@@ -26,6 +26,7 @@ The project uses mock data only for now. It is structured so real database and s
 
 ```text
 src/
+  App.jsx
   app/
     App.jsx
   components/
@@ -76,6 +77,7 @@ preview-server.js
 
 - The build output is written to `dist/`
 - Vercel should deploy the static `dist/` folder only
+- `.vercelignore` keeps local preview-only files out of the Vercel upload
 - The root `preview-server.js` file is only for local preview and supports SPA route fallback for direct route visits
 - This project is ready to upload to GitHub as a mock-data demo
 

@@ -1,0 +1,8 @@
+node_modules
+dist
+.pnpm-store
+tmp
+docs
+.agents
+preview-server.js
+app.js
