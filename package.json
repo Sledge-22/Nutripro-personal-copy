@@ -5,10 +5,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "node scripts/build.js && node dist/server.js",
+    "dev": "node scripts/build.js && node server.js",
     "build": "node scripts/build.js",
-    "preview": "node dist/server.js",
-    "start": "node dist/server.js",
+    "preview": "node server.js",
+    "start": "node server.js",
     "validate": "node scripts/validate.js",
     "check": "node scripts/validate.js && node scripts/build.js"
   },

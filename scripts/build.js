@@ -24,7 +24,7 @@ execFileSync(
   { stdio: "inherit" },
 );
 
-for (const file of ["index.html", "styles.css", "server.js", "package.json", "README.md"]) {
+for (const file of ["index.html", "styles.css"]) {
   fs.copyFileSync(path.join(root, file), path.join(dist, file));
 }
 

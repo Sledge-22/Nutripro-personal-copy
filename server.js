@@ -3,7 +3,9 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const root = path.dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = path.dirname(fileURLToPath(import.meta.url));
+const distRoot = path.join(workspaceRoot, "dist");
+const root = fs.existsSync(path.join(distRoot, "index.html")) ? distRoot : workspaceRoot;
 const port = Number(process.env.PORT || 4173);
 const types = {
   ".html": "text/html; charset=utf-8",

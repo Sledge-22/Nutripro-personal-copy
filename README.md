@@ -75,7 +75,8 @@ server.js
 ## Deployment notes
 
 - The build output is written to `dist/`
-- The included `server.js` supports SPA route fallback for direct route visits
+- Vercel should deploy the static `dist/` folder only
+- The root `server.js` is only for local preview and supports SPA route fallback for direct route visits
 - This project is ready to upload to GitHub as a mock-data demo
 
 ## Future integration points
