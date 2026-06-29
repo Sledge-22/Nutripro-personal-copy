@@ -8,7 +8,6 @@
     "dev": "node scripts/build.js && node preview-server.js",
     "build": "node scripts/build.js",
     "preview": "node preview-server.js",
-    "start": "node preview-server.js",
     "validate": "node scripts/validate.js",
     "check": "node scripts/validate.js && node scripts/build.js"
   },
