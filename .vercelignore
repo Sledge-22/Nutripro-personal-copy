@@ -4,5 +4,4 @@ dist
 tmp
 docs
 .agents
-preview-server.js
-app.js
+scripts/build.js

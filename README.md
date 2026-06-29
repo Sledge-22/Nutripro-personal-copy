@@ -1,6 +1,6 @@
 # Nutripro
 
-Nutripro is a React demo for the PDF-defined Admin and Student flows only.
+Nutripro is a Vite + React demo for the PDF-defined Admin and Student flows only.
 
 Current scope:
 - Admin dashboard
@@ -18,7 +18,7 @@ The project uses mock data only for now. It is structured so real database and s
 ## Tech
 
 - React 19
-- Esbuild
+- Vite 5
 - Simple SPA routing with browser history
 - Mock in-memory state
 
@@ -40,11 +40,10 @@ src/
   routes/
     appRoutes.js
 scripts/
-  build.js
   validate.js
 index.html
 styles.css
-preview-server.js
+vite.config.js
 ```
 
 ## Commands
@@ -59,13 +58,13 @@ preview-server.js
 ### What they do
 
 - `npm run dev`
-  Builds the app and starts the local preview server on `http://127.0.0.1:4173`
+  Starts the Vite dev server
 
 - `npm run build`
   Creates a production bundle in `dist/`
 
 - `npm run preview`
-  Serves the already-built `dist/` folder
+  Serves the already-built `dist/` folder with Vite preview
 
 - `npm run validate`
   Runs a scope check to make sure out-of-scope features are not present in the app source
@@ -77,8 +76,7 @@ preview-server.js
 
 - The build output is written to `dist/`
 - Vercel should deploy the static `dist/` folder only
-- `.vercelignore` keeps local preview-only files out of the Vercel upload
-- The root `preview-server.js` file is only for local preview and supports SPA route fallback for direct route visits
+- `.vercelignore` keeps non-deployment files out of the Vercel upload
 - This project is ready to upload to GitHub as a mock-data demo
 
 ## Future integration points
