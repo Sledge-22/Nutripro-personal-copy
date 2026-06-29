@@ -31,11 +31,3 @@
     "vite": "5.4.19"
   }
 }
-
-"scripts": {
-  "dev": "vite --host 0.0.0.0",
-  "build": "vite build",
-  "preview": "vite preview --host 0.0.0.0"
-}
-
-"main": "server.js"
