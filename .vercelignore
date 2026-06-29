@@ -1,7 +1,4 @@
 node_modules
 dist
-.pnpm-store
-tmp
-docs
-.agents
-scripts/build.js
+.env
+.env.local
