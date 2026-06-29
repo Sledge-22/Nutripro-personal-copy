@@ -9,7 +9,6 @@ NutriPro is currently a static browser app designed for polished demos and easy 
 ├── index.html              # App shell
 ├── styles.css              # Responsive UI system
 ├── app.js                  # Presentation UI and client routing
-├── preview-server.js       # Small local static server
 ├── src/
 │   ├── data/
 │   │   └── mockData.js     # Realistic seed data for the demo
