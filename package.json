@@ -1,0 +1,33 @@
+{
+  "name": "nutripro-lms",
+  "version": "1.0.0",
+  "description": "Nutripro Admin and Student education platform demo built with React and mock data.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/build.js && node dist/server.js",
+    "build": "node scripts/build.js",
+    "preview": "node dist/server.js",
+    "start": "node dist/server.js",
+    "validate": "node scripts/validate.js",
+    "check": "node scripts/validate.js && node scripts/build.js"
+  },
+  "keywords": [
+    "lms",
+    "nutrition",
+    "education",
+    "demo",
+    "mock-data"
+  ],
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.5"
+  }
+}
