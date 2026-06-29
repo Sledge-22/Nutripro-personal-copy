@@ -43,7 +43,7 @@ scripts/
   validate.js
 index.html
 styles.css
-server.js
+preview-server.js
 ```
 
 ## Commands
@@ -76,7 +76,7 @@ server.js
 
 - The build output is written to `dist/`
 - Vercel should deploy the static `dist/` folder only
-- The root `server.js` is only for local preview and supports SPA route fallback for direct route visits
+- The root `preview-server.js` file is only for local preview and supports SPA route fallback for direct route visits
 - This project is ready to upload to GitHub as a mock-data demo
 
 ## Future integration points
