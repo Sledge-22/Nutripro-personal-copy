@@ -43,8 +43,8 @@ function toModuleRow(courseId, module, index) {
     title: module.title,
     description: module.description,
     sort_order: module.sortOrder ?? index,
-    pdf_url: module.pdfUrl || null,
-    video_url: module.videoUrl || module.video?.url || module.video?.link || null,
+    pdf_url: module.pdf_url || module.pdfUrl || null,
+    video_url: module.video_url || module.videoUrl || module.video?.url || module.video?.link || null,
     pdf_label: module.pdfLabel || null,
     video_title: module.video?.title ?? "",
     video_description: module.video?.description ?? "",
@@ -97,7 +97,13 @@ export async function replaceModulesForCourse(courseId, modules) {
       console.error("Failed to replace modules in Supabase:", error);
       throw error;
     }
-    return (data ?? []).map(mapModuleRow);
+    const mapped = (data ?? []).map(mapModuleRow);
+    mapped.forEach((module, index) => {
+      const source = modules[index];
+      if (source?.pdfUrl && !module.pdf_url) console.error("Module save succeeded but pdf_url is missing:", module);
+      if ((source?.videoUrl || source?.video?.url) && !module.video_url) console.error("Module save succeeded but video_url is missing:", module);
+    });
+    return mapped;
   } catch {
     return updateMockModules(courseId, modules);
   }
