@@ -13,10 +13,14 @@ function createModuleDraft(sortOrder = 1) {
     title: "",
     description: "",
     pdfUrl: "",
+    pdf_url: "",
     pdfLabel: "No PDF selected",
+    pdfName: "",
     pdfUploading: false,
     pdfError: "",
     videoUrl: "",
+    video_url: "",
+    videoName: "",
     video: {
       id: createId(),
       title: "",
@@ -44,10 +48,12 @@ function createCourseDraft(course = null) {
       pdfUrl: module.pdfUrl || "",
       pdf_url: module.pdf_url || module.pdfUrl || "",
       pdfLabel: module.pdfLabel || "No PDF selected",
+      pdfName: module.pdfName || module.pdf_file_name || module.pdfLabel || "",
       pdfUploading: false,
       pdfError: "",
       videoUrl: module.videoUrl || module.video?.url || module.video?.link || "",
       video_url: module.video_url || module.videoUrl || module.video?.url || module.video?.link || "",
+      videoName: module.videoName || module.video_file_name || module.video?.uploadLabel || "",
       video: {
         id: module.video.id,
         title: module.video.title,
@@ -79,8 +85,10 @@ function buildCoursePayload(form, editingId, existingCourse) {
         pdfUrl: module.pdfUrl,
         pdf_url: module.pdf_url || module.pdfUrl,
         pdfLabel: module.pdfLabel,
+        pdfName: module.pdfName || module.pdfLabel,
         videoUrl: module.videoUrl || module.video.url || module.video.link.trim(),
         video_url: module.video_url || module.videoUrl || module.video.url || module.video.link.trim(),
+        videoName: module.videoName || module.video.uploadLabel,
         video: {
           id: module.video.id || createId(),
           title: module.video.title.trim() || `${module.title.trim() || "Module"} video`,
@@ -131,6 +139,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
     setSaveError("");
     const existingCourse = courses.find((course) => course.id === editingId);
     const payload = buildCoursePayload(form, editingId, existingCourse);
+    console.log("Module payload right before saving:", payload.modules);
     void Promise.resolve(onSaveCourse(payload, editingId))
       .then((result) => {
         if (result?.ok === false) {
@@ -151,6 +160,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
 
     try {
       const uploaded = await uploadModulePdf(file, moduleId);
+      console.log("PDF upload result publicUrl:", uploaded.publicUrl);
       if (!uploaded.publicUrl) {
         const error = new Error("PDF upload succeeded but public URL is missing.");
         console.error(error);
@@ -161,6 +171,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
         pdfUploading: false,
         pdfError: "",
         pdfLabel: uploaded.fileName,
+        pdfName: uploaded.fileName,
         pdfUrl: uploaded.publicUrl || module.pdfUrl,
         pdf_url: uploaded.publicUrl || module.pdfUrl,
       }));
@@ -183,6 +194,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
 
     try {
       const uploaded = await uploadModuleVideo(file, moduleId);
+      console.log("Video upload result publicUrl:", uploaded.publicUrl);
       if (!uploaded.publicUrl) {
         const error = new Error("Video upload succeeded but public URL is missing.");
         console.error(error);
@@ -192,6 +204,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
         ...module,
         videoUrl: uploaded.publicUrl || module.videoUrl,
         video_url: uploaded.publicUrl || module.videoUrl,
+        videoName: uploaded.fileName,
         video: {
           ...module.video,
           uploading: false,

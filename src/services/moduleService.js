@@ -13,6 +13,8 @@ function fileNameFromUrl(url, fallback) {
 function mapModuleRow(module) {
   const videoUrl = module.video_url ?? module.videoUrl ?? module.video_link ?? module.video?.url ?? module.video?.link ?? "";
   const pdfUrl = module.pdf_url ?? module.pdfUrl ?? "";
+  const pdfName = module.pdf_file_name ?? module.pdfName ?? module.pdf_label ?? fileNameFromUrl(pdfUrl, "No PDF selected");
+  const videoName = module.video_file_name ?? module.videoName ?? module.video_upload_label ?? fileNameFromUrl(videoUrl, "No video selected");
 
   return {
     id: module.id,
@@ -22,9 +24,11 @@ function mapModuleRow(module) {
     description: module.description ?? "",
     pdfUrl,
     pdf_url: pdfUrl,
-    pdfLabel: module.pdf_label ?? module.pdfLabel ?? fileNameFromUrl(pdfUrl, "No PDF selected"),
+    pdfLabel: pdfName,
+    pdfName,
     videoUrl,
     video_url: videoUrl,
+    videoName,
     video: {
       id: module.video_id ?? module.id,
       title: module.video_title ?? module.video?.title ?? `${module.title ?? "Module"} video`,
@@ -32,7 +36,7 @@ function mapModuleRow(module) {
       duration: module.video_duration ?? module.video?.duration ?? "10 min",
       link: module.video_link ?? module.video?.link ?? "",
       url: videoUrl,
-      uploadLabel: module.video_upload_label ?? module.video?.uploadLabel ?? fileNameFromUrl(videoUrl, "No video selected"),
+      uploadLabel: videoName,
     },
   };
 }
@@ -98,6 +102,7 @@ export async function replaceModulesForCourse(courseId, modules) {
       throw error;
     }
     const mapped = (data ?? []).map(mapModuleRow);
+    console.log("Saved Supabase module response:", mapped);
     mapped.forEach((module, index) => {
       const source = modules[index];
       if (source?.pdfUrl && !module.pdf_url) console.error("Module save succeeded but pdf_url is missing:", module);
