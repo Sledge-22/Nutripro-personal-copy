@@ -3,18 +3,6 @@ import { isSupabaseConfigured, supabase, supabaseUrl } from "../lib/supabaseClie
 const PDF_BUCKET = "module-pdfs";
 const VIDEO_BUCKET = "module-videos";
 
-function createFallbackUploadResult(bucket, file, pathPrefix) {
-  const fileName = typeof file === "string" ? file : file?.name || "upload-placeholder";
-  const storagePath = `${pathPrefix}/${Date.now()}-${fileName}`;
-  return {
-    bucket,
-    storagePath,
-    fileName,
-    publicUrl: null,
-    mock: true,
-  };
-}
-
 function buildPublicUrl(bucket, path) {
   if (!supabaseUrl || !bucket || !path) return "";
   const encodedPath = path
@@ -27,7 +15,11 @@ function buildPublicUrl(bucket, path) {
 
 async function uploadToBucket(bucket, file, pathPrefix) {
   if (!isSupabaseConfigured) {
-    return createFallbackUploadResult(bucket, file, pathPrefix);
+    const configError = new Error(
+      "Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY or VITE_SUPABASE_ANON_KEY.",
+    );
+    console.error(configError);
+    throw configError;
   }
 
   if (!(file instanceof File || file?.name)) {
