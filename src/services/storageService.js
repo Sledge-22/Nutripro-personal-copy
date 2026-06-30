@@ -41,6 +41,7 @@ async function uploadToBucket(bucket, file, pathPrefix) {
     console.error(urlError);
     throw urlError;
   }
+  console.log(`Supabase upload public URL resolved for ${bucket}:`, data.publicUrl);
   return {
     bucket,
     path,

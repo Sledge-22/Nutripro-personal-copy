@@ -26,9 +26,13 @@ function mapModuleRow(module) {
     pdf_url: pdfUrl,
     pdfLabel: pdfName,
     pdfName,
+    pdf_file_name: pdfName,
+    pdf_storage_path: module.pdf_storage_path ?? "",
     videoUrl,
     video_url: videoUrl,
     videoName,
+    video_file_name: videoName,
+    video_storage_path: module.video_storage_path ?? "",
     video: {
       id: module.video_id ?? module.id,
       title: module.video_title ?? module.video?.title ?? `${module.title ?? "Module"} video`,
@@ -42,19 +46,20 @@ function mapModuleRow(module) {
 }
 
 function toModuleRow(courseId, module, index) {
+  const pdfUrl = module.pdf_url ?? module.pdfUrl ?? null;
+  const videoUrl = module.video_url ?? module.videoUrl ?? module.video?.url ?? module.video?.link ?? null;
+
   return {
     course_id: courseId,
-    title: module.title,
-    description: module.description,
+    title: module.title ?? "",
+    description: module.description ?? "",
     sort_order: module.sortOrder ?? index,
-    pdf_url: module.pdf_url || module.pdfUrl || null,
-    video_url: module.video_url || module.videoUrl || module.video?.url || module.video?.link || null,
-    pdf_label: module.pdfLabel || null,
-    video_title: module.video?.title ?? "",
-    video_description: module.video?.description ?? "",
-    video_duration: module.video?.duration ?? "10 min",
-    video_link: module.video?.link ?? "",
-    video_upload_label: module.video?.uploadLabel ?? null,
+    pdf_url: pdfUrl,
+    video_url: videoUrl,
+    pdf_file_name: module.pdf_file_name ?? module.pdfName ?? module.pdfLabel ?? null,
+    video_file_name: module.video_file_name ?? module.videoName ?? module.video?.uploadLabel ?? null,
+    pdf_storage_path: module.pdf_storage_path ?? module.pdfStoragePath ?? null,
+    video_storage_path: module.video_storage_path ?? module.videoStoragePath ?? null,
   };
 }
 
@@ -76,8 +81,10 @@ export async function getModulesByCourse(courseId) {
       console.error("Failed to load modules from Supabase:", error);
       throw error;
     }
+    console.log("Fetched Supabase module rows:", data);
     return (data ?? []).map(mapModuleRow);
-  } catch {
+  } catch (error) {
+    console.error("Failed module fetch, falling back to mock data:", error);
     const course = getMockCourses().find((entry) => entry.id === courseId);
     return course?.modules ?? [];
   }
@@ -92,9 +99,11 @@ export async function replaceModulesForCourse(courseId, modules) {
     await supabase.from("modules").delete().eq("course_id", courseId);
     if (!modules.length) return [];
 
+    const rows = modules.map((module, index) => toModuleRow(courseId, module, index + 1));
+    console.log("Supabase module rows right before saving:", rows);
     const { data, error } = await supabase
       .from("modules")
-      .insert(modules.map((module, index) => toModuleRow(courseId, module, index + 1)))
+      .insert(rows)
       .select("*");
 
     if (error) {
@@ -105,11 +114,14 @@ export async function replaceModulesForCourse(courseId, modules) {
     console.log("Saved Supabase module response:", mapped);
     mapped.forEach((module, index) => {
       const source = modules[index];
-      if (source?.pdfUrl && !module.pdf_url) console.error("Module save succeeded but pdf_url is missing:", module);
-      if ((source?.videoUrl || source?.video?.url) && !module.video_url) console.error("Module save succeeded but video_url is missing:", module);
+      const sourcePdfUrl = source?.pdf_url || source?.pdfUrl;
+      const sourceVideoUrl = source?.video_url || source?.videoUrl || source?.video?.url || source?.video?.link;
+      if (sourcePdfUrl && !module.pdf_url) console.error("Module save succeeded but pdf_url is missing:", module);
+      if (sourceVideoUrl && !module.video_url) console.error("Module save succeeded but video_url is missing:", module);
     });
     return mapped;
-  } catch {
+  } catch (error) {
+    console.error("Failed module save, falling back to mock data:", error);
     return updateMockModules(courseId, modules);
   }
 }

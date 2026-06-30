@@ -8,13 +8,17 @@ function normalizeModules(modules = []) {
     sortOrder: module.sortOrder ?? index + 1,
     title: module.title ?? "",
     description: module.description ?? "",
-    pdfUrl: module.pdfUrl ?? module.pdf_url ?? "",
+    pdfUrl: module.pdf_url ?? module.pdfUrl ?? "",
     pdf_url: module.pdf_url ?? module.pdfUrl ?? "",
     pdfLabel: module.pdfLabel ?? module.pdfName ?? module.pdf_file_name ?? "No PDF selected",
     pdfName: module.pdfName ?? module.pdf_file_name ?? module.pdfLabel ?? "No PDF selected",
-    videoUrl: module.videoUrl ?? module.video_url ?? module.video?.url ?? module.video?.link ?? "",
+    pdf_file_name: module.pdf_file_name ?? module.pdfName ?? module.pdfLabel ?? "",
+    pdf_storage_path: module.pdf_storage_path ?? module.pdfStoragePath ?? "",
+    videoUrl: module.video_url ?? module.videoUrl ?? module.video?.url ?? module.video?.link ?? "",
     video_url: module.video_url ?? module.videoUrl ?? module.video?.url ?? module.video?.link ?? "",
     videoName: module.videoName ?? module.video_file_name ?? module.video?.uploadLabel ?? "No video selected",
+    video_file_name: module.video_file_name ?? module.videoName ?? module.video?.uploadLabel ?? "",
+    video_storage_path: module.video_storage_path ?? module.videoStoragePath ?? "",
     video: {
       id: module.video?.id ?? Date.now() + index + 1000,
       title: module.video?.title ?? "",
@@ -114,6 +118,7 @@ export async function createCourse(course) {
 
   try {
     const { owners, modules, ...courseRow } = payload;
+    console.log("Course modules right before create:", modules);
     const { data, error } = await supabase.from("courses").insert(courseRow).select("*").single();
     if (error) {
       console.error("Failed to create course in Supabase:", error);
@@ -124,7 +129,8 @@ export async function createCourse(course) {
     await syncEnrollments(data.id, owners);
 
     return normalizeCourse(data, owners, savedModules);
-  } catch {
+  } catch (error) {
+    console.error("Create course failed, falling back to mock data:", error);
     const courses = getMockCourses();
     const created = { id: createMockId(courses), ...cloneMockValue(payload) };
     setMockCourses([...courses, created]);
@@ -147,6 +153,7 @@ export async function updateCourse(courseId, updates) {
 
   try {
     const { owners, modules, ...courseRow } = payload;
+    console.log("Course modules right before update:", modules);
     const { data, error } = await supabase.from("courses").update(courseRow).eq("id", courseId).select("*").single();
     if (error) {
       console.error("Failed to update course in Supabase:", error);
@@ -157,7 +164,8 @@ export async function updateCourse(courseId, updates) {
     await syncEnrollments(courseId, owners);
 
     return normalizeCourse(data, owners, savedModules);
-  } catch {
+  } catch (error) {
+    console.error("Update course failed, falling back to mock data:", error);
     const nextCourses = persistMockCourse((courses) => courses.map((course) => course.id === courseId ? { ...course, ...cloneMockValue(payload) } : course));
     return nextCourses.find((course) => course.id === courseId) ?? null;
   }
