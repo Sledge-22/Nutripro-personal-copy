@@ -21,8 +21,10 @@ function mapModuleRow(module) {
     title: module.title ?? "",
     description: module.description ?? "",
     pdfUrl,
+    pdf_url: pdfUrl,
     pdfLabel: module.pdf_label ?? module.pdfLabel ?? fileNameFromUrl(pdfUrl, "No PDF selected"),
     videoUrl,
+    video_url: videoUrl,
     video: {
       id: module.video_id ?? module.id,
       title: module.video_title ?? module.video?.title ?? `${module.title ?? "Module"} video`,
@@ -66,7 +68,10 @@ export async function getModulesByCourse(courseId) {
 
   try {
     const { data, error } = await supabase.from("modules").select("*").eq("course_id", courseId).order("sort_order", { ascending: true }).order("id", { ascending: true });
-    if (error) throw error;
+    if (error) {
+      console.error("Failed to load modules from Supabase:", error);
+      throw error;
+    }
     return (data ?? []).map(mapModuleRow);
   } catch {
     const course = getMockCourses().find((entry) => entry.id === courseId);
@@ -88,7 +93,10 @@ export async function replaceModulesForCourse(courseId, modules) {
       .insert(modules.map((module, index) => toModuleRow(courseId, module, index + 1)))
       .select("*");
 
-    if (error) throw error;
+    if (error) {
+      console.error("Failed to replace modules in Supabase:", error);
+      throw error;
+    }
     return (data ?? []).map(mapModuleRow);
   } catch {
     return updateMockModules(courseId, modules);

@@ -145,9 +145,15 @@ export function App() {
   }
 
   async function handleSaveCourse(course, editingId) {
-    if (editingId) await updateCourse(editingId, course);
-    else await createCourse(course);
-    await refreshCourses();
+    try {
+      if (editingId) await updateCourse(editingId, course);
+      else await createCourse(course);
+      await refreshCourses();
+      return { ok: true };
+    } catch (error) {
+      console.error("Saving course failed:", error);
+      return { ok: false, error: "Saving the course failed." };
+    }
   }
 
   async function handleDeleteCourse(courseId) {

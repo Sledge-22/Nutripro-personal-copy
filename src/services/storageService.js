@@ -30,9 +30,17 @@ async function uploadToBucket(bucket, file, pathPrefix) {
   const fileName = file.name || "upload-placeholder";
   const path = `${pathPrefix}/${Date.now()}-${createSafeFileName(fileName)}`;
   const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
-  if (error) throw error;
+  if (error) {
+    console.error(`Supabase upload failed for bucket ${bucket}:`, error);
+    throw error;
+  }
 
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  if (!data?.publicUrl) {
+    const urlError = new Error(`Failed to resolve public URL for ${bucket} upload.`);
+    console.error(urlError);
+    throw urlError;
+  }
   return {
     bucket,
     path,

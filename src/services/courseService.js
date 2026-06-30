@@ -9,8 +9,10 @@ function normalizeModules(modules = []) {
     title: module.title ?? "",
     description: module.description ?? "",
     pdfUrl: module.pdfUrl ?? "",
+    pdf_url: module.pdfUrl ?? module.pdf_url ?? "",
     pdfLabel: module.pdfLabel ?? "No PDF selected",
     videoUrl: module.videoUrl ?? module.video?.url ?? module.video?.link ?? "",
+    video_url: module.videoUrl ?? module.video_url ?? module.video?.url ?? module.video?.link ?? "",
     video: {
       id: module.video?.id ?? Date.now() + index + 1000,
       title: module.video?.title ?? "",
@@ -83,7 +85,10 @@ export async function getCourses() {
 
   try {
     const { data, error } = await supabase.from("courses").select("*").order("id", { ascending: true });
-    if (error) throw error;
+    if (error) {
+      console.error("Failed to load courses from Supabase:", error);
+      throw error;
+    }
     return attachRelations(data ?? []);
   } catch {
     return getMockCourses();
@@ -108,7 +113,10 @@ export async function createCourse(course) {
   try {
     const { owners, modules, ...courseRow } = payload;
     const { data, error } = await supabase.from("courses").insert(courseRow).select("*").single();
-    if (error) throw error;
+    if (error) {
+      console.error("Failed to create course in Supabase:", error);
+      throw error;
+    }
 
     const savedModules = await replaceModulesForCourse(data.id, modules);
     await syncEnrollments(data.id, owners);
@@ -138,7 +146,10 @@ export async function updateCourse(courseId, updates) {
   try {
     const { owners, modules, ...courseRow } = payload;
     const { data, error } = await supabase.from("courses").update(courseRow).eq("id", courseId).select("*").single();
-    if (error) throw error;
+    if (error) {
+      console.error("Failed to update course in Supabase:", error);
+      throw error;
+    }
 
     const savedModules = await replaceModulesForCourse(courseId, modules);
     await syncEnrollments(courseId, owners);
@@ -160,7 +171,10 @@ export async function deleteCourse(courseId) {
     await supabase.from("enrollments").delete().eq("course_id", courseId);
     await supabase.from("modules").delete().eq("course_id", courseId);
     const { error } = await supabase.from("courses").delete().eq("id", courseId);
-    if (error) throw error;
+    if (error) {
+      console.error("Failed to delete course in Supabase:", error);
+      throw error;
+    }
     return true;
   } catch {
     setMockCourses(getMockCourses().filter((course) => course.id !== courseId));
@@ -175,13 +189,19 @@ export async function getStudentCourses(studentId) {
 
   try {
     const { data: enrollmentRows, error } = await supabase.from("enrollments").select("*").eq("student_id", studentId);
-    if (error) throw error;
+    if (error) {
+      console.error("Failed to load student enrollments from Supabase:", error);
+      throw error;
+    }
 
     const courseIds = (enrollmentRows ?? []).map((row) => row.course_id ?? row.courseId).filter(Boolean);
     if (!courseIds.length) return [];
 
     const { data: courseRows, error: courseError } = await supabase.from("courses").select("*").in("id", courseIds).order("id", { ascending: true });
-    if (courseError) throw courseError;
+    if (courseError) {
+      console.error("Failed to load student courses from Supabase:", courseError);
+      throw courseError;
+    }
 
     const allEnrollments = await fetchEnrollmentRows();
     const result = [];
