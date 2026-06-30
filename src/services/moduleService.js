@@ -75,19 +75,20 @@ export async function getModulesByCourse(courseId) {
     return course?.modules ?? [];
   }
 
-  try {
-    const { data, error } = await supabase.from("modules").select("*").eq("course_id", courseId).order("sort_order", { ascending: true }).order("id", { ascending: true });
-    if (error) {
-      console.error("Failed to load modules from Supabase:", error);
-      throw error;
-    }
-    console.log("Fetched Supabase module rows:", data);
-    return (data ?? []).map(mapModuleRow);
-  } catch (error) {
-    console.error("Failed module fetch, falling back to mock data:", error);
-    const course = getMockCourses().find((entry) => entry.id === courseId);
-    return course?.modules ?? [];
+  const { data, error } = await supabase
+    .from("modules")
+    .select("*")
+    .eq("course_id", courseId)
+    .order("sort_order", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) {
+    console.error("Failed module fetch from Supabase:", error);
+    throw error;
   }
+
+  console.log("Fetched Supabase module rows:", data);
+  return (data ?? []).map(mapModuleRow);
 }
 
 export async function replaceModulesForCourse(courseId, modules) {
@@ -95,33 +96,34 @@ export async function replaceModulesForCourse(courseId, modules) {
     return updateMockModules(courseId, modules);
   }
 
-  try {
-    await supabase.from("modules").delete().eq("course_id", courseId);
-    if (!modules.length) return [];
-
-    const rows = modules.map((module, index) => toModuleRow(courseId, module, index + 1));
-    console.log("Supabase module rows right before saving:", rows);
-    const { data, error } = await supabase
-      .from("modules")
-      .insert(rows)
-      .select("*");
-
-    if (error) {
-      console.error("Failed to replace modules in Supabase:", error);
-      throw error;
-    }
-    const mapped = (data ?? []).map(mapModuleRow);
-    console.log("Saved Supabase module response:", mapped);
-    mapped.forEach((module, index) => {
-      const source = modules[index];
-      const sourcePdfUrl = source?.pdf_url || source?.pdfUrl;
-      const sourceVideoUrl = source?.video_url || source?.videoUrl || source?.video?.url || source?.video?.link;
-      if (sourcePdfUrl && !module.pdf_url) console.error("Module save succeeded but pdf_url is missing:", module);
-      if (sourceVideoUrl && !module.video_url) console.error("Module save succeeded but video_url is missing:", module);
-    });
-    return mapped;
-  } catch (error) {
-    console.error("Failed module save, falling back to mock data:", error);
-    return updateMockModules(courseId, modules);
+  const { error: deleteError } = await supabase.from("modules").delete().eq("course_id", courseId);
+  if (deleteError) {
+    console.error("Failed to clear existing modules in Supabase:", deleteError);
+    throw deleteError;
   }
+
+  if (!modules.length) return [];
+
+  const rows = modules.map((module, index) => toModuleRow(courseId, module, index + 1));
+  console.log("Final module object sent to Supabase:", rows);
+  const { data, error } = await supabase
+    .from("modules")
+    .insert(rows)
+    .select("*");
+
+  if (error) {
+    console.error("Failed to insert modules in Supabase:", error);
+    throw error;
+  }
+
+  const mapped = (data ?? []).map(mapModuleRow);
+  console.log("Created module response:", mapped);
+  mapped.forEach((module, index) => {
+    const source = modules[index];
+    const sourcePdfUrl = source?.pdf_url || source?.pdfUrl;
+    const sourceVideoUrl = source?.video_url || source?.videoUrl || source?.video?.url || source?.video?.link;
+    if (sourcePdfUrl && !module.pdf_url) console.error("Module save succeeded but pdf_url is missing:", module);
+    if (sourceVideoUrl && !module.video_url) console.error("Module save succeeded but video_url is missing:", module);
+  });
+  return mapped;
 }

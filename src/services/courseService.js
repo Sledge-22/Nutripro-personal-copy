@@ -69,7 +69,11 @@ async function attachRelations(courses = []) {
 async function syncEnrollments(courseId, owners = []) {
   if (!isSupabaseConfigured) return;
 
-  await supabase.from("enrollments").delete().eq("course_id", courseId);
+  const { error: deleteError } = await supabase.from("enrollments").delete().eq("course_id", courseId);
+  if (deleteError) {
+    console.error("Failed to clear enrollments in Supabase:", deleteError);
+    throw deleteError;
+  }
   if (!owners.length) return;
 
   const rows = owners.map((studentId) => ({
@@ -77,7 +81,12 @@ async function syncEnrollments(courseId, owners = []) {
     student_id: studentId,
   }));
 
-  await supabase.from("enrollments").insert(rows);
+  const { data, error } = await supabase.from("enrollments").insert(rows).select("*");
+  if (error) {
+    console.error("Failed to insert enrollments in Supabase:", error);
+    throw error;
+  }
+  console.log("Created enrollment response:", data);
 }
 
 function persistMockCourse(updater) {
@@ -89,16 +98,12 @@ function persistMockCourse(updater) {
 export async function getCourses() {
   if (!isSupabaseConfigured) return getMockCourses();
 
-  try {
-    const { data, error } = await supabase.from("courses").select("*").order("id", { ascending: true });
-    if (error) {
-      console.error("Failed to load courses from Supabase:", error);
-      throw error;
-    }
-    return attachRelations(data ?? []);
-  } catch {
-    return getMockCourses();
+  const { data, error } = await supabase.from("courses").select("*").order("id", { ascending: true });
+  if (error) {
+    console.error("Failed to load courses from Supabase:", error);
+    throw error;
   }
+  return attachRelations(data ?? []);
 }
 
 export async function createCourse(course) {
@@ -116,26 +121,19 @@ export async function createCourse(course) {
     return created;
   }
 
-  try {
-    const { owners, modules, ...courseRow } = payload;
-    console.log("Course modules right before create:", modules);
-    const { data, error } = await supabase.from("courses").insert(courseRow).select("*").single();
-    if (error) {
-      console.error("Failed to create course in Supabase:", error);
-      throw error;
-    }
-
-    const savedModules = await replaceModulesForCourse(data.id, modules);
-    await syncEnrollments(data.id, owners);
-
-    return normalizeCourse(data, owners, savedModules);
-  } catch (error) {
-    console.error("Create course failed, falling back to mock data:", error);
-    const courses = getMockCourses();
-    const created = { id: createMockId(courses), ...cloneMockValue(payload) };
-    setMockCourses([...courses, created]);
-    return created;
+  const { owners, modules, ...courseRow } = payload;
+  console.log("Course modules right before create:", modules);
+  const { data, error } = await supabase.from("courses").insert(courseRow).select("*").single();
+  if (error) {
+    console.error("Failed to create course in Supabase:", error);
+    throw error;
   }
+  console.log("Created course response:", data);
+
+  const savedModules = await replaceModulesForCourse(data.id, modules);
+  await syncEnrollments(data.id, owners);
+
+  return normalizeCourse(data, owners, savedModules);
 }
 
 export async function updateCourse(courseId, updates) {
@@ -151,24 +149,19 @@ export async function updateCourse(courseId, updates) {
     return nextCourses.find((course) => course.id === courseId) ?? null;
   }
 
-  try {
-    const { owners, modules, ...courseRow } = payload;
-    console.log("Course modules right before update:", modules);
-    const { data, error } = await supabase.from("courses").update(courseRow).eq("id", courseId).select("*").single();
-    if (error) {
-      console.error("Failed to update course in Supabase:", error);
-      throw error;
-    }
-
-    const savedModules = await replaceModulesForCourse(courseId, modules);
-    await syncEnrollments(courseId, owners);
-
-    return normalizeCourse(data, owners, savedModules);
-  } catch (error) {
-    console.error("Update course failed, falling back to mock data:", error);
-    const nextCourses = persistMockCourse((courses) => courses.map((course) => course.id === courseId ? { ...course, ...cloneMockValue(payload) } : course));
-    return nextCourses.find((course) => course.id === courseId) ?? null;
+  const { owners, modules, ...courseRow } = payload;
+  console.log("Course modules right before update:", modules);
+  const { data, error } = await supabase.from("courses").update(courseRow).eq("id", courseId).select("*").single();
+  if (error) {
+    console.error("Failed to update course in Supabase:", error);
+    throw error;
   }
+  console.log("Updated course response:", data);
+
+  const savedModules = await replaceModulesForCourse(courseId, modules);
+  await syncEnrollments(courseId, owners);
+
+  return normalizeCourse(data, owners, savedModules);
 }
 
 export async function deleteCourse(courseId) {
@@ -177,19 +170,25 @@ export async function deleteCourse(courseId) {
     return true;
   }
 
-  try {
-    await supabase.from("enrollments").delete().eq("course_id", courseId);
-    await supabase.from("modules").delete().eq("course_id", courseId);
-    const { error } = await supabase.from("courses").delete().eq("id", courseId);
-    if (error) {
-      console.error("Failed to delete course in Supabase:", error);
-      throw error;
-    }
-    return true;
-  } catch {
-    setMockCourses(getMockCourses().filter((course) => course.id !== courseId));
-    return true;
+  const { error: enrollmentDeleteError } = await supabase.from("enrollments").delete().eq("course_id", courseId);
+  if (enrollmentDeleteError) {
+    console.error("Failed to delete enrollments in Supabase:", enrollmentDeleteError);
+    throw enrollmentDeleteError;
   }
+
+  const { error: moduleDeleteError } = await supabase.from("modules").delete().eq("course_id", courseId);
+  if (moduleDeleteError) {
+    console.error("Failed to delete modules in Supabase:", moduleDeleteError);
+    throw moduleDeleteError;
+  }
+
+  const { error } = await supabase.from("courses").delete().eq("id", courseId);
+  if (error) {
+    console.error("Failed to delete course in Supabase:", error);
+    throw error;
+  }
+
+  return true;
 }
 
 export async function getStudentCourses(studentId) {
@@ -197,30 +196,31 @@ export async function getStudentCourses(studentId) {
     return getMockCourses().filter((course) => Array.isArray(course.owners) && course.owners.includes(studentId));
   }
 
-  try {
-    const { data: enrollmentRows, error } = await supabase.from("enrollments").select("*").eq("student_id", studentId);
-    if (error) {
-      console.error("Failed to load student enrollments from Supabase:", error);
-      throw error;
-    }
-
-    const courseIds = (enrollmentRows ?? []).map((row) => row.course_id ?? row.courseId).filter(Boolean);
-    if (!courseIds.length) return [];
-
-    const { data: courseRows, error: courseError } = await supabase.from("courses").select("*").in("id", courseIds).order("id", { ascending: true });
-    if (courseError) {
-      console.error("Failed to load student courses from Supabase:", courseError);
-      throw courseError;
-    }
-
-    const allEnrollments = await fetchEnrollmentRows();
-    const result = [];
-    for (const course of courseRows ?? []) {
-      const modules = await getModulesByCourse(course.id);
-      result.push(normalizeCourse(course, ownersForCourse(course.id, allEnrollments), modules));
-    }
-    return result;
-  } catch {
-    return getMockCourses().filter((course) => Array.isArray(course.owners) && course.owners.includes(studentId));
+  const { data: enrollmentRows, error } = await supabase.from("enrollments").select("*").eq("student_id", studentId);
+  if (error) {
+    console.error("Failed to load student enrollments from Supabase:", error);
+    throw error;
   }
+
+  const courseIds = (enrollmentRows ?? []).map((row) => row.course_id ?? row.courseId).filter(Boolean);
+  if (!courseIds.length) return [];
+
+  const { data: courseRows, error: courseError } = await supabase
+    .from("courses")
+    .select("*")
+    .in("id", courseIds)
+    .order("id", { ascending: true });
+
+  if (courseError) {
+    console.error("Failed to load student courses from Supabase:", courseError);
+    throw courseError;
+  }
+
+  const allEnrollments = await fetchEnrollmentRows();
+  const result = [];
+  for (const course of courseRows ?? []) {
+    const modules = await getModulesByCourse(course.id);
+    result.push(normalizeCourse(course, ownersForCourse(course.id, allEnrollments), modules));
+  }
+  return result;
 }
