@@ -13,6 +13,38 @@ function createIssueDate() {
   });
 }
 
+function normalizeCertificate(row) {
+  return {
+    id: row.id,
+    studentId: row.student_id ?? row.studentId,
+    student: row.student_name ?? row.student ?? "",
+    courseId: row.course_id ?? row.courseId,
+    course: row.course_title ?? row.course ?? "",
+    number: row.certificate_number ?? row.number ?? "",
+    issueDate: row.issue_date ?? row.issueDate ?? "",
+    status: row.status ?? "Issued",
+  };
+}
+
+function createMockCertificate(payload) {
+  const certificates = getMockCertificates();
+  const created = { id: createMockId(certificates), ...payload };
+  setMockCertificates([created, ...certificates]);
+  return created;
+}
+
+export async function getCertificates() {
+  if (!isSupabaseConfigured) return getMockCertificates();
+
+  try {
+    const { data, error } = await supabase.from("certificates").select("*").order("id", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(normalizeCertificate);
+  } catch {
+    return getMockCertificates();
+  }
+}
+
 export async function generateCertificate({ studentId, student, courseId, course }) {
   const payload = {
     studentId,
@@ -25,22 +57,28 @@ export async function generateCertificate({ studentId, student, courseId, course
   };
 
   if (!isSupabaseConfigured) {
-    const certificates = getMockCertificates();
-    const created = { id: createMockId(certificates), ...payload };
-    setMockCertificates([created, ...certificates]);
-    return created;
+    return createMockCertificate(payload);
   }
 
   try {
-    // TODO(database): Persist generated certificates against the final Supabase certificates table schema.
-    const { data, error } = await supabase.from("certificates").insert(payload).select().single();
+    const { data, error } = await supabase
+      .from("certificates")
+      .insert({
+        student_id: payload.studentId,
+        student_name: payload.student,
+        course_id: payload.courseId,
+        course_title: payload.course,
+        certificate_number: payload.number,
+        issue_date: payload.issueDate,
+        status: payload.status,
+      })
+      .select("*")
+      .single();
+
     if (error) throw error;
-    return data;
+    return normalizeCertificate(data);
   } catch {
-    const certificates = getMockCertificates();
-    const created = { id: createMockId(certificates), ...payload };
-    setMockCertificates([created, ...certificates]);
-    return created;
+    return createMockCertificate(payload);
   }
 }
 
@@ -50,10 +88,9 @@ export async function getStudentCertificates(studentId) {
   }
 
   try {
-    // TODO(database): Retrieve student certificates against the final Supabase certificates table schema.
-    const { data, error } = await supabase.from("certificates").select("*").eq("studentId", studentId).order("id", { ascending: false });
+    const { data, error } = await supabase.from("certificates").select("*").eq("student_id", studentId).order("id", { ascending: false });
     if (error) throw error;
-    return data ?? [];
+    return (data ?? []).map(normalizeCertificate);
   } catch {
     return getMockCertificates().filter((certificate) => certificate.studentId === studentId);
   }

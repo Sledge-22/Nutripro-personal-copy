@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { cloneMockValue, createMockId, getMockCourses, setMockCourses } from "./mockStore.js";
+import { getModulesByCourse, replaceModulesForCourse } from "./moduleService.js";
 
 function normalizeModules(modules = []) {
   return modules.map((module, index) => ({
@@ -18,24 +19,68 @@ function normalizeModules(modules = []) {
   }));
 }
 
-async function attachModulesToCourses(courses = []) {
-  const modules = await import("./moduleService.js");
-  const result = [];
+function normalizeCourse(row, owners = [], modules = []) {
+  return {
+    id: row.id,
+    title: row.title ?? "",
+    description: row.description ?? "",
+    owners,
+    modules,
+  };
+}
+
+async function fetchEnrollmentRows() {
+  const { data, error } = await supabase.from("enrollments").select("*");
+  if (error) throw error;
+  return data ?? [];
+}
+
+function ownersForCourse(courseId, enrollments) {
+  return enrollments
+    .filter((entry) => (entry.course_id ?? entry.courseId) === courseId)
+    .map((entry) => entry.student_id ?? entry.user_id ?? entry.owner_id)
+    .filter(Boolean);
+}
+
+async function attachRelations(courses = []) {
+  const enrollments = await fetchEnrollmentRows();
+  const enriched = [];
+
   for (const course of courses) {
-    const courseModules = await modules.getModulesByCourse(course.id);
-    result.push({ ...course, modules: courseModules });
+    const modules = await getModulesByCourse(course.id);
+    enriched.push(normalizeCourse(course, ownersForCourse(course.id, enrollments), modules));
   }
-  return result;
+
+  return enriched;
+}
+
+async function syncEnrollments(courseId, owners = []) {
+  if (!isSupabaseConfigured) return;
+
+  await supabase.from("enrollments").delete().eq("course_id", courseId);
+  if (!owners.length) return;
+
+  const rows = owners.map((studentId) => ({
+    course_id: courseId,
+    student_id: studentId,
+  }));
+
+  await supabase.from("enrollments").insert(rows);
+}
+
+function persistMockCourse(updater) {
+  const nextCourses = updater(getMockCourses());
+  setMockCourses(nextCourses);
+  return nextCourses;
 }
 
 export async function getCourses() {
   if (!isSupabaseConfigured) return getMockCourses();
 
   try {
-    // TODO(database): Align selected columns with the final Supabase courses table schema.
     const { data, error } = await supabase.from("courses").select("*").order("id", { ascending: true });
     if (error) throw error;
-    return attachModulesToCourses(data ?? []);
+    return attachRelations(data ?? []);
   } catch {
     return getMockCourses();
   }
@@ -43,27 +88,31 @@ export async function getCourses() {
 
 export async function createCourse(course) {
   const payload = {
-    ...course,
-    owners: Array.isArray(course.owners) ? course.owners : [1],
+    title: course.title?.trim() ?? "",
+    description: course.description?.trim() ?? "",
+    owners: Array.isArray(course.owners) && course.owners.length ? course.owners : [1],
     modules: normalizeModules(course.modules),
   };
 
   if (!isSupabaseConfigured) {
     const courses = getMockCourses();
-    const created = { ...cloneMockValue(payload), id: payload.id ?? createMockId(courses) };
+    const created = { id: createMockId(courses), ...cloneMockValue(payload) };
     setMockCourses([...courses, created]);
     return created;
   }
 
   try {
-    const { modules, ...courseRow } = payload;
-    // TODO(database): Persist courses and module ownership against the final Supabase schema.
-    const { data, error } = await supabase.from("courses").insert(courseRow).select().single();
+    const { owners, modules, ...courseRow } = payload;
+    const { data, error } = await supabase.from("courses").insert(courseRow).select("*").single();
     if (error) throw error;
-    return { ...data, modules };
+
+    const savedModules = await replaceModulesForCourse(data.id, modules);
+    await syncEnrollments(data.id, owners);
+
+    return normalizeCourse(data, owners, savedModules);
   } catch {
     const courses = getMockCourses();
-    const created = { ...cloneMockValue(payload), id: payload.id ?? createMockId(courses) };
+    const created = { id: createMockId(courses), ...cloneMockValue(payload) };
     setMockCourses([...courses, created]);
     return created;
   }
@@ -71,49 +120,73 @@ export async function createCourse(course) {
 
 export async function updateCourse(courseId, updates) {
   const payload = {
-    ...updates,
-    modules: updates.modules ? normalizeModules(updates.modules) : undefined,
+    title: updates.title?.trim() ?? "",
+    description: updates.description?.trim() ?? "",
+    owners: Array.isArray(updates.owners) && updates.owners.length ? updates.owners : [1],
+    modules: normalizeModules(updates.modules),
   };
 
   if (!isSupabaseConfigured) {
-    const courses = getMockCourses().map((course) => course.id === courseId ? { ...course, ...cloneMockValue(payload) } : course);
-    setMockCourses(courses);
-    return courses.find((course) => course.id === courseId) ?? null;
+    const nextCourses = persistMockCourse((courses) => courses.map((course) => course.id === courseId ? { ...course, ...cloneMockValue(payload) } : course));
+    return nextCourses.find((course) => course.id === courseId) ?? null;
   }
 
   try {
-    const { modules, ...courseRow } = payload;
-    // TODO(database): Update course fields against the final Supabase courses table schema.
-    const { data, error } = await supabase.from("courses").update(courseRow).eq("id", courseId).select().single();
+    const { owners, modules, ...courseRow } = payload;
+    const { data, error } = await supabase.from("courses").update(courseRow).eq("id", courseId).select("*").single();
     if (error) throw error;
-    return { ...data, modules: modules ?? [] };
+
+    const savedModules = await replaceModulesForCourse(courseId, modules);
+    await syncEnrollments(courseId, owners);
+
+    return normalizeCourse(data, owners, savedModules);
   } catch {
-    const courses = getMockCourses().map((course) => course.id === courseId ? { ...course, ...cloneMockValue(payload) } : course);
-    setMockCourses(courses);
-    return courses.find((course) => course.id === courseId) ?? null;
+    const nextCourses = persistMockCourse((courses) => courses.map((course) => course.id === courseId ? { ...course, ...cloneMockValue(payload) } : course));
+    return nextCourses.find((course) => course.id === courseId) ?? null;
   }
 }
 
 export async function deleteCourse(courseId) {
   if (!isSupabaseConfigured) {
-    const courses = getMockCourses().filter((course) => course.id !== courseId);
-    setMockCourses(courses);
+    setMockCourses(getMockCourses().filter((course) => course.id !== courseId));
     return true;
   }
 
   try {
-    // TODO(database): Delete courses against the final Supabase courses table schema.
+    await supabase.from("enrollments").delete().eq("course_id", courseId);
+    await supabase.from("modules").delete().eq("course_id", courseId);
     const { error } = await supabase.from("courses").delete().eq("id", courseId);
     if (error) throw error;
     return true;
   } catch {
-    const courses = getMockCourses().filter((course) => course.id !== courseId);
-    setMockCourses(courses);
+    setMockCourses(getMockCourses().filter((course) => course.id !== courseId));
     return true;
   }
 }
 
 export async function getStudentCourses(studentId) {
-  const courses = await getCourses();
-  return courses.filter((course) => Array.isArray(course.owners) && course.owners.includes(studentId));
+  if (!isSupabaseConfigured) {
+    return getMockCourses().filter((course) => Array.isArray(course.owners) && course.owners.includes(studentId));
+  }
+
+  try {
+    const { data: enrollmentRows, error } = await supabase.from("enrollments").select("*").eq("student_id", studentId);
+    if (error) throw error;
+
+    const courseIds = (enrollmentRows ?? []).map((row) => row.course_id ?? row.courseId).filter(Boolean);
+    if (!courseIds.length) return [];
+
+    const { data: courseRows, error: courseError } = await supabase.from("courses").select("*").in("id", courseIds).order("id", { ascending: true });
+    if (courseError) throw courseError;
+
+    const enrollments = enrollmentRows ?? [];
+    const result = [];
+    for (const course of courseRows ?? []) {
+      const modules = await getModulesByCourse(course.id);
+      result.push(normalizeCourse(course, ownersForCourse(course.id, enrollments), modules));
+    }
+    return result;
+  } catch {
+    return getMockCourses().filter((course) => Array.isArray(course.owners) && course.owners.includes(studentId));
+  }
 }

@@ -1,18 +1,43 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { getMockProgress, setMockProgress } from "./mockStore.js";
 
+function mapRowsToProgress(rows) {
+  return (rows ?? []).reduce((progress, row) => {
+    const moduleId = row.module_id ?? row.moduleId;
+    if (!moduleId) return progress;
+    progress[`pdf-${moduleId}`] = Boolean(row.pdf_completed ?? row.pdf_viewed ?? row.pdfOpened ?? false);
+    progress[`video-${moduleId}`] = Boolean(row.video_completed ?? row.video_viewed ?? row.videoOpened ?? false);
+    progress[`module-${moduleId}`] = Boolean(row.module_completed ?? row.completed ?? false);
+    return progress;
+  }, {});
+}
+
+function groupProgressUpdates(updates) {
+  return Object.entries(updates).reduce((rows, [key, value]) => {
+    const [type, moduleIdValue] = key.split("-");
+    const moduleId = Number(moduleIdValue);
+    if (!moduleId || !["pdf", "video", "module"].includes(type)) return rows;
+
+    if (!rows[moduleId]) {
+      rows[moduleId] = {
+        module_id: moduleId,
+      };
+    }
+
+    if (type === "pdf") rows[moduleId].pdf_completed = Boolean(value);
+    if (type === "video") rows[moduleId].video_completed = Boolean(value);
+    if (type === "module") rows[moduleId].module_completed = Boolean(value);
+    return rows;
+  }, {});
+}
+
 export async function getStudentProgress(studentId = 1) {
   if (!isSupabaseConfigured) return getMockProgress();
 
   try {
-    // TODO(database): Align selected columns with the final Supabase student progress table schema.
     const { data, error } = await supabase.from("student_progress").select("*").eq("student_id", studentId);
     if (error) throw error;
-
-    return (data ?? []).reduce((accumulator, item) => {
-      accumulator[item.progress_key] = item.completed;
-      return accumulator;
-    }, {});
+    return mapRowsToProgress(data);
   } catch {
     return getMockProgress();
   }
@@ -26,18 +51,18 @@ export async function updateStudentProgress(studentId = 1, updates = {}) {
   }
 
   try {
-    const rows = Object.entries(updates).map(([progress_key, completed]) => ({
+    const current = await getStudentProgress(studentId);
+    const merged = { ...current, ...updates };
+    const grouped = Object.values(groupProgressUpdates(merged)).map((row) => ({
       student_id: studentId,
-      progress_key,
-      completed,
+      ...row,
     }));
 
-    // TODO(database): Upsert student progress against the final Supabase student progress table schema.
-    const { error } = await supabase.from("student_progress").upsert(rows, {
-      onConflict: "student_id,progress_key",
+    const { error } = await supabase.from("student_progress").upsert(grouped, {
+      onConflict: "student_id,module_id",
     });
     if (error) throw error;
-    return getStudentProgress(studentId);
+    return merged;
   } catch {
     const nextProgress = { ...getMockProgress(), ...updates };
     setMockProgress(nextProgress);
