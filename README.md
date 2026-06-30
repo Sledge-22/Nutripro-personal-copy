@@ -14,6 +14,7 @@ Current scope:
 - Course detail with modules, PDFs, videos, and module progress
 
 The project uses mock data only for now. It is structured so real database and storage integrations can be added later without changing the demo scope.
+Supabase service files are included as an optional data layer, and the app falls back to mock data automatically when Supabase environment variables are missing.
 
 ## Tech
 
@@ -33,12 +34,23 @@ src/
     ui.jsx
   data/
     mockData.js
+  lib/
+    supabaseClient.js
   pages/
     AdminWorkspacePage.jsx
     LoginPage.jsx
     StudentWorkspacePage.jsx
   routes/
     appRoutes.js
+  services/
+    certificateService.js
+    communityService.js
+    courseService.js
+    mockStore.js
+    moduleService.js
+    progressService.js
+    storageService.js
+    userService.js
 scripts/
   validate.js
 index.html
@@ -77,6 +89,8 @@ vite.config.js
 - The build output is written to `dist/`
 - Vercel should deploy the static `dist/` folder only
 - `.vercelignore` keeps non-deployment files out of the Vercel upload
+- Supabase browser credentials should be supplied with `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`
+- If those variables are missing, the demo continues using mock data
 - This project is ready to upload to GitHub as a mock-data demo
 
 ## Future integration points
