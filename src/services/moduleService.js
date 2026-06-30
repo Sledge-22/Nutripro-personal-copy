@@ -1,35 +1,54 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { getMockCourses, setMockCourses } from "./mockStore.js";
 
+function fileNameFromUrl(url, fallback) {
+  if (!url) return fallback;
+  try {
+    return decodeURIComponent(url.split("/").pop().split("?")[0]);
+  } catch {
+    return fallback;
+  }
+}
+
 function mapModuleRow(module) {
+  const videoUrl = module.video_url ?? module.videoUrl ?? module.video_link ?? module.video?.url ?? module.video?.link ?? "";
+  const pdfUrl = module.pdf_url ?? module.pdfUrl ?? "";
+
   return {
     id: module.id,
     courseId: module.course_id ?? module.courseId,
+    sortOrder: module.sort_order ?? module.sortOrder ?? 0,
     title: module.title ?? "",
     description: module.description ?? "",
-    pdfLabel: module.pdf_label ?? module.pdfLabel ?? module.pdf_name ?? "No PDF selected",
+    pdfUrl,
+    pdfLabel: module.pdf_label ?? module.pdfLabel ?? fileNameFromUrl(pdfUrl, "No PDF selected"),
+    videoUrl,
     video: {
       id: module.video_id ?? module.id,
       title: module.video_title ?? module.video?.title ?? `${module.title ?? "Module"} video`,
       description: module.video_description ?? module.video?.description ?? "",
       duration: module.video_duration ?? module.video?.duration ?? "10 min",
       link: module.video_link ?? module.video?.link ?? "",
-      uploadLabel: module.video_upload_label ?? module.video?.uploadLabel ?? module.video_name ?? "No video selected",
+      url: videoUrl,
+      uploadLabel: module.video_upload_label ?? module.video?.uploadLabel ?? fileNameFromUrl(videoUrl, "No video selected"),
     },
   };
 }
 
-function toModuleRow(courseId, module) {
+function toModuleRow(courseId, module, index) {
   return {
     course_id: courseId,
     title: module.title,
     description: module.description,
-    pdf_label: module.pdfLabel,
+    sort_order: module.sortOrder ?? index,
+    pdf_url: module.pdfUrl || null,
+    video_url: module.videoUrl || module.video?.url || module.video?.link || null,
+    pdf_label: module.pdfLabel || null,
     video_title: module.video?.title ?? "",
     video_description: module.video?.description ?? "",
     video_duration: module.video?.duration ?? "10 min",
     video_link: module.video?.link ?? "",
-    video_upload_label: module.video?.uploadLabel ?? "No video selected",
+    video_upload_label: module.video?.uploadLabel ?? null,
   };
 }
 
@@ -46,7 +65,7 @@ export async function getModulesByCourse(courseId) {
   }
 
   try {
-    const { data, error } = await supabase.from("modules").select("*").eq("course_id", courseId).order("id", { ascending: true });
+    const { data, error } = await supabase.from("modules").select("*").eq("course_id", courseId).order("sort_order", { ascending: true }).order("id", { ascending: true });
     if (error) throw error;
     return (data ?? []).map(mapModuleRow);
   } catch {
@@ -66,7 +85,7 @@ export async function replaceModulesForCourse(courseId, modules) {
 
     const { data, error } = await supabase
       .from("modules")
-      .insert(modules.map((module) => toModuleRow(courseId, module)))
+      .insert(modules.map((module, index) => toModuleRow(courseId, module, index + 1)))
       .select("*");
 
     if (error) throw error;

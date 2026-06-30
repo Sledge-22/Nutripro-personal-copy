@@ -5,15 +5,19 @@ import { getModulesByCourse, replaceModulesForCourse } from "./moduleService.js"
 function normalizeModules(modules = []) {
   return modules.map((module, index) => ({
     id: module.id ?? Date.now() + index,
+    sortOrder: module.sortOrder ?? index + 1,
     title: module.title ?? "",
     description: module.description ?? "",
+    pdfUrl: module.pdfUrl ?? "",
     pdfLabel: module.pdfLabel ?? "No PDF selected",
+    videoUrl: module.videoUrl ?? module.video?.url ?? module.video?.link ?? "",
     video: {
       id: module.video?.id ?? Date.now() + index + 1000,
       title: module.video?.title ?? "",
       description: module.video?.description ?? "",
       duration: module.video?.duration ?? "10 min",
       link: module.video?.link ?? "",
+      url: module.video?.url ?? module.videoUrl ?? module.video?.link ?? "",
       uploadLabel: module.video?.uploadLabel ?? "No video selected",
     },
   }));
@@ -179,11 +183,11 @@ export async function getStudentCourses(studentId) {
     const { data: courseRows, error: courseError } = await supabase.from("courses").select("*").in("id", courseIds).order("id", { ascending: true });
     if (courseError) throw courseError;
 
-    const enrollments = enrollmentRows ?? [];
+    const allEnrollments = await fetchEnrollmentRows();
     const result = [];
     for (const course of courseRows ?? []) {
       const modules = await getModulesByCourse(course.id);
-      result.push(normalizeCourse(course, ownersForCourse(course.id, enrollments), modules));
+      result.push(normalizeCourse(course, ownersForCourse(course.id, allEnrollments), modules));
     }
     return result;
   } catch {

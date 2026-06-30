@@ -14,32 +14,32 @@ function createFallbackUploadResult(bucket, file, pathPrefix) {
   };
 }
 
+function createSafeFileName(fileName) {
+  return fileName.toLowerCase().replace(/[^a-z0-9.\-_]+/g, "-");
+}
+
 async function uploadToBucket(bucket, file, pathPrefix) {
   if (!isSupabaseConfigured) {
     return createFallbackUploadResult(bucket, file, pathPrefix);
   }
 
-  try {
-    const fileName = file?.name || "upload-placeholder";
-    const path = `${pathPrefix}/${Date.now()}-${fileName}`;
-
-    // TODO(database): Use real uploaded files from the UI once PDF and video uploads are connected.
-    const { error } = await supabase.storage.from(bucket).upload(path, file, {
-      upsert: true,
-    });
-    if (error) throw error;
-
-    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-    return {
-      bucket,
-      path,
-      fileName,
-      publicUrl: data.publicUrl,
-      mock: false,
-    };
-  } catch {
-    return createFallbackUploadResult(bucket, file, pathPrefix);
+  if (!(file instanceof File || file?.name)) {
+    throw new Error("A real file is required for upload.");
   }
+
+  const fileName = file.name || "upload-placeholder";
+  const path = `${pathPrefix}/${Date.now()}-${createSafeFileName(fileName)}`;
+  const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return {
+    bucket,
+    path,
+    fileName,
+    publicUrl: data.publicUrl,
+    mock: false,
+  };
 }
 
 export async function uploadModulePdf(file, moduleId = "module") {
