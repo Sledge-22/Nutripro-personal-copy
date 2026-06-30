@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
+import { configuredSupabaseUrl, isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 
 const PDF_BUCKET = "module-pdfs";
 const VIDEO_BUCKET = "module-videos";
@@ -18,6 +18,16 @@ function createSafeFileName(fileName) {
   return fileName.toLowerCase().replace(/[^a-z0-9.\-_]+/g, "-");
 }
 
+function buildPublicStorageUrl(bucket, path) {
+  if (!configuredSupabaseUrl || !bucket || !path) return "";
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  return `${configuredSupabaseUrl}/storage/v1/object/public/${bucket}/${encodedPath}`;
+}
+
 async function uploadToBucket(bucket, file, pathPrefix) {
   if (!isSupabaseConfigured) {
     return createFallbackUploadResult(bucket, file, pathPrefix);
@@ -35,18 +45,27 @@ async function uploadToBucket(bucket, file, pathPrefix) {
     throw error;
   }
 
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  if (!data?.publicUrl) {
-    const urlError = new Error(`Failed to resolve public URL for ${bucket} upload.`);
+  const publicUrlResponse = supabase.storage.from(bucket).getPublicUrl(path);
+  const responseUrl = publicUrlResponse?.data?.publicUrl ?? "";
+  const fallbackUrl = buildPublicStorageUrl(bucket, path);
+  const publicUrl = responseUrl || fallbackUrl;
+
+  console.log(`Supabase getPublicUrl response for ${bucket}:`, publicUrlResponse);
+  console.log(`Supabase upload result for ${bucket}:`, { bucket, path, fileName, responseUrl, fallbackUrl, publicUrl });
+
+  if (!publicUrl) {
+    const urlError = new Error(
+      `Failed to resolve public URL for ${bucket} upload. Make sure the ${bucket} storage bucket exists and is public.`,
+    );
     console.error(urlError);
     throw urlError;
   }
-  console.log(`Supabase upload public URL resolved for ${bucket}:`, data.publicUrl);
+  console.log(`Supabase upload public URL resolved for ${bucket}:`, publicUrl);
   return {
     bucket,
     path,
     fileName,
-    publicUrl: data.publicUrl,
+    publicUrl,
     mock: false,
   };
 }
