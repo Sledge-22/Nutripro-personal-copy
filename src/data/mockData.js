@@ -14,6 +14,7 @@ export const initialCourses = [
     id: 1,
     title: "Nutrition Foundations",
     description: "Build a practical understanding of nutrients, balanced meals, and everyday food choices.",
+    status: "published",
     owners: [1, 2],
     modules: [
       {
@@ -50,6 +51,7 @@ export const initialCourses = [
     id: 2,
     title: "Healthy Meal Planning",
     description: "Turn nutrition principles into a simple weekly meal-planning routine.",
+    status: "published",
     owners: [1],
     modules: [
       {
@@ -86,6 +88,7 @@ export const initialCourses = [
     id: 3,
     title: "Mindful Eating Essentials",
     description: "Learn practical techniques for more attentive and intentional eating.",
+    status: "published",
     owners: [2, 3],
     modules: [
       {

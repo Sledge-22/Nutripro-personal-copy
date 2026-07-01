@@ -42,11 +42,12 @@ function createModuleDraft(sortOrder = 1) {
 }
 
 function createCourseDraft(course = null) {
-  if (!course) return { title: "", description: "", modules: [createModuleDraft()] };
+  if (!course) return { title: "", description: "", status: "published", modules: [createModuleDraft()] };
 
   return {
     title: course.title,
     description: course.description,
+    status: course.status || "published",
     modules: course.modules.map((module, index) => ({
       id: module.id,
       sortOrder: module.sortOrder ?? index + 1,
@@ -87,6 +88,7 @@ function buildCoursePayload(form, editingId, existingCourse) {
     id: editingId || createId(),
     title: form.title.trim(),
     description: form.description.trim(),
+    status: form.status || "published",
     owners: existingCourse?.owners?.length ? existingCourse.owners : [1],
     modules: form.modules
       .filter((module) => module.title.trim())
@@ -123,6 +125,15 @@ function slug(value) {
   return (value || "module").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "module";
 }
 
+function formatCourseStatus(status) {
+  const value = (status || "published").toLowerCase();
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function isVisibleToStudents(status) {
+  return (status || "published") === "published";
+}
+
 export function AdminWorkspacePage({
   pathname,
   users,
@@ -132,6 +143,7 @@ export function AdminWorkspacePage({
   onDeleteUser,
   onSaveCourse,
   onDeleteCourse,
+  onUpdateCourseVisibility,
   onGenerateCertificate,
 }) {
   if (pathname === "/admin/users") {
@@ -139,7 +151,14 @@ export function AdminWorkspacePage({
   }
 
   if (pathname === "/admin/post-courses") {
-    return <PostCoursesPage courses={courses} onSaveCourse={onSaveCourse} onDeleteCourse={onDeleteCourse} />;
+    return (
+      <PostCoursesPage
+        courses={courses}
+        onSaveCourse={onSaveCourse}
+        onDeleteCourse={onDeleteCourse}
+        onUpdateCourseVisibility={onUpdateCourseVisibility}
+      />
+    );
   }
 
   if (pathname === "/admin/certificates") {
@@ -247,10 +266,13 @@ function UsersAdminPage({ users, onUpdateUserStatus, onDeleteUser }) {
   );
 }
 
-function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
+function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourseVisibility }) {
   const [form, setForm] = useState(createCourseDraft());
   const [editingId, setEditingId] = useState(null);
   const [saveError, setSaveError] = useState("");
+  const [visibilityMessage, setVisibilityMessage] = useState("");
+  const [visibilityError, setVisibilityError] = useState("");
+  const [statusUpdatingId, setStatusUpdatingId] = useState(null);
 
   const reset = () => {
     setForm(createCourseDraft());
@@ -295,6 +317,8 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
   const submit = (event) => {
     event.preventDefault();
     setSaveError("");
+    setVisibilityMessage("");
+    setVisibilityError("");
     const existingCourse = courses.find((course) => course.id === editingId);
     const payload = buildCoursePayload(form, editingId, existingCourse);
     console.log("Module payload right before saving:", payload.modules);
@@ -312,6 +336,27 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
         console.error("Course save failed:", error);
         setSaveError("Saving the course failed.");
       });
+  };
+
+  const changeCourseVisibility = async (course, visibleToStudents) => {
+    setVisibilityMessage("");
+    setVisibilityError("");
+    setStatusUpdatingId(course.id);
+
+    try {
+      const result = await onUpdateCourseVisibility(course.id, visibleToStudents);
+      if (result?.ok === false) {
+        setVisibilityError(result.error || "Updating course visibility failed.");
+        return;
+      }
+
+      setVisibilityMessage(result?.message || "Course visibility updated.");
+    } catch (error) {
+      console.error("Course visibility update failed:", error);
+      setVisibilityError("Updating course visibility failed.");
+    } finally {
+      setStatusUpdatingId(null);
+    }
   };
 
   const uploadPdf = async (moduleId, file) => {
@@ -441,6 +486,15 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
             onChange={(event) => updateCourseField("description", event.target.value)}
             placeholder="What will students learn?"
           />
+        </label>
+
+        <label>
+          <input
+            type="checkbox"
+            checked={isVisibleToStudents(form.status)}
+            onChange={(event) => updateCourseField("status", event.target.checked ? "published" : "draft")}
+          />{" "}
+          Visible to students
         </label>
 
         {saveError && <small className="field-note danger-text">{saveError}</small>}
@@ -694,7 +748,14 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
           <div className="preview-shell">
             <h3>{previewCourse.title || "Course title"}</h3>
             <p>{previewCourse.description || "Course description will appear here."}</p>
-            <span className="subtle-badge">Assigned to the demo student after posting</span>
+            <div className="row-actions">
+              <Status status={formatCourseStatus(previewCourse.status)} />
+              <span className="subtle-badge">
+                {isVisibleToStudents(previewCourse.status)
+                  ? "Assigned to the demo student after posting"
+                  : "Hidden from the student workspace"}
+              </span>
+            </div>
             <div className="preview-tree">
               {previewCourse.modules.length ? (
                 previewCourse.modules.map((module) => (
@@ -733,6 +794,9 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
             <span className="count-badge">{courses.length} courses</span>
           </div>
 
+          {visibilityMessage && <small className="field-note">{visibilityMessage}</small>}
+          {visibilityError && <small className="field-note danger-text">{visibilityError}</small>}
+
           <div className="course-admin-list">
             {courses.map((course) => (
               <article key={course.id}>
@@ -740,12 +804,15 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
                   <Icon name="courses" />
                 </div>
                 <div className="course-info">
-                  <h3>{course.title}</h3>
+                  <div className="row-actions">
+                    <h3>{course.title}</h3>
+                    <Status status={formatCourseStatus(course.status || "published")} />
+                  </div>
                   <p>{course.description}</p>
-                  <span>{course.modules.length} modules</span>
+                  <span>{(course.modules ?? []).length} modules</span>
                   <span>
                     {
-                      course.modules.filter(
+                      (course.modules ?? []).filter(
                         (module) => module.pdf_url || module.pdfUrl || module.pdfLabel !== "No PDF selected",
                       ).length
                     }{" "}
@@ -753,12 +820,21 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse }) {
                   </span>
                   <span>
                     {
-                      course.modules.filter(
+                      (course.modules ?? []).filter(
                         (module) => module.video_url || module.videoUrl || module.video?.url || module.video?.link,
                       ).length
                     }{" "}
                     videos
                   </span>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={isVisibleToStudents(course.status)}
+                      disabled={statusUpdatingId === course.id}
+                      onChange={(event) => void changeCourseVisibility(course, event.target.checked)}
+                    />{" "}
+                    Visible to students
+                  </label>
                 </div>
                 <div className="row-actions">
                   <button onClick={() => editCourse(course)}>Edit</button>

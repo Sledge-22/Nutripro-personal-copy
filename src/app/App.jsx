@@ -12,7 +12,15 @@ import { LoginPage } from "../pages/LoginPage.jsx";
 import { AdminWorkspacePage } from "../pages/AdminWorkspacePage.jsx";
 import { StudentWorkspacePage } from "../pages/StudentWorkspacePage.jsx";
 import { getUsers, updateUserStatus, deleteUser } from "../services/userService.js";
-import { getCourses, createCourse, updateCourse, deleteCourse, getStudentCourses } from "../services/courseService.js";
+import {
+  getCourses,
+  createCourse,
+  updateCourse,
+  deleteCourse,
+  getStudentCourses,
+  publishCourse,
+  unpublishCourse,
+} from "../services/courseService.js";
 import { getCertificates, generateCertificate, getStudentCertificates } from "../services/certificateService.js";
 import { getStudentProgress, updateStudentProgress } from "../services/progressService.js";
 import { getCommunityPosts, createCommunityPost } from "../services/communityService.js";
@@ -198,6 +206,35 @@ export function App() {
     await refreshCourses();
   }
 
+  async function handleUpdateCourseVisibility(courseId, visibleToStudents) {
+    try {
+      const updatedCourse = visibleToStudents ? await publishCourse(courseId) : await unpublishCourse(courseId);
+
+      setCourses((currentCourses) => upsertCourseList(currentCourses, updatedCourse));
+      setStudentCourses((currentCourses) => {
+        if (!visibleToStudents) return currentCourses.filter((course) => course.id !== courseId);
+
+        const shouldShowCourse =
+          Array.isArray(updatedCourse.owners) && updatedCourse.owners.includes(DEMO_STUDENT_ID) && updatedCourse.status === "published";
+
+        if (!shouldShowCourse) return currentCourses;
+        return upsertCourseList(currentCourses, updatedCourse);
+      });
+
+      void refreshCourses().catch((refreshError) => {
+        console.error("Refreshing courses after visibility update failed:", refreshError);
+      });
+
+      return {
+        ok: true,
+        message: visibleToStudents ? "Course is now visible to students." : "Course is now hidden from students.",
+      };
+    } catch (error) {
+      console.error("Updating course visibility failed:", error);
+      return { ok: false, error: formatSupabaseError(error) };
+    }
+  }
+
   async function handleGenerateCertificate(payload) {
     await generateCertificate(payload);
     await refreshCertificates();
@@ -215,5 +252,5 @@ export function App() {
 
   if (!role) return <LoginPage onChoose={handleLogin} />;
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={handleLogout} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? "Courses" : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} onUpdateUserStatus={handleUpdateUserStatus} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={DEMO_STUDENT_ID} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={handleLogout} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? "Courses" : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} onUpdateUserStatus={handleUpdateUserStatus} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={DEMO_STUDENT_ID} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }

@@ -2,6 +2,18 @@ import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { cloneMockValue, createMockId, getMockCourses, setMockCourses } from "./mockStore.js";
 import { getModulesByCourse, replaceModulesForCourse } from "./moduleService.js";
 
+const DEMO_STUDENT_ID = 1;
+
+function normalizeCourseStatus(status) {
+  if (status === "draft" || status === "archived" || status === "published") return status;
+  return "published";
+}
+
+function ownersForStatus(status, owners = []) {
+  if (normalizeCourseStatus(status) !== "published") return [];
+  return Array.from(new Set([...(Array.isArray(owners) ? owners : []), DEMO_STUDENT_ID]));
+}
+
 function normalizeModules(modules = []) {
   return modules.map((module, index) => ({
     id: module.id ?? Date.now() + index,
@@ -36,8 +48,9 @@ function normalizeCourse(row, owners = [], modules = []) {
     id: row.id,
     title: row.title ?? "",
     description: row.description ?? "",
+    status: normalizeCourseStatus(row.status),
     owners,
-    modules,
+    modules: Array.isArray(modules) ? modules : [],
   };
 }
 
@@ -89,6 +102,52 @@ async function syncEnrollments(courseId, owners = []) {
   console.log("Created enrollment response:", data);
 }
 
+async function syncVisibilityEnrollment(courseId, status) {
+  if (!isSupabaseConfigured) return;
+
+  const normalizedStatus = normalizeCourseStatus(status);
+
+  if (normalizedStatus === "published") {
+    const { data: existingRows, error: existingError } = await supabase
+      .from("enrollments")
+      .select("*")
+      .eq("course_id", courseId)
+      .eq("student_id", DEMO_STUDENT_ID);
+
+    if (existingError) {
+      console.error("Failed to check demo student enrollment in Supabase:", existingError);
+      throw existingError;
+    }
+
+    if (!(existingRows ?? []).length) {
+      const { data, error } = await supabase
+        .from("enrollments")
+        .insert([{ course_id: courseId, student_id: DEMO_STUDENT_ID }])
+        .select("*");
+
+      if (error) {
+        console.error("Failed to auto-enroll demo student in Supabase:", error);
+        throw error;
+      }
+
+      console.log("Created demo student enrollment response:", data);
+    }
+
+    return;
+  }
+
+  const { error } = await supabase
+    .from("enrollments")
+    .delete()
+    .eq("course_id", courseId)
+    .eq("student_id", DEMO_STUDENT_ID);
+
+  if (error) {
+    console.error("Failed to remove demo student enrollment in Supabase:", error);
+    throw error;
+  }
+}
+
 function persistMockCourse(updater) {
   const nextCourses = updater(getMockCourses());
   setMockCourses(nextCourses);
@@ -107,10 +166,12 @@ export async function getCourses() {
 }
 
 export async function createCourse(course) {
+  const status = normalizeCourseStatus(course.status);
   const payload = {
     title: course.title?.trim() ?? "",
     description: course.description?.trim() ?? "",
-    owners: Array.isArray(course.owners) && course.owners.length ? course.owners : [1],
+    status,
+    owners: ownersForStatus(status, course.owners),
     modules: normalizeModules(course.modules),
   };
 
@@ -149,10 +210,12 @@ export async function createCourse(course) {
 }
 
 export async function updateCourse(courseId, updates) {
+  const status = normalizeCourseStatus(updates.status);
   const payload = {
     title: updates.title?.trim() ?? "",
     description: updates.description?.trim() ?? "",
-    owners: Array.isArray(updates.owners) && updates.owners.length ? updates.owners : [1],
+    status,
+    owners: ownersForStatus(status, updates.owners),
     modules: normalizeModules(updates.modules),
   };
 
@@ -210,7 +273,12 @@ export async function deleteCourse(courseId) {
 
 export async function getStudentCourses(studentId) {
   if (!isSupabaseConfigured) {
-    return getMockCourses().filter((course) => Array.isArray(course.owners) && course.owners.includes(studentId));
+    return getMockCourses().filter(
+      (course) =>
+        normalizeCourseStatus(course.status) === "published" &&
+        Array.isArray(course.owners) &&
+        course.owners.includes(studentId),
+    );
   }
 
   const { data: enrollmentRows, error } = await supabase.from("enrollments").select("*").eq("student_id", studentId);
@@ -226,6 +294,7 @@ export async function getStudentCourses(studentId) {
     .from("courses")
     .select("*")
     .in("id", courseIds)
+    .eq("status", "published")
     .order("id", { ascending: true });
 
   if (courseError) {
@@ -240,4 +309,51 @@ export async function getStudentCourses(studentId) {
     result.push(normalizeCourse(course, ownersForCourse(course.id, allEnrollments), modules));
   }
   return result;
+}
+
+export async function updateCourseStatus(courseId, status) {
+  const nextStatus = normalizeCourseStatus(status);
+
+  if (!isSupabaseConfigured) {
+    const nextCourses = getMockCourses().map((course) =>
+      course.id === courseId
+        ? {
+            ...course,
+            status: nextStatus,
+            owners: ownersForStatus(nextStatus, course.owners),
+          }
+        : course,
+    );
+
+    setMockCourses(nextCourses);
+    return nextCourses.find((course) => course.id === courseId) ?? null;
+  }
+
+  const { data, error } = await supabase
+    .from("courses")
+    .update({ status: nextStatus })
+    .eq("id", courseId)
+    .select("*")
+    .single();
+
+  if (error) {
+    console.error("Failed to update course status in Supabase:", error);
+    throw error;
+  }
+
+  console.log("Updated course status response:", data);
+
+  await syncVisibilityEnrollment(courseId, nextStatus);
+
+  const modules = await getModulesByCourse(courseId);
+  const enrollments = await fetchEnrollmentRows();
+  return normalizeCourse(data, ownersForCourse(courseId, enrollments), modules);
+}
+
+export async function publishCourse(courseId) {
+  return updateCourseStatus(courseId, "published");
+}
+
+export async function unpublishCourse(courseId) {
+  return updateCourseStatus(courseId, "draft");
 }

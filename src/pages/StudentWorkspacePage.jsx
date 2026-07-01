@@ -48,8 +48,8 @@ export function StudentWorkspacePage({
         ) : (
           <section className="section-card">
             <span className="eyebrow">COURSE DETAIL</span>
-            <h2>Course not available</h2>
-            <p>This course is not available in your student workspace yet.</p>
+            <h2>This course is not currently available.</h2>
+            <p>The course may be hidden, unpublished, archived, or not assigned to your student workspace.</p>
           </section>
         )}
       </>
@@ -159,6 +159,22 @@ function StudentModuleDetail({ course, completed, onUpdateProgress, progress }) 
   const modules = getCourseModules(course);
   const [activeModuleId, setActiveModuleId] = useState(modules[0]?.id || null);
   const [viewError, setViewError] = useState("");
+
+  if (course?.status && course.status !== "published") {
+    return (
+      <>
+        <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
+          ‹ Back to courses
+        </button>
+
+        <section className="section-card">
+          <span className="eyebrow">COURSE DETAIL</span>
+          <h2>This course is not currently available.</h2>
+          <p>The course is currently hidden from the student workspace.</p>
+        </section>
+      </>
+    );
+  }
 
   const activeModule = modules.find((module) => module.id === activeModuleId) || modules[0] || null;
   const pdfSeen = activeModule ? completed[`pdf-${activeModule.id}`] : false;
