@@ -409,10 +409,35 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     );
   }
 
+  const pdfSource = activeModule?.pdf_url || activeModule?.pdfUrl || "";
+  const videoSource = activeModule?.video_url || activeModule?.videoUrl || "";
+  const pdfLabel = activeModule?.pdfLabel || activeModule?.pdfName || "No PDF selected";
+  const videoLabel =
+    activeModule?.videoName || activeModule?.video?.uploadLabel || activeModule?.video?.link || "No video selected";
+  const assignmentType = activeAssignment?.submissionType || activeAssignment?.submission_type || "text";
+  const assignmentStatus = assignmentState.submission?.status || "";
+  const hasSubmission = Boolean(assignmentState.submission);
+  const assignmentHasGrade =
+    assignmentState.submission?.grade !== null && assignmentState.submission?.grade !== undefined;
+  const assignmentApprovedForCompletion =
+    assignmentStatus === "approved" ||
+    (assignmentHasGrade && assignmentStatus !== "needs_revision" && assignmentStatus !== "rejected");
+  const hasPdfRequirement = Boolean(
+    pdfSource || (activeModule?.pdfLabel && activeModule.pdfLabel !== "No PDF selected") || activeModule?.pdfName,
+  );
+  const hasVideoRequirement = Boolean(
+    videoSource ||
+      (activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== "No video selected") ||
+      activeModule?.videoName,
+  );
+  const hasAssignmentRequirement = Boolean(activeAssignment?.id);
   const pdfSeen = activeModule ? completed[`pdf-${activeModule.id}`] : false;
   const videoSeen = activeModule ? completed[`video-${activeModule.id}`] : false;
   const moduleDone = activeModule ? completed[`module-${activeModule.id}`] : false;
-  const canComplete = pdfSeen && videoSeen;
+  const pdfRequirementMet = !hasPdfRequirement || pdfSeen;
+  const videoRequirementMet = !hasVideoRequirement || videoSeen;
+  const assignmentRequirementMet = !hasAssignmentRequirement || (hasSubmission && assignmentApprovedForCompletion);
+  const canComplete = pdfRequirementMet && videoRequirementMet && assignmentRequirementMet;
 
   const markSeen = (key) => {
     void onUpdateProgress({ [key]: true });
@@ -482,6 +507,12 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
         fileSize,
       });
 
+      const submitMessage = !existingSubmission
+        ? "Assignment submitted."
+        : existingSubmission.status === "needs_revision" || existingSubmission.status === "rejected"
+          ? "Assignment resubmitted."
+          : "Assignment updated.";
+
       setAssignmentState({
         loading: false,
         error: "",
@@ -489,7 +520,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
         textResponse: savedSubmission?.textResponse || textResponse,
         selectedFile: null,
         selectedFileName: savedSubmission?.fileName || fileName,
-        submitMessage: "Assignment submitted.",
+        submitMessage,
         submitError: "",
         uploading: false,
       });
@@ -533,15 +564,20 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     );
   }
 
-  const pdfSource = activeModule?.pdf_url || activeModule?.pdfUrl || "";
-  const videoSource = activeModule?.video_url || activeModule?.videoUrl || "";
-  const pdfLabel = activeModule?.pdfLabel || activeModule?.pdfName || "No PDF selected";
-  const videoLabel =
-    activeModule?.videoName || activeModule?.video?.uploadLabel || activeModule?.video?.link || "No video selected";
-  const assignmentType = activeAssignment?.submissionType || activeAssignment?.submission_type || "text";
-  const assignmentStatus = assignmentState.submission?.status || "";
   const canEditAssignment =
-    !assignmentState.submission || assignmentStatus === "needs_revision" || assignmentStatus === "submitted";
+    !hasSubmission ||
+    assignmentStatus === "submitted" ||
+    assignmentStatus === "needs_revision" ||
+    assignmentStatus === "rejected";
+  const assignmentButtonLabel = assignmentState.uploading
+    ? "Submitting..."
+    : !hasSubmission
+      ? "Submit assignment"
+      : assignmentStatus === "approved"
+        ? "Assignment approved"
+        : assignmentStatus === "needs_revision" || assignmentStatus === "rejected"
+          ? "Resubmit assignment"
+          : "Update submission";
 
   return (
     <>
@@ -745,6 +781,10 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                 <small className="field-note">This assignment needs revision. You can update and resubmit it.</small>
               ) : assignmentStatus === "approved" ? (
                 <small className="field-note">This assignment has been approved. Editing is disabled.</small>
+              ) : assignmentStatus === "rejected" ? (
+                <small className="field-note">This assignment was rejected. Update your work and resubmit it.</small>
+              ) : assignmentStatus === "submitted" ? (
+                <small className="field-note">Your submission is saved. You can update it until it is reviewed.</small>
               ) : null}
 
               <div className="form-actions compact">
@@ -755,22 +795,43 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                   onClick={() => void handleAssignmentSubmit()}
                 >
                   <Icon name="check" />
-                  {assignmentState.uploading
-                    ? "Submitting..."
-                    : assignmentStatus === "needs_revision"
-                      ? "Resubmit assignment"
-                      : "Submit assignment"}
+                  {assignmentButtonLabel}
                 </button>
               </div>
             </section>
           ) : null}
 
           <div className="progress-steps">
-            <span className={pdfSeen ? "subtle-badge" : "count-badge"}>{pdfSeen ? "PDF viewed" : "PDF pending"}</span>
-            <span className={videoSeen ? "subtle-badge" : "count-badge"}>
-              {videoSeen ? "Video viewed" : "Video pending"}
+            <span className={pdfRequirementMet ? "subtle-badge" : "count-badge"}>
+              {!hasPdfRequirement ? "No PDF required" : pdfSeen ? "PDF viewed" : "PDF pending"}
             </span>
+            <span className={videoRequirementMet ? "subtle-badge" : "count-badge"}>
+              {!hasVideoRequirement ? "No video required" : videoSeen ? "Video viewed" : "Video pending"}
+            </span>
+            {hasAssignmentRequirement ? (
+              <span className={assignmentRequirementMet ? "subtle-badge" : "count-badge"}>
+                {assignmentStatus === "approved"
+                  ? "Assignment approved"
+                  : assignmentStatus === "needs_revision"
+                    ? "Assignment needs revision"
+                    : assignmentStatus === "rejected"
+                      ? "Assignment rejected"
+                      : assignmentApprovedForCompletion
+                        ? "Assignment reviewed"
+                        : hasSubmission
+                          ? "Assignment pending review"
+                          : "Assignment pending"}
+              </span>
+            ) : (
+              <span className="subtle-badge">No assignment required</span>
+            )}
           </div>
+
+          {!canComplete ? (
+            <small className="field-note danger-text">
+              Complete the PDF, video, and assignment requirements before marking this module complete.
+            </small>
+          ) : null}
 
           <button
             className={moduleDone ? "complete-btn done" : "complete-btn"}
