@@ -15,6 +15,8 @@ function createAssignmentDraft() {
     id: null,
     title: "",
     instructions: "",
+    dueDate: "",
+    due_date: "",
     submissionType: "text",
     submission_type: "text",
   };
@@ -99,6 +101,8 @@ function createCourseDraft(course = null) {
             id: module.assignment.id || null,
             title: module.assignment.title || "",
             instructions: module.assignment.instructions || "",
+            dueDate: module.assignment.dueDate || module.assignment.due_date || "",
+            due_date: module.assignment.due_date || module.assignment.dueDate || "",
             submissionType: module.assignment.submissionType || module.assignment.submission_type || "text",
             submission_type: module.assignment.submission_type || module.assignment.submissionType || "text",
           }
@@ -146,6 +150,8 @@ function buildCoursePayload(form, editingId, existingCourse) {
               id: module.assignment.id || null,
               title: module.assignment.title.trim(),
               instructions: module.assignment.instructions.trim(),
+              dueDate: module.assignment.dueDate || module.assignment.due_date || "",
+              due_date: module.assignment.due_date || module.assignment.dueDate || "",
               submissionType: module.assignment.submissionType || module.assignment.submission_type || "text",
               submission_type: module.assignment.submission_type || module.assignment.submissionType || "text",
             }
@@ -181,6 +187,20 @@ function createReviewDraft(submission = null) {
   };
 }
 
+function formatDisplayDate(value) {
+  if (!value) return "—";
+
+  try {
+    return new Date(value).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return value;
+  }
+}
+
 export function AdminWorkspacePage({
   pathname,
   users,
@@ -206,6 +226,10 @@ export function AdminWorkspacePage({
         onUpdateCourseVisibility={onUpdateCourseVisibility}
       />
     );
+  }
+
+  if (pathname === "/admin/assignment-reviews") {
+    return <AssignmentReviewsPage />;
   }
 
   if (pathname === "/admin/certificates") {
@@ -242,12 +266,17 @@ function AdminDashboardPage({ users, courses, certificates }) {
         <div className="section-heading">
           <div>
             <span className="eyebrow">ADMIN OVERVIEW</span>
-            <h2>Your three admin areas</h2>
+            <h2>Your admin areas</h2>
           </div>
         </div>
         <div className="overview-grid">
           <OverviewCard icon="users" title="Users Admin" text="Activate, deactivate, pause, or delete users." />
           <OverviewCard icon="courses" title="Post Courses" text="Create, edit, and manage posted courses." />
+          <OverviewCard
+            icon="certificate"
+            title="Assignment Reviews"
+            text="Review student homework, assign grades, and send feedback."
+          />
           <OverviewCard
             icon="certificate"
             title="Certificates Generator"
@@ -890,6 +919,21 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                     </label>
 
                     <label>
+                      Due date
+                      <input
+                        type="date"
+                        value={module.assignment.dueDate || module.assignment.due_date || ""}
+                        onChange={(event) =>
+                          updateAssignment(module.id, (assignment) => ({
+                            ...assignment,
+                            dueDate: event.target.value,
+                            due_date: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+
+                    <label>
                       Submission type
                       <select
                         value={module.assignment.submissionType || module.assignment.submission_type || "text"}
@@ -982,6 +1026,9 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                       <div className="preview-item">
                         <span className="subtle-badge">Homework</span>
                         <strong>{module.assignment?.title || "No assignment"}</strong>
+                        {module.assignment?.dueDate || module.assignment?.due_date ? (
+                          <small>Due {formatDisplayDate(module.assignment?.dueDate || module.assignment?.due_date)}</small>
+                        ) : null}
                       </div>
                     </div>
                   </article>
@@ -1195,6 +1242,256 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+function AssignmentReviewsPage() {
+  const [submissions, setSubmissions] = useState([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [submissionsError, setSubmissionsError] = useState("");
+  const [reviewForms, setReviewForms] = useState({});
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
+  const [reviewSavingId, setReviewSavingId] = useState(null);
+  const [reviewMessage, setReviewMessage] = useState("");
+  const [reviewError, setReviewError] = useState("");
+
+  const loadSubmissions = async (keepSelectedId = selectedSubmissionId) => {
+    setSubmissionsLoading(true);
+    setSubmissionsError("");
+
+    try {
+      const rows = await getSubmissionsForAdmin();
+      setSubmissions(rows);
+      setReviewForms((current) => ({
+        ...Object.fromEntries(rows.map((submission) => [submission.id, current[submission.id] ?? createReviewDraft(submission)])),
+      }));
+      setSelectedSubmissionId(rows.some((submission) => submission.id === keepSelectedId) ? keepSelectedId : rows[0]?.id ?? null);
+    } catch (error) {
+      console.error("Loading assignment submissions failed:", error);
+      setSubmissionsError(error.message || "Loading submissions failed.");
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadSubmissions();
+  }, []);
+
+  const selectedSubmission = submissions.find((submission) => submission.id === selectedSubmissionId) ?? null;
+  const reviewForm = selectedSubmission ? reviewForms[selectedSubmission.id] ?? createReviewDraft(selectedSubmission) : createReviewDraft();
+
+  const updateReviewForm = (field, value) => {
+    if (!selectedSubmission) return;
+
+    setReviewForms((current) => ({
+      ...current,
+      [selectedSubmission.id]: {
+        ...(current[selectedSubmission.id] ?? createReviewDraft(selectedSubmission)),
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveReview = async () => {
+    if (!selectedSubmission) return;
+
+    setReviewMessage("");
+    setReviewError("");
+    setReviewSavingId(selectedSubmission.id);
+
+    try {
+      const gradeValue = reviewForm.grade === "" ? null : Number(reviewForm.grade);
+      if (gradeValue !== null && (Number.isNaN(gradeValue) || gradeValue < 0 || gradeValue > 100)) {
+        throw new Error("Grade must be between 0 and 100.");
+      }
+
+      await reviewSubmission(selectedSubmission.id, reviewForm.status, reviewForm.adminFeedback, gradeValue);
+      setReviewMessage("Submission review saved.");
+      await loadSubmissions(selectedSubmission.id);
+    } catch (error) {
+      console.error("Saving assignment review failed:", error);
+      setReviewError(error.message || "Saving the review failed.");
+    } finally {
+      setReviewSavingId(null);
+    }
+  };
+
+  return (
+    <div className="split-layout review-center-layout">
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">ASSIGNMENT REVIEWS</span>
+            <h2>All student submissions</h2>
+            <p>Review homework, open uploaded files, and send grades and feedback back to students.</p>
+          </div>
+          <span className="count-badge">{submissions.length} submissions</span>
+        </div>
+
+        {submissionsLoading && <small className="field-note">Loading submissions...</small>}
+        {submissionsError && <small className="field-note danger-text">{submissionsError}</small>}
+        {reviewMessage && <small className="field-note">{reviewMessage}</small>}
+        {reviewError && <small className="field-note danger-text">{reviewError}</small>}
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Course</th>
+                <th>Module</th>
+                <th>Assignment</th>
+                <th>Status</th>
+                <th>Grade</th>
+                <th>Submitted date</th>
+                <th>Review</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!submissionsLoading && !submissions.length ? (
+                <tr>
+                  <td colSpan="8">No assignment submissions yet.</td>
+                </tr>
+              ) : (
+                submissions.map((submission) => (
+                  <tr key={submission.id}>
+                    <td>
+                      <strong>{submission.studentName || "Student"}</strong>
+                      <div>{submission.studentEmail || "—"}</div>
+                    </td>
+                    <td>{submission.courseTitle || "—"}</td>
+                    <td>{submission.moduleTitle || "—"}</td>
+                    <td>{submission.assignmentTitle || "—"}</td>
+                    <td>
+                      <Status status={submission.status || "submitted"} />
+                    </td>
+                    <td>{submission.grade === null || submission.grade === undefined ? "Not graded yet" : `${submission.grade}/100`}</td>
+                    <td>{formatDisplayDate(submission.submittedAt || submission.submitted_at)}</td>
+                    <td>
+                      <button
+                        onClick={() => {
+                          setSelectedSubmissionId(submission.id);
+                          setReviewMessage("");
+                          setReviewError("");
+                        }}
+                      >
+                        Review
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="section-card review-detail-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">REVIEW PANEL</span>
+            <h2>{selectedSubmission ? selectedSubmission.assignmentTitle || "Assignment review" : "Select a submission"}</h2>
+            <p>
+              {selectedSubmission
+                ? `${selectedSubmission.studentName || "Student"} · ${selectedSubmission.courseTitle || "Course"}`
+                : "Choose a submission from the list to review it."}
+            </p>
+          </div>
+        </div>
+
+        {selectedSubmission ? (
+          <div className="review-panel-content">
+            <div className="review-meta-grid">
+              <div>
+                <small>Student</small>
+                <strong>{selectedSubmission.studentName || "Student"}</strong>
+                <p>{selectedSubmission.studentEmail || "—"}</p>
+              </div>
+              <div>
+                <small>Course</small>
+                <strong>{selectedSubmission.courseTitle || "—"}</strong>
+                <p>{selectedSubmission.moduleTitle || "—"}</p>
+              </div>
+              <div>
+                <small>Assignment</small>
+                <strong>{selectedSubmission.assignmentTitle || "—"}</strong>
+                <p>Due {formatDisplayDate(selectedSubmission.assignment?.dueDate || selectedSubmission.assignment?.due_date)}</p>
+              </div>
+              <div>
+                <small>Submitted</small>
+                <strong>{formatDisplayDate(selectedSubmission.submittedAt || selectedSubmission.submitted_at)}</strong>
+                <p>{formatSubmissionType(selectedSubmission.assignment?.submissionType || selectedSubmission.assignment?.submission_type)}</p>
+              </div>
+            </div>
+
+            <div className="response-block">
+              <strong>Assignment instructions</strong>
+              <p>{selectedSubmission.assignmentInstructions || "No instructions added."}</p>
+            </div>
+
+            <div className="response-block">
+              <strong>Student text response</strong>
+              <p>{selectedSubmission.textResponse || "No text response submitted."}</p>
+            </div>
+
+            {selectedSubmission.filePublicUrl || selectedSubmission.fileUrl ? (
+              <a href={selectedSubmission.filePublicUrl || selectedSubmission.fileUrl} target="_blank" rel="noreferrer">
+                Open attachment
+              </a>
+            ) : (
+              <small className="field-note">No file attachment submitted.</small>
+            )}
+
+            <label>
+              Current status
+              <select value={reviewForm.status} onChange={(event) => updateReviewForm("status", event.target.value)}>
+                <option value="submitted">Submitted</option>
+                <option value="approved">Approved</option>
+                <option value="needs_revision">Needs revision</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </label>
+
+            <label>
+              Grade out of 100
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={reviewForm.grade}
+                onChange={(event) => updateReviewForm("grade", event.target.value)}
+                placeholder="0 - 100"
+              />
+            </label>
+
+            <label>
+              Feedback
+              <textarea
+                rows="6"
+                value={reviewForm.adminFeedback}
+                onChange={(event) => updateReviewForm("adminFeedback", event.target.value)}
+                placeholder="Write clear feedback for the student."
+              />
+            </label>
+
+            <div className="form-actions compact">
+              <button
+                type="button"
+                className="primary-btn"
+                disabled={reviewSavingId === selectedSubmission.id}
+                onClick={() => void saveReview()}
+              >
+                <Icon name="check" />
+                {reviewSavingId === selectedSubmission.id ? "Saving..." : "Save review"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="empty-copy">Select a submission to open the review panel.</p>
+        )}
+      </section>
     </div>
   );
 }

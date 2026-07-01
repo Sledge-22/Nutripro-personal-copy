@@ -539,6 +539,9 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const videoLabel =
     activeModule?.videoName || activeModule?.video?.uploadLabel || activeModule?.video?.link || "No video selected";
   const assignmentType = activeAssignment?.submissionType || activeAssignment?.submission_type || "text";
+  const assignmentStatus = assignmentState.submission?.status || "";
+  const canEditAssignment =
+    !assignmentState.submission || assignmentStatus === "needs_revision" || assignmentStatus === "submitted";
 
   return (
     <>
@@ -661,6 +664,9 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
               <div className="assignment-chip-row">
                 <span className="subtle-badge">Submission type: {formatSubmissionType(assignmentType)}</span>
+                {activeAssignment.dueDate || activeAssignment.due_date ? (
+                  <span className="subtle-badge">Due: {activeAssignment.dueDate || activeAssignment.due_date}</span>
+                ) : null}
                 {assignmentState.submission?.status ? <Status status={assignmentState.submission.status} /> : null}
               </div>
 
@@ -677,6 +683,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                   <textarea
                     rows="5"
                     value={assignmentState.textResponse}
+                    disabled={!canEditAssignment || assignmentState.loading || assignmentState.uploading}
                     onChange={(event) =>
                       setAssignmentState((current) => ({
                         ...current,
@@ -695,6 +702,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                   Upload file
                   <input
                     type="file"
+                    disabled={!canEditAssignment || assignmentState.loading || assignmentState.uploading}
                     onChange={(event) =>
                       setAssignmentState((current) => ({
                         ...current,
@@ -733,15 +741,25 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                 </p>
               </div>
 
+              {assignmentStatus === "needs_revision" ? (
+                <small className="field-note">This assignment needs revision. You can update and resubmit it.</small>
+              ) : assignmentStatus === "approved" ? (
+                <small className="field-note">This assignment has been approved. Editing is disabled.</small>
+              ) : null}
+
               <div className="form-actions compact">
                 <button
                   type="button"
                   className="primary-btn"
-                  disabled={assignmentState.uploading || assignmentState.loading}
+                  disabled={!canEditAssignment || assignmentState.uploading || assignmentState.loading}
                   onClick={() => void handleAssignmentSubmit()}
                 >
                   <Icon name="check" />
-                  {assignmentState.uploading ? "Submitting..." : "Submit assignment"}
+                  {assignmentState.uploading
+                    ? "Submitting..."
+                    : assignmentStatus === "needs_revision"
+                      ? "Resubmit assignment"
+                      : "Submit assignment"}
                 </button>
               </div>
             </section>

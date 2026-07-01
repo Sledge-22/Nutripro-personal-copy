@@ -162,6 +162,7 @@ export function App() {
     { path: ROUTES.admin.dashboard, label: "Dashboard", icon: "dashboard" },
     { path: ROUTES.admin.users, label: "Users Admin", icon: "users" },
     { path: ROUTES.admin.postCourses, label: "Post Courses", icon: "courses" },
+    { path: ROUTES.admin.assignmentReviews, label: "Assignment Reviews", icon: "certificate" },
     { path: ROUTES.admin.certificates, label: "Certificates Generator", icon: "certificate" },
   ]), []);
 
@@ -177,6 +178,7 @@ export function App() {
       [ROUTES.admin.dashboard]: "Dashboard",
       [ROUTES.admin.users]: "Users Admin",
       [ROUTES.admin.postCourses]: "Post Courses",
+      [ROUTES.admin.assignmentReviews]: "Assignment Reviews",
       [ROUTES.admin.certificates]: "Certificates Generator",
       [ROUTES.student.dashboard]: "Dashboard",
       [ROUTES.student.certificates]: "Certificates",

@@ -160,6 +160,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
 .preview-items { display: grid; gap: 8px; }
 .preview-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: #fff; }
 .preview-item strong { font-size: 12px; }
+.preview-item small { display: block; margin-left: auto; color: var(--muted); font-size: 11px; }
 .mini-action { padding: 0; border: 0; background: none; cursor: pointer; font-weight: 700; }
 .empty-copy { margin: 0; font-size: 12px; }
 .course-admin-list { display: grid; gap: 12px; }
@@ -246,6 +247,15 @@ code { padding: 5px 7px; border-radius: 6px; color: var(--green-800); background
 .response-block { padding: 14px; border-radius: 12px; background: #fff; }
 .response-block strong { display: block; margin-bottom: 6px; }
 .review-panel { display: grid; gap: 8px; padding-top: 4px; border-top: 1px solid #dfe8e3; }
+.review-center-layout { grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr); }
+.review-detail-card { position: sticky; top: 20px; }
+.review-panel-content { display: grid; gap: 14px; }
+.review-meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.review-meta-grid > div { padding: 14px; border-radius: 12px; background: var(--green-50); }
+.review-meta-grid small, .review-meta-grid p { color: var(--muted); }
+.review-meta-grid small { display: block; margin-bottom: 5px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.review-meta-grid strong { display: block; font-size: 14px; }
+.review-meta-grid p { margin: 5px 0 0; font-size: 12px; line-height: 1.5; }
 .progress-steps { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .lesson-meta { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; }
 .lesson-meta a { color: var(--green-700); word-break: break-word; }
@@ -289,6 +299,7 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
   .course-detail-layout { grid-template-columns: 330px minmax(0,1fr); }
   .login-panel { padding-inline: 45px; }
   .submission-summary { flex-direction: column; }
+  .review-center-layout, .review-meta-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {

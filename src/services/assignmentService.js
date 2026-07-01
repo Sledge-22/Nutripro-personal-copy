@@ -54,6 +54,8 @@ function normalizeAssignment(row) {
     moduleId: row.module_id ?? row.moduleId,
     title: row.title ?? "",
     instructions: row.instructions ?? "",
+    dueDate: row.due_date ?? row.dueDate ?? "",
+    due_date: row.due_date ?? row.dueDate ?? "",
     submissionType: normalizeSubmissionType(row.submission_type ?? row.submissionType),
     submission_type: normalizeSubmissionType(row.submission_type ?? row.submissionType),
   };
@@ -67,6 +69,8 @@ function normalizeSubmission(row, context = {}) {
   const course = context.course ?? null;
   const student = context.student ?? null;
   const grade = row.grade === null || row.grade === undefined || row.grade === "" ? null : Number(row.grade);
+  const filePublicUrl = row.file_public_url ?? row.file_url ?? row.submission_file_url ?? "";
+  const fileStoragePath = row.file_storage_path ?? row.storage_path ?? row.submission_file_storage_path ?? "";
 
   return {
     id: row.id,
@@ -74,13 +78,13 @@ function normalizeSubmission(row, context = {}) {
     studentId: row.student_id ?? row.studentId,
     textResponse: row.text_response ?? row.response_text ?? row.submission_text ?? "",
     text_response: row.text_response ?? row.response_text ?? row.submission_text ?? "",
-    filePublicUrl: row.file_public_url ?? row.file_url ?? row.submission_file_url ?? "",
-    file_public_url: row.file_public_url ?? row.file_url ?? row.submission_file_url ?? "",
-    fileUrl: row.file_public_url ?? row.file_url ?? row.submission_file_url ?? "",
+    filePublicUrl,
+    file_public_url: filePublicUrl,
+    fileUrl: filePublicUrl,
     fileName: row.file_name ?? row.submission_file_name ?? "",
     file_name: row.file_name ?? row.submission_file_name ?? "",
-    fileStoragePath: row.file_storage_path ?? row.storage_path ?? row.submission_file_storage_path ?? "",
-    file_storage_path: row.file_storage_path ?? row.storage_path ?? row.submission_file_storage_path ?? "",
+    fileStoragePath,
+    file_storage_path: fileStoragePath,
     fileType: row.file_type ?? row.submission_file_type ?? "",
     file_type: row.file_type ?? row.submission_file_type ?? "",
     fileSize: normalizeOptionalNumber(row.file_size),
@@ -93,9 +97,11 @@ function normalizeSubmission(row, context = {}) {
     reviewed_at: row.reviewed_at ?? null,
     gradedAt: row.graded_at ?? null,
     graded_at: row.graded_at ?? null,
-    submittedAt: row.created_at ?? row.submitted_at ?? null,
+    submittedAt: row.submitted_at ?? row.created_at ?? null,
+    submitted_at: row.submitted_at ?? row.created_at ?? null,
     assignment,
     assignmentTitle: assignment?.title ?? context.assignmentTitle ?? "",
+    assignmentInstructions: assignment?.instructions ?? "",
     moduleId: assignment?.moduleId ?? module?.id ?? null,
     moduleTitle: module?.title ?? "",
     courseId: module?.courseId ?? course?.id ?? null,
@@ -109,6 +115,7 @@ function sanitizeAssignmentData(assignmentData = {}) {
   return {
     title: `${assignmentData.title ?? ""}`.trim(),
     instructions: `${assignmentData.instructions ?? ""}`.trim(),
+    due_date: assignmentData.due_date ?? assignmentData.dueDate ?? null,
     submission_type: normalizeSubmissionType(assignmentData.submission_type ?? assignmentData.submissionType),
   };
 }
@@ -127,9 +134,7 @@ function findMockModuleEntry(moduleId) {
 }
 
 function nextMockAssignmentId() {
-  return (
-    allMockModules().reduce((maxValue, { module }) => Math.max(maxValue, Number(module.assignment?.id) || 0), 0) + 1
-  );
+  return allMockModules().reduce((maxValue, { module }) => Math.max(maxValue, Number(module.assignment?.id) || 0), 0) + 1;
 }
 
 function updateMockAssignmentForModule(moduleId, updater) {
@@ -142,6 +147,7 @@ function updateMockAssignmentForModule(moduleId, updater) {
 
       const nextAssignment = updater(module.assignment ?? null, module, course);
       updatedAssignment = nextAssignment;
+
       return {
         ...module,
         assignment: nextAssignment,
@@ -176,9 +182,7 @@ async function hydrateSubmissions(rows = []) {
 
   const assignmentMap = new Map(assignmentRows.map((assignment) => [String(assignment.id), assignment]));
   const moduleIds = Array.from(
-    new Set(
-      assignmentRows.map((assignment) => assignment.module_id ?? assignment.moduleId).filter(Boolean),
-    ),
+    new Set(assignmentRows.map((assignment) => assignment.module_id ?? assignment.moduleId).filter(Boolean)),
   );
 
   const moduleRows = moduleIds.length
@@ -189,9 +193,7 @@ async function hydrateSubmissions(rows = []) {
     : [];
 
   const moduleMap = new Map(moduleRows.map((module) => [String(module.id), module]));
-  const courseIds = Array.from(
-    new Set(moduleRows.map((module) => module.course_id ?? module.courseId).filter(Boolean)),
-  );
+  const courseIds = Array.from(new Set(moduleRows.map((module) => module.course_id ?? module.courseId).filter(Boolean)));
 
   const courseRows = courseIds.length
     ? await supabase.from("courses").select("*").in("id", courseIds).then(({ data, error }) => {
@@ -216,8 +218,7 @@ async function hydrateSubmissions(rows = []) {
 function hydrateMockSubmission(submission) {
   const assignmentId = submission.assignment_id ?? submission.assignmentId;
   const studentId = submission.student_id ?? submission.studentId;
-  const assignmentEntry =
-    allMockModules().find(({ module }) => String(module.assignment?.id) === String(assignmentId)) ?? null;
+  const assignmentEntry = allMockModules().find(({ module }) => String(module.assignment?.id) === String(assignmentId)) ?? null;
   const student = getMockUsers().find((user) => String(user.id) === String(studentId)) ?? null;
 
   return normalizeSubmission(submission, {
@@ -284,12 +285,15 @@ export async function createAssignment(moduleId, assignmentData) {
   }
 
   if (!isSupabaseConfigured) {
-    return normalizeAssignment(updateMockAssignmentForModule(normalizedModuleId, () => ({
-      id: nextMockAssignmentId(),
-      moduleId: normalizedModuleId,
-      ...payload,
-      submissionType: payload.submission_type,
-    })));
+    return normalizeAssignment(
+      updateMockAssignmentForModule(normalizedModuleId, () => ({
+        id: nextMockAssignmentId(),
+        moduleId: normalizedModuleId,
+        ...payload,
+        dueDate: payload.due_date ?? "",
+        submissionType: payload.submission_type,
+      })),
+    );
   }
 
   const { data, error } = await supabase
@@ -315,17 +319,19 @@ export async function updateAssignment(assignmentId, assignmentData) {
   }
 
   if (!isSupabaseConfigured) {
-    const assignmentEntry =
-      allMockModules().find(({ module }) => String(module.assignment?.id) === String(normalizedAssignmentId)) ?? null;
+    const assignmentEntry = allMockModules().find(({ module }) => String(module.assignment?.id) === String(normalizedAssignmentId)) ?? null;
     if (!assignmentEntry) return null;
 
-    return normalizeAssignment(updateMockAssignmentForModule(assignmentEntry.module.id, (assignment) => ({
-      ...(assignment ?? {}),
-      id: normalizedAssignmentId,
-      moduleId: assignmentEntry.module.id,
-      ...payload,
-      submissionType: payload.submission_type,
-    })));
+    return normalizeAssignment(
+      updateMockAssignmentForModule(assignmentEntry.module.id, (assignment) => ({
+        ...(assignment ?? {}),
+        id: normalizedAssignmentId,
+        moduleId: assignmentEntry.module.id,
+        ...payload,
+        dueDate: payload.due_date ?? "",
+        submissionType: payload.submission_type,
+      })),
+    );
   }
 
   const { data, error } = await supabase
@@ -347,9 +353,7 @@ export async function deleteAssignment(assignmentId) {
   const normalizedAssignmentId = normalizeEntityId(assignmentId);
 
   if (!isSupabaseConfigured) {
-    const assignmentEntry =
-      allMockModules().find(({ module }) => String(module.assignment?.id) === String(normalizedAssignmentId)) ?? null;
-
+    const assignmentEntry = allMockModules().find(({ module }) => String(module.assignment?.id) === String(normalizedAssignmentId)) ?? null;
     if (!assignmentEntry) return true;
 
     updateMockAssignmentForModule(assignmentEntry.module.id, () => null);
@@ -474,15 +478,24 @@ export async function syncAssignmentsForModules(savedModules = [], sourceModules
 export async function submitAssignment(assignmentId, studentId, responseData = {}) {
   const normalizedAssignmentId = normalizeEntityId(assignmentId);
   const normalizedStudentId = normalizeEntityId(studentId);
+  const submittedAt = new Date().toISOString();
   const payload = {
     assignment_id: normalizedAssignmentId,
     student_id: normalizedStudentId,
     text_response: `${responseData.textResponse ?? responseData.text_response ?? ""}`.trim() || null,
     file_public_url:
-      responseData.filePublicUrl ?? responseData.file_public_url ?? responseData.fileUrl ?? responseData.file_url ?? null,
+      responseData.filePublicUrl ??
+      responseData.file_public_url ??
+      responseData.fileUrl ??
+      responseData.file_url ??
+      null,
     file_name: responseData.fileName ?? responseData.file_name ?? null,
     file_storage_path:
-      responseData.fileStoragePath ?? responseData.file_storage_path ?? responseData.storagePath ?? responseData.storage_path ?? null,
+      responseData.fileStoragePath ??
+      responseData.file_storage_path ??
+      responseData.storagePath ??
+      responseData.storage_path ??
+      null,
     file_type: responseData.fileType ?? responseData.file_type ?? null,
     file_size:
       responseData.fileSize === null || responseData.fileSize === undefined || responseData.fileSize === ""
@@ -491,6 +504,7 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
     status: "submitted",
     admin_feedback: null,
     grade: null,
+    submitted_at: submittedAt,
     reviewed_at: null,
     graded_at: null,
   };
@@ -507,7 +521,7 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
       id: existingSubmission?.id ?? createMockId(submissions),
       ...(existingSubmission ?? {}),
       ...payload,
-      created_at: existingSubmission?.created_at ?? new Date().toISOString(),
+      created_at: existingSubmission?.created_at ?? submittedAt,
     };
 
     const nextSubmissions = existingSubmission
@@ -563,7 +577,7 @@ export async function getSubmissionsForAdmin() {
   const { data, error } = await supabase
     .from("assignment_submissions")
     .select("*")
-    .order("created_at", { ascending: false })
+    .order("submitted_at", { ascending: false, nullsFirst: false })
     .order("id", { ascending: false });
 
   if (error) {
@@ -587,7 +601,7 @@ export async function getSubmissionsByAssignment(assignmentId) {
     .from("assignment_submissions")
     .select("*")
     .eq("assignment_id", normalizedAssignmentId)
-    .order("created_at", { ascending: false })
+    .order("submitted_at", { ascending: false, nullsFirst: false })
     .order("id", { ascending: false });
 
   if (error) {

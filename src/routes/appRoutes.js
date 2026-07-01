@@ -4,6 +4,7 @@ export const ROUTES = {
     dashboard: "/admin",
     users: "/admin/users",
     postCourses: "/admin/post-courses",
+    assignmentReviews: "/admin/assignment-reviews",
     certificates: "/admin/certificates",
   },
   student: {
