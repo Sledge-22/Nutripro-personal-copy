@@ -4,6 +4,7 @@ import { ROUTES } from "../routes/appRoutes.js";
 import { getStudentSubmission, submitAssignment } from "../services/assignmentService.js";
 import { getStudentCourseAccess } from "../services/courseService.js";
 import { uploadAssignmentFile } from "../services/storageService.js";
+import { useLanguage } from "../i18n/LanguageContext.jsx";
 
 function goTo(pathname) {
   window.history.pushState({}, "", pathname);
@@ -14,10 +15,14 @@ function getCourseModules(course) {
   return Array.isArray(course?.modules) ? course.modules : [];
 }
 
-function formatSubmissionType(submissionType) {
-  const value = submissionType || "text";
-  if (value === "text_and_file") return "Text and file";
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function StudentCourseState({ eyebrow, title, text }) {
+  return (
+    <section className="section-card">
+      <span className="eyebrow">{eyebrow}</span>
+      <h2>{title}</h2>
+      <p>{text}</p>
+    </section>
+  );
 }
 
 export function StudentWorkspacePage({
@@ -30,6 +35,7 @@ export function StudentWorkspacePage({
   onCreatePost,
   onUpdateProgress,
 }) {
+  const { t } = useLanguage();
   const ownedCourses = Array.isArray(courses) ? courses : [];
   const studentCertificates = certificates.filter((certificate) => certificate.studentId === studentId);
   const [previewCertificate, setPreviewCertificate] = useState(null);
@@ -125,47 +131,21 @@ export function StudentWorkspacePage({
     const selectedCourse = detailState.course ?? ownedCourses.find((entry) => String(entry?.id) === routeCourseId) ?? null;
 
     if (detailState.loading && !selectedCourse) {
-      return (
-        <section className="section-card">
-          <span className="eyebrow">COURSE DETAIL</span>
-          <h2>Loading course...</h2>
-          <p>Checking Maya Laurent&apos;s enrollment and the selected course record.</p>
-        </section>
-      );
+      return <StudentCourseState eyebrow={t("student.courseDetail")} title={t("student.loadingCourse")} text={t("student.checkingEnrollment")} />;
     }
 
     return (
       <>
         {detailState.reason === "missing-id" ? (
-          <section className="section-card">
-            <span className="eyebrow">COURSE DETAIL</span>
-            <h2>Course id missing.</h2>
-            <p>The selected course link does not include a valid course id.</p>
-          </section>
+          <StudentCourseState eyebrow={t("student.courseDetail")} title={t("student.courseIdMissing")} text={t("student.courseLinkMissingId")} />
         ) : detailState.reason === "missing-enrollment" ? (
-          <section className="section-card">
-            <span className="eyebrow">COURSE DETAIL</span>
-            <h2>Course not assigned.</h2>
-            <p>Maya Laurent is not enrolled in this exact course id.</p>
-          </section>
+          <StudentCourseState eyebrow={t("student.courseDetail")} title={t("student.courseNotAssigned")} text={t("student.notEnrolledExactCourse")} />
         ) : detailState.reason === "not-published" ? (
-          <section className="section-card">
-            <span className="eyebrow">COURSE DETAIL</span>
-            <h2>Course not published.</h2>
-            <p>This course is currently hidden from the student workspace.</p>
-          </section>
+          <StudentCourseState eyebrow={t("student.courseDetail")} title={t("student.courseNotPublished")} text={t("student.hiddenFromWorkspace")} />
         ) : detailState.reason === "missing-student" ? (
-          <section className="section-card">
-            <span className="eyebrow">COURSE DETAIL</span>
-            <h2>Student account missing.</h2>
-            <p>The Maya Laurent demo student could not be resolved.</p>
-          </section>
+          <StudentCourseState eyebrow={t("student.courseDetail")} title={t("student.studentAccountMissing")} text={t("student.demoStudentMissing")} />
         ) : detailState.reason === "load-error" && !selectedCourse ? (
-          <section className="section-card">
-            <span className="eyebrow">COURSE DETAIL</span>
-            <h2>Course detail failed to load.</h2>
-            <p>The selected course could not be loaded right now.</p>
-          </section>
+          <StudentCourseState eyebrow={t("student.courseDetail")} title={t("student.courseDetailFailed")} text={t("student.selectedCourseCouldNotLoad")} />
         ) : selectedCourse ? (
           <StudentModuleDetail
             course={selectedCourse}
@@ -175,11 +155,7 @@ export function StudentWorkspacePage({
             progress={progressFor(selectedCourse)}
           />
         ) : (
-          <section className="section-card">
-            <span className="eyebrow">COURSE DETAIL</span>
-            <h2>Course detail failed to load.</h2>
-            <p>The selected course record could not be resolved.</p>
-          </section>
+          <StudentCourseState eyebrow={t("student.courseDetail")} title={t("student.courseDetailFailed")} text={t("student.selectedCourseRecordMissing")} />
         )}
       </>
     );
@@ -208,23 +184,24 @@ export function StudentWorkspacePage({
 }
 
 function StudentDashboardPage({ courses, certificates, progressFor }) {
+  const { t } = useLanguage();
   const average = courses.length
     ? Math.round(courses.reduce((sum, course) => sum + progressFor(course), 0) / courses.length)
     : 0;
 
   return (
     <>
-      <Welcome title="Welcome back, Maya." text="Keep learning and watch your progress grow." />
+      <Welcome title={t("dashboard.studentWelcomeTitle")} text={t("dashboard.studentWelcomeText")} />
       <div className="stats-grid student-stats">
-        <Stat icon="courses" label="Owned courses" value={courses.length} note="In your learning area" />
-        <Stat icon="dashboard" label="Average progress" value={`${average}%`} note="Across owned courses" />
-        <Stat icon="certificate" label="Certificates" value={certificates.length} note="Issued to you" />
+        <Stat icon="courses" label={t("dashboard.ownedCourses")} value={courses.length} note={t("dashboard.inYourLearningArea")} />
+        <Stat icon="dashboard" label={t("dashboard.averageProgress")} value={`${average}%`} note={t("dashboard.acrossOwnedCourses")} />
+        <Stat icon="certificate" label={t("common.certificates")} value={certificates.length} note={t("dashboard.issuedToYou")} />
       </div>
       <section className="section-card">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">CONTINUE LEARNING</span>
-            <h2>Your courses</h2>
+            <span className="eyebrow">{t("dashboard.continueLearning")}</span>
+            <h2>{t("dashboard.yourCourses")}</h2>
           </div>
         </div>
         <div className="mini-course-grid">
@@ -233,7 +210,7 @@ function StudentDashboardPage({ courses, certificates, progressFor }) {
               <div className="course-index">{String(index + 1).padStart(2, "0")}</div>
               <h3>{course.title}</h3>
               <Progress value={progressFor(course)} />
-              <span>{progressFor(course)}% complete</span>
+              <span>{t("dashboard.completePercent", { value: progressFor(course) })}</span>
             </article>
           ))}
         </div>
@@ -243,13 +220,15 @@ function StudentDashboardPage({ courses, certificates, progressFor }) {
 }
 
 function OwnedCoursesPage({ courses, progressFor }) {
+  const { t } = useLanguage();
+
   return (
     <>
       <div className="page-intro">
         <div>
-          <span className="eyebrow">MY LEARNING</span>
-          <h2>Courses you own</h2>
-          <p>Only courses assigned to your student account appear here.</p>
+          <span className="eyebrow">{t("dashboard.myLearning")}</span>
+          <h2>{t("dashboard.coursesYouOwn")}</h2>
+          <p>{t("dashboard.assignedOnly")}</p>
         </div>
       </div>
       <div className="owned-grid">
@@ -264,11 +243,11 @@ function OwnedCoursesPage({ courses, progressFor }) {
                 <Icon name="courses" size={34} />
               </div>
               <div className="owned-body">
-                <span className="eyebrow">{modules.length} MODULES</span>
+                <span className="eyebrow">{t("dashboard.modulesCount", { count: modules.length })}</span>
                 <h3>{course.title}</h3>
                 <p>{course.description}</p>
                 <div className="progress-label">
-                  <span>Course progress</span>
+                  <span>{t("common.courseProgress")}</span>
                   <strong>{progress}%</strong>
                 </div>
                 <Progress value={progress} />
@@ -279,7 +258,7 @@ function OwnedCoursesPage({ courses, progressFor }) {
                     goTo(ROUTES.student.courseDetail(course.id));
                   }}
                 >
-                  Continue course <Icon name="arrow" />
+                  {t("dashboard.continueCourse")} <Icon name="arrow" />
                 </button>
               </div>
             </article>
@@ -291,6 +270,7 @@ function OwnedCoursesPage({ courses, progressFor }) {
 }
 
 function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, progress }) {
+  const { t, translateSubmissionType } = useLanguage();
   const modules = getCourseModules(course);
   const [activeModuleId, setActiveModuleId] = useState(modules[0]?.id || null);
   const [viewError, setViewError] = useState("");
@@ -397,13 +377,13 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     return (
       <>
         <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
-          ‹ Back to courses
+          ‹ {t("common.backToCourses")}
         </button>
 
         <section className="section-card">
-          <span className="eyebrow">COURSE DETAIL</span>
-          <h2>This course is not currently available.</h2>
-          <p>The course is currently hidden from the student workspace.</p>
+          <span className="eyebrow">{t("student.courseDetail")}</span>
+          <h2>{t("student.hiddenFromWorkspace")}</h2>
+          <p>{t("student.hiddenFromWorkspace")}</p>
         </section>
       </>
     );
@@ -411,9 +391,9 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
   const pdfSource = activeModule?.pdf_url || activeModule?.pdfUrl || "";
   const videoSource = activeModule?.video_url || activeModule?.videoUrl || "";
-  const pdfLabel = activeModule?.pdfLabel || activeModule?.pdfName || "No PDF selected";
+  const pdfLabel = activeModule?.pdfLabel || activeModule?.pdfName || t("common.noPdfSelected");
   const videoLabel =
-    activeModule?.videoName || activeModule?.video?.uploadLabel || activeModule?.video?.link || "No video selected";
+    activeModule?.videoName || activeModule?.video?.uploadLabel || activeModule?.video?.link || t("common.noVideoSelected");
   const assignmentType = activeAssignment?.submissionType || activeAssignment?.submission_type || "text";
   const assignmentStatus = assignmentState.submission?.status || "";
   const hasSubmission = Boolean(assignmentState.submission);
@@ -423,11 +403,11 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     assignmentStatus === "approved" ||
     (assignmentHasGrade && assignmentStatus !== "needs_revision" && assignmentStatus !== "rejected");
   const hasPdfRequirement = Boolean(
-    pdfSource || (activeModule?.pdfLabel && activeModule.pdfLabel !== "No PDF selected") || activeModule?.pdfName,
+    pdfSource || (activeModule?.pdfLabel && activeModule.pdfLabel !== t("common.noPdfSelected")) || activeModule?.pdfName,
   );
   const hasVideoRequirement = Boolean(
     videoSource ||
-      (activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== "No video selected") ||
+      (activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== t("common.noVideoSelected")) ||
       activeModule?.videoName,
   );
   const hasAssignmentRequirement = Boolean(activeAssignment?.id);
@@ -460,7 +440,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     if (needsText && !textResponse) {
       setAssignmentState((current) => ({
         ...current,
-        submitError: "A text response is required for this assignment.",
+        submitError: t("validation.assignmentTextRequired"),
         submitMessage: "",
       }));
       return;
@@ -469,7 +449,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     if (needsFile && !assignmentState.selectedFile && !existingSubmission?.fileUrl) {
       setAssignmentState((current) => ({
         ...current,
-        submitError: "A file upload is required for this assignment.",
+        submitError: t("validation.assignmentFileRequired"),
         submitMessage: "",
       }));
       return;
@@ -508,10 +488,10 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
       });
 
       const submitMessage = !existingSubmission
-        ? "Assignment submitted."
+        ? t("common.assignmentSubmittedSuccess")
         : existingSubmission.status === "needs_revision" || existingSubmission.status === "rejected"
-          ? "Assignment resubmitted."
-          : "Assignment updated.";
+          ? t("common.assignmentResubmittedSuccess")
+          : t("common.assignmentUpdatedSuccess");
 
       setAssignmentState({
         loading: false,
@@ -529,7 +509,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
       setAssignmentState((current) => ({
         ...current,
         uploading: false,
-        submitError: error.message || "Submitting the assignment failed.",
+        submitError: error.message || t("errors.submittingAssignmentFailed"),
         submitMessage: "",
       }));
     }
@@ -539,26 +519,26 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     return (
       <>
         <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
-          ‹ Back to courses
+          ‹ {t("common.backToCourses")}
         </button>
 
         <div className="detail-hero">
           <div>
-            <span className="eyebrow">OWNED COURSE</span>
+            <span className="eyebrow">{t("student.ownedCourse")}</span>
             <h2>{course.title}</h2>
             <p>{course.description}</p>
           </div>
           <div className="hero-progress">
             <strong>{progress}%</strong>
-            <span>Course progress</span>
+            <span>{t("common.courseProgress")}</span>
             <Progress value={progress} />
           </div>
         </div>
 
         <section className="section-card">
-          <span className="eyebrow">COURSE MODULES</span>
-          <h2>No modules available for this course yet</h2>
-          <p>The course has been created, but no modules are available to view yet.</p>
+          <span className="eyebrow">{t("common.courseModules")}</span>
+          <h2>{t("student.noModulesAvailable")}</h2>
+          <p>{t("student.noModulesYetDescription")}</p>
         </section>
       </>
     );
@@ -570,30 +550,30 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     assignmentStatus === "needs_revision" ||
     assignmentStatus === "rejected";
   const assignmentButtonLabel = assignmentState.uploading
-    ? "Submitting..."
+    ? t("common.submitting")
     : !hasSubmission
-      ? "Submit assignment"
+      ? t("common.submitAssignment")
       : assignmentStatus === "approved"
-        ? "Assignment approved"
+        ? t("common.assignmentApprovedButton")
         : assignmentStatus === "needs_revision" || assignmentStatus === "rejected"
-          ? "Resubmit assignment"
-          : "Update submission";
+          ? t("common.resubmitAssignment")
+          : t("common.updateSubmission");
 
   return (
     <>
       <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
-        ‹ Back to courses
+        ‹ {t("common.backToCourses")}
       </button>
 
       <div className="detail-hero">
         <div>
-          <span className="eyebrow">OWNED COURSE</span>
+          <span className="eyebrow">{t("student.ownedCourse")}</span>
           <h2>{course.title}</h2>
           <p>{course.description}</p>
         </div>
         <div className="hero-progress">
           <strong>{progress}%</strong>
-          <span>Course progress</span>
+          <span>{t("common.courseProgress")}</span>
           <Progress value={progress} />
         </div>
       </div>
@@ -601,8 +581,8 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
       <div className="course-detail-layout">
         <aside className="module-list">
           <div className="module-title">
-            <span className="eyebrow">COURSE MODULES</span>
-            <h3>{modules.length} modules</h3>
+            <span className="eyebrow">{t("common.courseModules")}</span>
+            <h3>{t("dashboard.modulesCount", { count: modules.length }).toLowerCase()}</h3>
           </div>
 
           {modules.map((module, index) => (
@@ -632,12 +612,12 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
             <div className="play-large">
               <Icon name="courses" size={28} />
             </div>
-            <span>Module assets</span>
+            <span>{t("common.moduleAssets")}</span>
           </div>
 
-          <span className="eyebrow">CURRENT MODULE</span>
-          <h2>{activeModule?.title || "Select a module"}</h2>
-          <p>{activeModule?.description || "This module description will appear here for students."}</p>
+          <span className="eyebrow">{t("common.currentModule")}</span>
+          <h2>{activeModule?.title || t("common.selectModule")}</h2>
+          <p>{activeModule?.description || t("student.currentModuleDescriptionFallback")}</p>
 
           {viewError && <small className="field-note danger-text">{viewError}</small>}
 
@@ -650,15 +630,15 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
             {pdfSource ? (
               <div className="row-actions">
                 <a href={pdfSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`pdf-${activeModule.id}`)}>
-                  Open PDF
+                  {t("common.openPdf")}
                 </a>
               </div>
-            ) : activeModule?.pdfLabel && activeModule.pdfLabel !== "No PDF selected" ? (
-              <small className="field-note danger-text">File name exists, but file URL is missing.</small>
+            ) : activeModule?.pdfLabel && activeModule.pdfLabel !== t("common.noPdfSelected") ? (
+              <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
             ) : activeModule?.pdfName ? (
-              <small className="field-note danger-text">File name exists, but file URL is missing.</small>
+              <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
             ) : (
-              <small className="field-note">No PDF uploaded yet.</small>
+              <small className="field-note">{t("common.noPdfUploadedYet")}</small>
             )}
 
             <div className="lesson-meta">
@@ -675,16 +655,16 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                   onPlay={() => markSeen(`video-${activeModule.id}`)}
                   onError={() => {
                     console.error("Video playback failed for module:", activeModule?.id, videoSource);
-                    setViewError("The uploaded video could not be viewed.");
+                    setViewError(t("errors.videoPlaybackFailed"));
                   }}
                 />
               </div>
-            ) : activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== "No video selected" ? (
-              <small className="field-note danger-text">File name exists, but file URL is missing.</small>
+            ) : activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== t("common.noVideoSelected") ? (
+              <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
             ) : activeModule?.videoName ? (
-              <small className="field-note danger-text">File name exists, but file URL is missing.</small>
+              <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
             ) : (
-              <small className="field-note">No video uploaded yet.</small>
+              <small className="field-note">{t("common.noVideoUploadedYet")}</small>
             )}
           </div>
 
@@ -692,21 +672,21 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
             <section className="section-card assignment-card">
               <div className="section-heading">
                 <div>
-                  <span className="eyebrow">MODULE ASSIGNMENT</span>
+                  <span className="eyebrow">{t("common.moduleAssignment")}</span>
                   <h2>{activeAssignment.title}</h2>
                   <p>{activeAssignment.instructions}</p>
                 </div>
               </div>
 
               <div className="assignment-chip-row">
-                <span className="subtle-badge">Submission type: {formatSubmissionType(assignmentType)}</span>
+                <span className="subtle-badge">{t("student.assignmentType", { type: translateSubmissionType(assignmentType) })}</span>
                 {activeAssignment.dueDate || activeAssignment.due_date ? (
-                  <span className="subtle-badge">Due: {activeAssignment.dueDate || activeAssignment.due_date}</span>
+                  <span className="subtle-badge">{t("student.dueDate", { date: activeAssignment.dueDate || activeAssignment.due_date })}</span>
                 ) : null}
                 {assignmentState.submission?.status ? <Status status={assignmentState.submission.status} /> : null}
               </div>
 
-              {assignmentState.loading && <small className="field-note">Loading your submission...</small>}
+              {assignmentState.loading && <small className="field-note">{t("common.loadingYourSubmission")}</small>}
               {assignmentState.error && <small className="field-note danger-text">{assignmentState.error}</small>}
               {assignmentState.submitMessage && <small className="field-note">{assignmentState.submitMessage}</small>}
               {assignmentState.submitError && (
@@ -715,7 +695,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
               {(assignmentType === "text" || assignmentType === "text_and_file") && (
                 <label>
-                  Text response
+                  {t("common.textResponse")}
                   <textarea
                     rows="5"
                     value={assignmentState.textResponse}
@@ -728,14 +708,14 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                         submitMessage: "",
                       }))
                     }
-                    placeholder="Write your assignment response here."
+                    placeholder={t("student.writeResponseHere")}
                   />
                 </label>
               )}
 
               {(assignmentType === "file" || assignmentType === "text_and_file") && (
                 <label>
-                  Upload file
+                  {t("common.uploadFile")}
                   <input
                     type="file"
                     disabled={!canEditAssignment || assignmentState.loading || assignmentState.uploading}
@@ -753,38 +733,38 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
               )}
 
               {assignmentState.selectedFileName ? (
-                <small className="field-note">Selected file: {assignmentState.selectedFileName}</small>
+                <small className="field-note">{t("common.selectedFile", { name: assignmentState.selectedFileName })}</small>
               ) : null}
 
               {assignmentState.submission?.fileUrl ? (
                 <a className="assignment-link" href={assignmentState.submission.fileUrl} target="_blank" rel="noreferrer">
-                  Open submitted file
+                  {t("common.openSubmittedFile")}
                 </a>
               ) : null}
 
               <div className="assignment-meta">
                 <p>
-                  <strong>Grade:</strong>{" "}
+                  <strong>{t("common.grade")}:</strong>{" "}
                   {assignmentState.submission?.grade === null || assignmentState.submission?.grade === undefined
-                    ? "Not graded yet."
+                    ? `${t("common.notGradedYet")}.`
                     : `${assignmentState.submission.grade}/100`}
                 </p>
                 <p>
-                  <strong>Feedback:</strong>{" "}
+                  <strong>{t("common.feedback")}:</strong>{" "}
                   {assignmentState.submission?.adminFeedback ||
                     assignmentState.submission?.admin_feedback ||
-                    "No feedback yet."}
+                    t("common.noFeedbackYet")}
                 </p>
               </div>
 
               {assignmentStatus === "needs_revision" ? (
-                <small className="field-note">This assignment needs revision. You can update and resubmit it.</small>
+                <small className="field-note">{t("common.assignmentNeedsRevisionHelp")}</small>
               ) : assignmentStatus === "approved" ? (
-                <small className="field-note">This assignment has been approved. Editing is disabled.</small>
+                <small className="field-note">{t("common.assignmentApprovedHelp")}</small>
               ) : assignmentStatus === "rejected" ? (
-                <small className="field-note">This assignment was rejected. Update your work and resubmit it.</small>
+                <small className="field-note">{t("common.assignmentRejectedHelp")}</small>
               ) : assignmentStatus === "submitted" ? (
-                <small className="field-note">Your submission is saved. You can update it until it is reviewed.</small>
+                <small className="field-note">{t("common.assignmentSubmittedHelp")}</small>
               ) : null}
 
               <div className="form-actions compact">
@@ -803,33 +783,33 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
           <div className="progress-steps">
             <span className={pdfRequirementMet ? "subtle-badge" : "count-badge"}>
-              {!hasPdfRequirement ? "No PDF required" : pdfSeen ? "PDF viewed" : "PDF pending"}
+              {!hasPdfRequirement ? t("common.noPdfRequired") : pdfSeen ? t("common.pdfViewed") : t("common.pdfPending")}
             </span>
             <span className={videoRequirementMet ? "subtle-badge" : "count-badge"}>
-              {!hasVideoRequirement ? "No video required" : videoSeen ? "Video viewed" : "Video pending"}
+              {!hasVideoRequirement ? t("common.noVideoRequired") : videoSeen ? t("common.videoViewed") : t("common.videoPending")}
             </span>
             {hasAssignmentRequirement ? (
               <span className={assignmentRequirementMet ? "subtle-badge" : "count-badge"}>
                 {assignmentStatus === "approved"
-                  ? "Assignment approved"
+                  ? t("common.assignmentApproved")
                   : assignmentStatus === "needs_revision"
-                    ? "Assignment needs revision"
+                    ? t("common.assignmentNeedsRevision")
                     : assignmentStatus === "rejected"
-                      ? "Assignment rejected"
+                      ? t("common.assignmentRejected")
                       : assignmentApprovedForCompletion
-                        ? "Assignment reviewed"
+                        ? t("common.assignmentReviewed")
                         : hasSubmission
-                          ? "Assignment pending review"
-                          : "Assignment pending"}
+                          ? t("common.assignmentPendingReview")
+                          : t("common.assignmentPending")}
               </span>
             ) : (
-              <span className="subtle-badge">No assignment required</span>
+              <span className="subtle-badge">{t("common.noAssignmentRequired")}</span>
             )}
           </div>
 
           {!canComplete ? (
             <small className="field-note danger-text">
-              Complete the PDF, video, and assignment requirements before marking this module complete.
+              {t("common.completeRequirements")}
             </small>
           ) : null}
 
@@ -839,7 +819,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
             disabled={!activeModule || !canComplete}
           >
             <Icon name="check" />
-            {moduleDone ? "Module marked complete" : "Mark module complete"}
+            {moduleDone ? t("common.moduleMarkedComplete") : t("common.markModuleComplete")}
           </button>
         </section>
       </div>
@@ -848,13 +828,14 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 }
 
 function StudentCertificatesPage({ certificates, onPreview }) {
+  const { t } = useLanguage();
   return (
     <>
       <div className="page-intro">
         <div>
-          <span className="eyebrow">MY ACHIEVEMENTS</span>
-          <h2>Your certificates</h2>
-          <p>Certificates generated for your completed courses.</p>
+          <span className="eyebrow">{t("student.myAchievements")}</span>
+          <h2>{t("student.yourCertificates")}</h2>
+          <p>{t("student.certificatesGeneratedForCompletedCourses")}</p>
         </div>
       </div>
       <div className="certificate-grid">
@@ -863,26 +844,26 @@ function StudentCertificatesPage({ certificates, onPreview }) {
             <div className="cert-ribbon">
               <Icon name="certificate" size={30} />
             </div>
-            <span className="eyebrow">CERTIFICATE OF COMPLETION</span>
+            <span className="eyebrow">{t("student.certificateOfCompletion")}</span>
             <h3>{certificate.course}</h3>
             <dl>
               <div>
-                <dt>Certificate number</dt>
+                <dt>{t("admin.certificateNumber")}</dt>
                 <dd>{certificate.number}</dd>
               </div>
               <div>
-                <dt>Issue date</dt>
+                <dt>{t("admin.issueDate")}</dt>
                 <dd>{certificate.issueDate}</dd>
               </div>
               <div>
-                <dt>Status</dt>
+                <dt>{t("common.status")}</dt>
                 <dd>
                   <Status status={certificate.status} />
                 </dd>
               </div>
             </dl>
             <button className="secondary-btn" onClick={() => onPreview(certificate)}>
-              Preview certificate
+              {t("common.previewCertificate")}
             </button>
           </article>
         ))}
@@ -892,6 +873,7 @@ function StudentCertificatesPage({ certificates, onPreview }) {
 }
 
 function CommunityPage({ posts, onCreatePost }) {
+  const { t } = useLanguage();
   const [form, setForm] = useState({ title: "", body: "" });
 
   const submit = (event) => {
@@ -905,9 +887,9 @@ function CommunityPage({ posts, onCreatePost }) {
       <section>
         <div className="page-intro">
           <div>
-            <span className="eyebrow">STUDENT COMMUNITY</span>
-            <h2>Recent discussions</h2>
-            <p>Share ideas with other Nutripro students.</p>
+            <span className="eyebrow">{t("student.studentCommunity")}</span>
+            <h2>{t("student.recentDiscussions")}</h2>
+            <p>{t("student.shareIdeas")}</p>
           </div>
         </div>
         <div className="post-list">
@@ -928,33 +910,33 @@ function CommunityPage({ posts, onCreatePost }) {
       </section>
 
       <form className="section-card post-form" onSubmit={submit}>
-        <span className="eyebrow">NEW DISCUSSION</span>
-        <h2>Create a post</h2>
+        <span className="eyebrow">{t("student.newDiscussion")}</span>
+        <h2>{t("student.createPost")}</h2>
 
         <label>
-          Post title
+          {t("student.postTitle")}
           <input
             required
             value={form.title}
             onChange={(event) => setForm({ ...form, title: event.target.value })}
-            placeholder="What would you like to discuss?"
+            placeholder={t("student.whatDiscuss")}
           />
         </label>
 
         <label>
-          Your post
+          {t("student.yourPost")}
           <textarea
             required
             rows="6"
             value={form.body}
             onChange={(event) => setForm({ ...form, body: event.target.value })}
-            placeholder="Share a thought or question..."
+            placeholder={t("student.shareThought")}
           />
         </label>
 
         <button className="primary-btn" type="submit">
           <Icon name="plus" />
-          Publish post
+          {t("student.publishPost")}
         </button>
       </form>
     </div>

@@ -1,4 +1,6 @@
 import React from "react";
+import { useLanguage } from "../i18n/LanguageContext.jsx";
+import { LanguageDropdown } from "./LanguageDropdown.jsx";
 
 const icons = {
   dashboard: <path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z" />,
@@ -19,11 +21,14 @@ export function Icon({ name, size = 20 }) {
 }
 
 export function Brand() {
-  return <div className="brand"><div className="brand-mark"><span>N</span></div><div><strong>Nutripro</strong><small>Learn well. Live well.</small></div></div>;
+  const { t } = useLanguage();
+  return <div className="brand"><div className="brand-mark"><span>N</span></div><div><strong>Nutripro</strong><small>{t("brand.tagline")}</small></div></div>;
 }
 
 export function Status({ status }) {
-  return <span className={`status ${status.toLowerCase()}`}><i />{status}</span>;
+  const { translateStatus } = useLanguage();
+  const normalizedStatus = String(status ?? "").toLowerCase().replace(/\s+/g, "_");
+  return <span className={`status ${normalizedStatus}`}><i />{translateStatus(status)}</span>;
 }
 
 export function Progress({ value }) {
@@ -31,7 +36,8 @@ export function Progress({ value }) {
 }
 
 export function Welcome({ title, text }) {
-  return <div className="welcome"><div><span className="eyebrow">NUTRIPRO AT A GLANCE</span><h2>{title}</h2><p>{text}</p></div><div className="welcome-mark">N</div></div>;
+  const { t } = useLanguage();
+  return <div className="welcome"><div><span className="eyebrow">{t("dashboard.atAGlance")}</span><h2>{title}</h2><p>{text}</p></div><div className="welcome-mark">N</div></div>;
 }
 
 export function Stat({ icon, label, value, note }) {
@@ -43,13 +49,16 @@ export function OverviewCard({ icon, title, text }) {
 }
 
 export function Header({ role, title, detailTitle }) {
-  return <header className="topbar"><div>{detailTitle ? <><button className="back-label">Courses / Course detail</button><h1>{detailTitle}</h1></> : <><span className="eyebrow">{role.toUpperCase()} AREA</span><h1>{title}</h1></>}</div><div className="profile"><div className="avatar">{role === "Admin" ? "AM" : "ML"}</div><div><strong>{role === "Admin" ? "Alex Morgan" : "Maya Laurent"}</strong><small>{role}</small></div></div></header>;
+  const { t, translateRole } = useLanguage();
+  return <header className="topbar"><div>{detailTitle ? <><button className="back-label">{t("header.coursesCourseDetail")}</button><h1>{detailTitle}</h1></> : <><span className="eyebrow">{role === "Admin" ? t("common.adminArea") : t("common.studentArea")}</span><h1>{title}</h1></>}</div><div className="topbar-actions"><LanguageDropdown /><div className="profile"><div className="avatar">{role === "Admin" ? "AM" : "ML"}</div><div><strong>{role === "Admin" ? t("header.AlexMorgan") : t("header.MayaLaurent")}</strong><small>{translateRole(role)}</small></div></div></div></header>;
 }
 
 export function Sidebar({ role, navItems, currentPath, onNavigate, onLogout }) {
-  return <aside className="sidebar"><Brand /><div className="role-pill"><span className="role-dot" />{role} area</div><nav aria-label={`${role} navigation`}>{navItems.map((item) => <button key={item.path} className={`nav-item ${currentPath === item.path ? "active" : ""}`} onClick={() => onNavigate(item.path)}><Icon name={item.icon} />{item.label}</button>)}</nav><button className="logout" onClick={onLogout}><Icon name="logout" />Sign out</button></aside>;
+  const { t, translateRole } = useLanguage();
+  return <aside className="sidebar"><Brand /><div className="role-pill"><span className="role-dot" />{t("common.roleArea", { role: translateRole(role) })}</div><nav aria-label={`${translateRole(role)} navigation`}>{navItems.map((item) => <button key={item.path} className={`nav-item ${currentPath === item.path ? "active" : ""}`} onClick={() => onNavigate(item.path)}><Icon name={item.icon} />{item.label}</button>)}</nav><button className="logout" onClick={onLogout}><Icon name="logout" />{t("common.signOut")}</button></aside>;
 }
 
 export function CertificateModal({ certificate, onClose }) {
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="certificate-modal" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><div className="cert-seal">N</div><span className="eyebrow">NUTRIPRO</span><h2>Certificate of Completion</h2><p>This certifies that</p><h3>{certificate.student}</h3><p>has successfully completed</p><h4>{certificate.course}</h4><div className="certificate-meta"><span>Issued {certificate.issueDate}</span><span>{certificate.number}</span></div></div></div>;
+  const { t } = useLanguage();
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="certificate-modal" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><div className="cert-seal">N</div><span className="eyebrow">NUTRIPRO</span><h2>{t("student.certificateOfCompletion")}</h2><p>{t("certificateModal.certifiesThat")}</p><h3>{certificate.student}</h3><p>{t("certificateModal.successfullyCompleted")}</p><h4>{certificate.course}</h4><div className="certificate-meta"><span>{t("common.issued")} {certificate.issueDate}</span><span>{certificate.number}</span></div></div></div>;
 }

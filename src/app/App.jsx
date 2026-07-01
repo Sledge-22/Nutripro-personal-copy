@@ -24,6 +24,7 @@ import {
 import { getCertificates, generateCertificate, getStudentCertificates } from "../services/certificateService.js";
 import { getStudentProgress, updateStudentProgress } from "../services/progressService.js";
 import { getCommunityPosts, createCommunityPost } from "../services/communityService.js";
+import { useLanguage } from "../i18n/LanguageContext.jsx";
 
 function getPathname() {
   return window.location.pathname || ROUTES.login;
@@ -35,14 +36,14 @@ function navigateTo(pathname, replace = false) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-function formatSupabaseError(error) {
-  if (!error) return "Saving the course failed.";
+function formatSupabaseError(error, fallbackMessage) {
+  if (!error) return fallbackMessage;
   if (typeof error === "string") return error;
 
   const parts = [error.message, error.details, error.hint].filter(Boolean);
   if (error.code) parts.push(`Code: ${error.code}`);
 
-  return parts.length ? parts.join(" ") : "Saving the course failed.";
+  return parts.length ? parts.join(" ") : fallbackMessage;
 }
 
 function upsertCourseList(courses, nextCourse) {
@@ -53,6 +54,7 @@ function upsertCourseList(courses, nextCourse) {
 }
 
 export function App() {
+  const { t } = useLanguage();
   const initialDemoStudent = initialUsers.find((user) => user.email?.toLowerCase() === DEMO_STUDENT_EMAIL) ?? initialUsers[0] ?? null;
   const [pathname, setPathname] = useState(getPathname());
   const [users, setUsers] = useState(initialUsers);
@@ -159,31 +161,31 @@ export function App() {
   const role = isAdminRoute(pathname) ? "Admin" : isStudentRoute(pathname) ? "Student" : null;
 
   const adminNav = useMemo(() => ([
-    { path: ROUTES.admin.dashboard, label: "Dashboard", icon: "dashboard" },
-    { path: ROUTES.admin.users, label: "Users Admin", icon: "users" },
-    { path: ROUTES.admin.postCourses, label: "Post Courses", icon: "courses" },
-    { path: ROUTES.admin.assignmentReviews, label: "Assignment Reviews", icon: "certificate" },
-    { path: ROUTES.admin.certificates, label: "Certificates Generator", icon: "certificate" },
-  ]), []);
+    { path: ROUTES.admin.dashboard, label: t("common.dashboard"), icon: "dashboard" },
+    { path: ROUTES.admin.users, label: t("common.usersAdmin"), icon: "users" },
+    { path: ROUTES.admin.postCourses, label: t("common.postCourses"), icon: "courses" },
+    { path: ROUTES.admin.assignmentReviews, label: t("common.assignmentReviews"), icon: "certificate" },
+    { path: ROUTES.admin.certificates, label: t("common.certificatesGenerator"), icon: "certificate" },
+  ]), [t]);
 
   const studentNav = useMemo(() => ([
-    { path: ROUTES.student.dashboard, label: "Dashboard", icon: "dashboard" },
-    { path: ROUTES.student.certificates, label: "Certificates", icon: "certificate" },
-    { path: ROUTES.student.courses, label: "Courses", icon: "courses" },
-    { path: ROUTES.student.community, label: "Community", icon: "community" },
-  ]), []);
+    { path: ROUTES.student.dashboard, label: t("common.dashboard"), icon: "dashboard" },
+    { path: ROUTES.student.certificates, label: t("common.certificates"), icon: "certificate" },
+    { path: ROUTES.student.courses, label: t("common.courses"), icon: "courses" },
+    { path: ROUTES.student.community, label: t("common.community"), icon: "community" },
+  ]), [t]);
 
   const title = useMemo(() => {
     const map = {
-      [ROUTES.admin.dashboard]: "Dashboard",
-      [ROUTES.admin.users]: "Users Admin",
-      [ROUTES.admin.postCourses]: "Post Courses",
-      [ROUTES.admin.assignmentReviews]: "Assignment Reviews",
-      [ROUTES.admin.certificates]: "Certificates Generator",
-      [ROUTES.student.dashboard]: "Dashboard",
-      [ROUTES.student.certificates]: "Certificates",
-      [ROUTES.student.courses]: "Courses",
-      [ROUTES.student.community]: "Community",
+      [ROUTES.admin.dashboard]: t("common.dashboard"),
+      [ROUTES.admin.users]: t("common.usersAdmin"),
+      [ROUTES.admin.postCourses]: t("common.postCourses"),
+      [ROUTES.admin.assignmentReviews]: t("common.assignmentReviews"),
+      [ROUTES.admin.certificates]: t("common.certificatesGenerator"),
+      [ROUTES.student.dashboard]: t("common.dashboard"),
+      [ROUTES.student.certificates]: t("common.certificates"),
+      [ROUTES.student.courses]: t("common.courses"),
+      [ROUTES.student.community]: t("common.community"),
     };
 
     if (pathname.startsWith("/student/courses/")) {
@@ -191,12 +193,12 @@ export function App() {
       return (
         studentCourses.find((course) => String(course.id) === courseId)?.title ||
         courses.find((course) => String(course.id) === courseId)?.title ||
-        "Course detail"
+        t("student.courseDetail")
       );
     }
 
     return map[pathname] || "Nutripro";
-  }, [courses, pathname, studentCourses]);
+  }, [courses, pathname, studentCourses, t]);
 
   const handleLogin = (nextRole) => navigateTo(nextRole === "Admin" ? ROUTES.admin.dashboard : ROUTES.student.dashboard);
   const handleLogout = () => navigateTo(ROUTES.login);
@@ -230,7 +232,7 @@ export function App() {
       return { ok: true };
     } catch (error) {
       console.error("Saving course failed:", error);
-      return { ok: false, error: formatSupabaseError(error) };
+      return { ok: false, error: formatSupabaseError(error, t("admin.savingCourseFailed")) };
     }
   }
 
@@ -264,11 +266,11 @@ export function App() {
 
       return {
         ok: true,
-        message: visibleToStudents ? "Course is now visible to students." : "Course is now hidden from students.",
+        message: visibleToStudents ? t("admin.courseVisibleNow") : t("admin.courseHiddenNow"),
       };
     } catch (error) {
       console.error("Updating course visibility failed:", error);
-      return { ok: false, error: formatSupabaseError(error) };
+      return { ok: false, error: formatSupabaseError(error, t("admin.updatingCourseVisibilityFailed")) };
     }
   }
 
@@ -294,5 +296,5 @@ export function App() {
 
   if (!role) return <LoginPage onChoose={handleLogin} />;
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={handleLogout} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? "Courses" : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} onUpdateUserStatus={handleUpdateUserStatus} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={demoStudentId} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={handleLogout} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} onUpdateUserStatus={handleUpdateUserStatus} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={demoStudentId} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }

@@ -350,6 +350,64 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
   backdrop-filter: blur(12px);
 }
 
+.login-topbar,
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.language-dropdown {
+  position: relative;
+}
+
+.language-trigger,
+.language-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.language-trigger {
+  padding: 10px 14px;
+}
+
+.language-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 8px;
+  min-width: 180px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.language-option {
+  justify-content: flex-start;
+  width: 100%;
+  padding: 10px 12px;
+}
+
+.language-option.active,
+.language-trigger:hover,
+.language-option:hover {
+  border-color: rgba(79, 202, 214, .28);
+  background: rgba(79, 202, 214, .12);
+}
+
 .brand-mark,
 .avatar,
 .post-avatar,
