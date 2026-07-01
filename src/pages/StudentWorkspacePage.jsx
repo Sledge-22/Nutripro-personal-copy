@@ -7,6 +7,10 @@ function goTo(pathname) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+function getCourseModules(course) {
+  return Array.isArray(course?.modules) ? course.modules : [];
+}
+
 export function StudentWorkspacePage({
   pathname,
   studentId,
@@ -17,12 +21,12 @@ export function StudentWorkspacePage({
   onCreatePost,
   onUpdateProgress,
 }) {
-  const ownedCourses = courses;
+  const ownedCourses = Array.isArray(courses) ? courses : [];
   const studentCertificates = certificates.filter((certificate) => certificate.studentId === studentId);
   const [previewCertificate, setPreviewCertificate] = useState(null);
 
   const progressFor = (course) => {
-    const modules = course.modules;
+    const modules = getCourseModules(course);
     return modules.length
       ? Math.round((modules.filter((module) => progressState[`module-${module.id}`]).length / modules.length) * 100)
       : 0;
@@ -34,13 +38,19 @@ export function StudentWorkspacePage({
 
     return (
       <>
-        {course && (
+        {course ? (
           <StudentModuleDetail
             course={course}
             completed={progressState}
             onUpdateProgress={onUpdateProgress}
             progress={progressFor(course)}
           />
+        ) : (
+          <section className="section-card">
+            <span className="eyebrow">COURSE DETAIL</span>
+            <h2>Course not available</h2>
+            <p>This course is not available in your student workspace yet.</p>
+          </section>
         )}
       </>
     );
@@ -116,6 +126,7 @@ function OwnedCoursesPage({ courses, progressFor }) {
       <div className="owned-grid">
         {courses.map((course, index) => {
           const progress = progressFor(course);
+          const modules = getCourseModules(course);
 
           return (
             <article className="owned-card" key={course.id}>
@@ -124,7 +135,7 @@ function OwnedCoursesPage({ courses, progressFor }) {
                 <Icon name="courses" size={34} />
               </div>
               <div className="owned-body">
-                <span className="eyebrow">{course.modules.length} MODULES</span>
+                <span className="eyebrow">{modules.length} MODULES</span>
                 <h3>{course.title}</h3>
                 <p>{course.description}</p>
                 <div className="progress-label">
@@ -145,10 +156,11 @@ function OwnedCoursesPage({ courses, progressFor }) {
 }
 
 function StudentModuleDetail({ course, completed, onUpdateProgress, progress }) {
-  const [activeModuleId, setActiveModuleId] = useState(course.modules[0]?.id || null);
+  const modules = getCourseModules(course);
+  const [activeModuleId, setActiveModuleId] = useState(modules[0]?.id || null);
   const [viewError, setViewError] = useState("");
 
-  const activeModule = course.modules.find((module) => module.id === activeModuleId) || course.modules[0] || null;
+  const activeModule = modules.find((module) => module.id === activeModuleId) || modules[0] || null;
   const pdfSeen = activeModule ? completed[`pdf-${activeModule.id}`] : false;
   const videoSeen = activeModule ? completed[`video-${activeModule.id}`] : false;
   const moduleDone = activeModule ? completed[`module-${activeModule.id}`] : false;
@@ -162,6 +174,35 @@ function StudentModuleDetail({ course, completed, onUpdateProgress, progress }) 
     if (!activeModule || !canComplete) return;
     void onUpdateProgress({ [`module-${activeModule.id}`]: !completed[`module-${activeModule.id}`] });
   };
+
+  if (!modules.length) {
+    return (
+      <>
+        <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
+          ‹ Back to courses
+        </button>
+
+        <div className="detail-hero">
+          <div>
+            <span className="eyebrow">OWNED COURSE</span>
+            <h2>{course.title}</h2>
+            <p>{course.description}</p>
+          </div>
+          <div className="hero-progress">
+            <strong>{progress}%</strong>
+            <span>Course progress</span>
+            <Progress value={progress} />
+          </div>
+        </div>
+
+        <section className="section-card">
+          <span className="eyebrow">COURSE MODULES</span>
+          <h2>No modules available for this course yet</h2>
+          <p>The course has been created, but no modules are available to view yet.</p>
+        </section>
+      </>
+    );
+  }
 
   const pdfSource = activeModule?.pdf_url || activeModule?.pdfUrl || "";
   const videoSource = activeModule?.video_url || activeModule?.videoUrl || "";
@@ -192,10 +233,10 @@ function StudentModuleDetail({ course, completed, onUpdateProgress, progress }) 
         <aside className="module-list">
           <div className="module-title">
             <span className="eyebrow">COURSE MODULES</span>
-            <h3>{course.modules.length} modules</h3>
+            <h3>{modules.length} modules</h3>
           </div>
 
-          {course.modules.map((module, index) => (
+          {modules.map((module, index) => (
             <div className="module" key={module.id}>
               <button
                 className={activeModule?.id === module.id ? "active" : ""}

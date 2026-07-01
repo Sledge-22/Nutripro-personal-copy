@@ -75,20 +75,30 @@ export async function getModulesByCourse(courseId) {
     return course?.modules ?? [];
   }
 
-  const { data, error } = await supabase
-    .from("modules")
-    .select("*")
-    .eq("course_id", courseId)
-    .order("sort_order", { ascending: true })
-    .order("id", { ascending: true });
+  try {
+    const selectedCourseId = Number.isNaN(Number(courseId)) ? courseId : Number(courseId);
+    const { data, error } = await supabase
+      .from("modules")
+      .select("*")
+      .eq("course_id", selectedCourseId)
+      .order("sort_order", { ascending: true })
+      .order("id", { ascending: true });
 
-  if (error) {
+    if (error) {
+      console.error("Failed module fetch from Supabase:", error);
+      throw error;
+    }
+
+    if (!Array.isArray(data) || !data.length) {
+      return [];
+    }
+
+    console.log("Fetched Supabase module rows:", data);
+    return data.map(mapModuleRow);
+  } catch (error) {
     console.error("Failed module fetch from Supabase:", error);
     throw error;
   }
-
-  console.log("Fetched Supabase module rows:", data);
-  return (data ?? []).map(mapModuleRow);
 }
 
 export async function replaceModulesForCourse(courseId, modules) {
