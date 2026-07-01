@@ -40,6 +40,12 @@ function normalizeGrade(value) {
   return numericValue;
 }
 
+function normalizeOptionalNumber(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const numericValue = Number(value);
+  return Number.isNaN(numericValue) ? null : numericValue;
+}
+
 function normalizeAssignment(row) {
   if (!row) return null;
 
@@ -68,12 +74,17 @@ function normalizeSubmission(row, context = {}) {
     studentId: row.student_id ?? row.studentId,
     textResponse: row.text_response ?? row.response_text ?? row.submission_text ?? "",
     text_response: row.text_response ?? row.response_text ?? row.submission_text ?? "",
-    fileUrl: row.file_url ?? row.submission_file_url ?? "",
-    file_url: row.file_url ?? row.submission_file_url ?? "",
+    filePublicUrl: row.file_public_url ?? row.file_url ?? row.submission_file_url ?? "",
+    file_public_url: row.file_public_url ?? row.file_url ?? row.submission_file_url ?? "",
+    fileUrl: row.file_public_url ?? row.file_url ?? row.submission_file_url ?? "",
     fileName: row.file_name ?? row.submission_file_name ?? "",
     file_name: row.file_name ?? row.submission_file_name ?? "",
-    fileStoragePath: row.file_storage_path ?? row.submission_file_storage_path ?? "",
-    file_storage_path: row.file_storage_path ?? row.submission_file_storage_path ?? "",
+    fileStoragePath: row.file_storage_path ?? row.storage_path ?? row.submission_file_storage_path ?? "",
+    file_storage_path: row.file_storage_path ?? row.storage_path ?? row.submission_file_storage_path ?? "",
+    fileType: row.file_type ?? row.submission_file_type ?? "",
+    file_type: row.file_type ?? row.submission_file_type ?? "",
+    fileSize: normalizeOptionalNumber(row.file_size),
+    file_size: normalizeOptionalNumber(row.file_size),
     status: normalizeSubmissionStatus(row.status),
     adminFeedback: row.admin_feedback ?? "",
     admin_feedback: row.admin_feedback ?? "",
@@ -467,9 +478,16 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
     assignment_id: normalizedAssignmentId,
     student_id: normalizedStudentId,
     text_response: `${responseData.textResponse ?? responseData.text_response ?? ""}`.trim() || null,
-    file_url: responseData.fileUrl ?? responseData.file_url ?? null,
+    file_public_url:
+      responseData.filePublicUrl ?? responseData.file_public_url ?? responseData.fileUrl ?? responseData.file_url ?? null,
     file_name: responseData.fileName ?? responseData.file_name ?? null,
-    file_storage_path: responseData.fileStoragePath ?? responseData.file_storage_path ?? null,
+    file_storage_path:
+      responseData.fileStoragePath ?? responseData.file_storage_path ?? responseData.storagePath ?? responseData.storage_path ?? null,
+    file_type: responseData.fileType ?? responseData.file_type ?? null,
+    file_size:
+      responseData.fileSize === null || responseData.fileSize === undefined || responseData.fileSize === ""
+        ? null
+        : Number(responseData.fileSize),
     status: "submitted",
     admin_feedback: null,
     grade: null,

@@ -458,22 +458,28 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     }));
 
     try {
-      let fileUrl = existingSubmission?.fileUrl || "";
+      let filePublicUrl = existingSubmission?.filePublicUrl || existingSubmission?.fileUrl || "";
       let fileName = existingSubmission?.fileName || "";
       let fileStoragePath = existingSubmission?.fileStoragePath || "";
+      let fileType = existingSubmission?.fileType || "";
+      let fileSize = existingSubmission?.fileSize ?? null;
 
       if (assignmentState.selectedFile) {
         const uploaded = await uploadAssignmentFile(assignmentState.selectedFile);
-        fileUrl = uploaded.publicUrl || "";
+        filePublicUrl = uploaded.publicUrl || "";
         fileName = uploaded.fileName || assignmentState.selectedFile.name;
         fileStoragePath = uploaded.storagePath || "";
+        fileType = uploaded.fileType || assignmentState.selectedFile.type || "";
+        fileSize = uploaded.fileSize ?? assignmentState.selectedFile.size ?? null;
       }
 
       const savedSubmission = await submitAssignment(activeAssignment.id, studentId, {
         textResponse,
-        fileUrl,
+        filePublicUrl,
         fileName,
         fileStoragePath,
+        fileType,
+        fileSize,
       });
 
       setAssignmentState({

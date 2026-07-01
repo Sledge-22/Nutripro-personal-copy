@@ -41,6 +41,8 @@ async function uploadToBucket(bucket, file, pathPrefix) {
       storagePath,
       fileName,
       publicUrl,
+      fileType: file?.type || "",
+      fileSize: typeof file?.size === "number" ? file.size : null,
       mock: true,
     };
   }
@@ -80,6 +82,8 @@ async function uploadToBucket(bucket, file, pathPrefix) {
     storagePath,
     fileName,
     publicUrl,
+    fileType: file?.type || "",
+    fileSize: typeof file?.size === "number" ? file.size : null,
     mock: false,
   };
 }
