@@ -125,13 +125,25 @@ export async function createCourse(course) {
   console.log("Course modules right before create:", modules);
   const { data, error } = await supabase.from("courses").insert(courseRow).select("*").single();
   if (error) {
-    console.error("Failed to create course in Supabase:", error);
+    console.error("Course insert error:", error);
     throw error;
   }
   console.log("Created course response:", data);
 
-  const savedModules = await replaceModulesForCourse(data.id, modules);
-  await syncEnrollments(data.id, owners);
+  let savedModules = [];
+  try {
+    savedModules = await replaceModulesForCourse(data.id, modules);
+  } catch (moduleError) {
+    console.error("Module insert error:", moduleError);
+    await supabase.from("courses").delete().eq("id", data.id);
+    throw moduleError;
+  }
+
+  try {
+    await syncEnrollments(data.id, owners);
+  } catch (enrollmentError) {
+    console.error("Enrollment sync failed after course create:", enrollmentError);
+  }
 
   return normalizeCourse(data, owners, savedModules);
 }
@@ -153,13 +165,18 @@ export async function updateCourse(courseId, updates) {
   console.log("Course modules right before update:", modules);
   const { data, error } = await supabase.from("courses").update(courseRow).eq("id", courseId).select("*").single();
   if (error) {
-    console.error("Failed to update course in Supabase:", error);
+    console.error("Course update error:", error);
     throw error;
   }
   console.log("Updated course response:", data);
 
   const savedModules = await replaceModulesForCourse(courseId, modules);
-  await syncEnrollments(courseId, owners);
+
+  try {
+    await syncEnrollments(courseId, owners);
+  } catch (enrollmentError) {
+    console.error("Enrollment sync failed after course update:", enrollmentError);
+  }
 
   return normalizeCourse(data, owners, savedModules);
 }

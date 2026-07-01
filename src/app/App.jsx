@@ -29,6 +29,23 @@ function navigateTo(pathname, replace = false) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+function formatSupabaseError(error) {
+  if (!error) return "Saving the course failed.";
+  if (typeof error === "string") return error;
+
+  const parts = [error.message, error.details, error.hint].filter(Boolean);
+  if (error.code) parts.push(`Code: ${error.code}`);
+
+  return parts.length ? parts.join(" ") : "Saving the course failed.";
+}
+
+function upsertCourseList(courses, nextCourse) {
+  const existingIndex = courses.findIndex((course) => course.id === nextCourse.id);
+  if (existingIndex === -1) return [...courses, nextCourse];
+
+  return courses.map((course) => (course.id === nextCourse.id ? nextCourse : course));
+}
+
 export function App() {
   const [pathname, setPathname] = useState(getPathname());
   const [users, setUsers] = useState(initialUsers);
@@ -78,12 +95,23 @@ export function App() {
   }
 
   async function refreshCourses() {
-    const [allCourses, ownedCourses] = await Promise.all([
+    const [allCoursesResult, ownedCoursesResult] = await Promise.allSettled([
       getCourses(),
       getStudentCourses(DEMO_STUDENT_ID),
     ]);
-    setCourses(allCourses);
-    setStudentCourses(ownedCourses);
+
+    if (allCoursesResult.status === "rejected") {
+      console.error("Refreshing all courses failed:", allCoursesResult.reason);
+      throw allCoursesResult.reason;
+    }
+
+    setCourses(allCoursesResult.value);
+
+    if (ownedCoursesResult.status === "fulfilled") {
+      setStudentCourses(ownedCoursesResult.value);
+    } else {
+      console.error("Refreshing student courses failed:", ownedCoursesResult.reason);
+    }
   }
 
   async function refreshCertificates() {
@@ -146,13 +174,22 @@ export function App() {
 
   async function handleSaveCourse(course, editingId) {
     try {
-      if (editingId) await updateCourse(editingId, course);
-      else await createCourse(course);
-      await refreshCourses();
+      const savedCourse = editingId ? await updateCourse(editingId, course) : await createCourse(course);
+
+      setCourses((currentCourses) => upsertCourseList(currentCourses, savedCourse));
+      setStudentCourses((currentCourses) => {
+        const shouldOwnCourse = Array.isArray(savedCourse.owners) && savedCourse.owners.includes(DEMO_STUDENT_ID);
+        if (!shouldOwnCourse) return currentCourses.filter((existingCourse) => existingCourse.id !== savedCourse.id);
+        return upsertCourseList(currentCourses, savedCourse);
+      });
+
+      void refreshCourses().catch((refreshError) => {
+        console.error("Refreshing courses after save failed:", refreshError);
+      });
       return { ok: true };
     } catch (error) {
       console.error("Saving course failed:", error);
-      return { ok: false, error: "Saving the course failed." };
+      return { ok: false, error: formatSupabaseError(error) };
     }
   }
 
