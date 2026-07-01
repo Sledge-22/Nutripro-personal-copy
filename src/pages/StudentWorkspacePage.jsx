@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { CertificateModal, Icon, Progress, Stat, Status, Welcome } from "../components/ui.jsx";
 import { ROUTES } from "../routes/appRoutes.js";
+import { getStudentSubmission, submitAssignment } from "../services/assignmentService.js";
 import { getStudentCourseAccess } from "../services/courseService.js";
+import { uploadAssignmentFile } from "../services/storageService.js";
 
 function goTo(pathname) {
   window.history.pushState({}, "", pathname);
@@ -10,6 +12,12 @@ function goTo(pathname) {
 
 function getCourseModules(course) {
   return Array.isArray(course?.modules) ? course.modules : [];
+}
+
+function formatSubmissionType(submissionType) {
+  const value = submissionType || "text";
+  if (value === "text_and_file") return "Text and file";
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 export function StudentWorkspacePage({
@@ -161,6 +169,7 @@ export function StudentWorkspacePage({
         ) : selectedCourse ? (
           <StudentModuleDetail
             course={selectedCourse}
+            studentId={studentId}
             completed={progressState}
             onUpdateProgress={onUpdateProgress}
             progress={progressFor(selectedCourse)}
@@ -281,10 +290,21 @@ function OwnedCoursesPage({ courses, progressFor }) {
   );
 }
 
-function StudentModuleDetail({ course, completed, onUpdateProgress, progress }) {
+function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, progress }) {
   const modules = getCourseModules(course);
   const [activeModuleId, setActiveModuleId] = useState(modules[0]?.id || null);
   const [viewError, setViewError] = useState("");
+  const [assignmentState, setAssignmentState] = useState({
+    loading: false,
+    error: "",
+    submission: null,
+    textResponse: "",
+    selectedFile: null,
+    selectedFileName: "",
+    submitMessage: "",
+    submitError: "",
+    uploading: false,
+  });
 
   console.log("selected course id on detail page:", course?.id);
 
@@ -292,6 +312,86 @@ function StudentModuleDetail({ course, completed, onUpdateProgress, progress }) 
     setActiveModuleId(modules[0]?.id || null);
     setViewError("");
   }, [course?.id, modules]);
+
+  const activeModule = modules.find((module) => module.id === activeModuleId) || modules[0] || null;
+  const activeAssignment = activeModule?.assignment ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSubmission = async () => {
+      if (!activeAssignment?.id || !studentId) {
+        if (!cancelled) {
+          setAssignmentState({
+            loading: false,
+            error: "",
+            submission: null,
+            textResponse: "",
+            selectedFile: null,
+            selectedFileName: "",
+            submitMessage: "",
+            submitError: "",
+            uploading: false,
+          });
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setAssignmentState({
+          loading: true,
+          error: "",
+          submission: null,
+          textResponse: "",
+          selectedFile: null,
+          selectedFileName: "",
+          submitMessage: "",
+          submitError: "",
+          uploading: false,
+        });
+      }
+
+      try {
+        const submission = await getStudentSubmission(activeAssignment.id, studentId);
+
+        if (!cancelled) {
+          setAssignmentState({
+            loading: false,
+            error: "",
+            submission,
+            textResponse: submission?.textResponse || "",
+            selectedFile: null,
+            selectedFileName: submission?.fileName || "",
+            submitMessage: "",
+            submitError: "",
+            uploading: false,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load the student assignment submission:", error);
+
+        if (!cancelled) {
+          setAssignmentState({
+            loading: false,
+            error: error.message || "Loading the assignment submission failed.",
+            submission: null,
+            textResponse: "",
+            selectedFile: null,
+            selectedFileName: "",
+            submitMessage: "",
+            submitError: "",
+            uploading: false,
+          });
+        }
+      }
+    };
+
+    void loadSubmission();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAssignment?.id, studentId]);
 
   if (course?.status && course.status !== "published") {
     return (
@@ -309,7 +409,6 @@ function StudentModuleDetail({ course, completed, onUpdateProgress, progress }) 
     );
   }
 
-  const activeModule = modules.find((module) => module.id === activeModuleId) || modules[0] || null;
   const pdfSeen = activeModule ? completed[`pdf-${activeModule.id}`] : false;
   const videoSeen = activeModule ? completed[`video-${activeModule.id}`] : false;
   const moduleDone = activeModule ? completed[`module-${activeModule.id}`] : false;
@@ -322,6 +421,81 @@ function StudentModuleDetail({ course, completed, onUpdateProgress, progress }) 
   const toggleModule = () => {
     if (!activeModule || !canComplete) return;
     void onUpdateProgress({ [`module-${activeModule.id}`]: !completed[`module-${activeModule.id}`] });
+  };
+
+  const handleAssignmentSubmit = async () => {
+    if (!activeAssignment?.id || !studentId) return;
+
+    const submissionType = activeAssignment.submissionType || activeAssignment.submission_type || "text";
+    const needsText = submissionType === "text" || submissionType === "text_and_file";
+    const needsFile = submissionType === "file" || submissionType === "text_and_file";
+    const textResponse = assignmentState.textResponse.trim();
+    const existingSubmission = assignmentState.submission;
+
+    if (needsText && !textResponse) {
+      setAssignmentState((current) => ({
+        ...current,
+        submitError: "A text response is required for this assignment.",
+        submitMessage: "",
+      }));
+      return;
+    }
+
+    if (needsFile && !assignmentState.selectedFile && !existingSubmission?.fileUrl) {
+      setAssignmentState((current) => ({
+        ...current,
+        submitError: "A file upload is required for this assignment.",
+        submitMessage: "",
+      }));
+      return;
+    }
+
+    setAssignmentState((current) => ({
+      ...current,
+      uploading: true,
+      submitError: "",
+      submitMessage: "",
+    }));
+
+    try {
+      let fileUrl = existingSubmission?.fileUrl || "";
+      let fileName = existingSubmission?.fileName || "";
+      let fileStoragePath = existingSubmission?.fileStoragePath || "";
+
+      if (assignmentState.selectedFile) {
+        const uploaded = await uploadAssignmentFile(assignmentState.selectedFile);
+        fileUrl = uploaded.publicUrl || "";
+        fileName = uploaded.fileName || assignmentState.selectedFile.name;
+        fileStoragePath = uploaded.storagePath || "";
+      }
+
+      const savedSubmission = await submitAssignment(activeAssignment.id, studentId, {
+        textResponse,
+        fileUrl,
+        fileName,
+        fileStoragePath,
+      });
+
+      setAssignmentState({
+        loading: false,
+        error: "",
+        submission: savedSubmission,
+        textResponse: savedSubmission?.textResponse || textResponse,
+        selectedFile: null,
+        selectedFileName: savedSubmission?.fileName || fileName,
+        submitMessage: "Assignment submitted.",
+        submitError: "",
+        uploading: false,
+      });
+    } catch (error) {
+      console.error("Submitting the assignment failed:", error);
+      setAssignmentState((current) => ({
+        ...current,
+        uploading: false,
+        submitError: error.message || "Submitting the assignment failed.",
+        submitMessage: "",
+      }));
+    }
   };
 
   if (!modules.length) {
@@ -358,6 +532,7 @@ function StudentModuleDetail({ course, completed, onUpdateProgress, progress }) 
   const pdfLabel = activeModule?.pdfLabel || activeModule?.pdfName || "No PDF selected";
   const videoLabel =
     activeModule?.videoName || activeModule?.video?.uploadLabel || activeModule?.video?.link || "No video selected";
+  const assignmentType = activeAssignment?.submissionType || activeAssignment?.submission_type || "text";
 
   return (
     <>
@@ -467,6 +642,104 @@ function StudentModuleDetail({ course, completed, onUpdateProgress, progress }) 
               <small className="field-note">No video uploaded yet.</small>
             )}
           </div>
+
+          {activeAssignment ? (
+            <section className="section-card assignment-card">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">MODULE ASSIGNMENT</span>
+                  <h2>{activeAssignment.title}</h2>
+                  <p>{activeAssignment.instructions}</p>
+                </div>
+              </div>
+
+              <div className="assignment-chip-row">
+                <span className="subtle-badge">Submission type: {formatSubmissionType(assignmentType)}</span>
+                {assignmentState.submission?.status ? <Status status={assignmentState.submission.status} /> : null}
+              </div>
+
+              {assignmentState.loading && <small className="field-note">Loading your submission...</small>}
+              {assignmentState.error && <small className="field-note danger-text">{assignmentState.error}</small>}
+              {assignmentState.submitMessage && <small className="field-note">{assignmentState.submitMessage}</small>}
+              {assignmentState.submitError && (
+                <small className="field-note danger-text">{assignmentState.submitError}</small>
+              )}
+
+              {(assignmentType === "text" || assignmentType === "text_and_file") && (
+                <label>
+                  Text response
+                  <textarea
+                    rows="5"
+                    value={assignmentState.textResponse}
+                    onChange={(event) =>
+                      setAssignmentState((current) => ({
+                        ...current,
+                        textResponse: event.target.value,
+                        submitError: "",
+                        submitMessage: "",
+                      }))
+                    }
+                    placeholder="Write your assignment response here."
+                  />
+                </label>
+              )}
+
+              {(assignmentType === "file" || assignmentType === "text_and_file") && (
+                <label>
+                  Upload file
+                  <input
+                    type="file"
+                    onChange={(event) =>
+                      setAssignmentState((current) => ({
+                        ...current,
+                        selectedFile: event.target.files?.[0] ?? null,
+                        selectedFileName: event.target.files?.[0]?.name || current.selectedFileName,
+                        submitError: "",
+                        submitMessage: "",
+                      }))
+                    }
+                  />
+                </label>
+              )}
+
+              {assignmentState.selectedFileName ? (
+                <small className="field-note">Selected file: {assignmentState.selectedFileName}</small>
+              ) : null}
+
+              {assignmentState.submission?.fileUrl ? (
+                <a className="assignment-link" href={assignmentState.submission.fileUrl} target="_blank" rel="noreferrer">
+                  Open submitted file
+                </a>
+              ) : null}
+
+              <div className="assignment-meta">
+                <p>
+                  <strong>Grade:</strong>{" "}
+                  {assignmentState.submission?.grade === null || assignmentState.submission?.grade === undefined
+                    ? "Not graded yet."
+                    : `${assignmentState.submission.grade}/100`}
+                </p>
+                <p>
+                  <strong>Feedback:</strong>{" "}
+                  {assignmentState.submission?.adminFeedback ||
+                    assignmentState.submission?.admin_feedback ||
+                    "No feedback yet."}
+                </p>
+              </div>
+
+              <div className="form-actions compact">
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={assignmentState.uploading || assignmentState.loading}
+                  onClick={() => void handleAssignmentSubmit()}
+                >
+                  <Icon name="check" />
+                  {assignmentState.uploading ? "Submitting..." : "Submit assignment"}
+                </button>
+              </div>
+            </section>
+          ) : null}
 
           <div className="progress-steps">
             <span className={pdfSeen ? "subtle-badge" : "count-badge"}>{pdfSeen ? "PDF viewed" : "PDF pending"}</span>

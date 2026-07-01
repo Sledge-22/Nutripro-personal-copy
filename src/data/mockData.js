@@ -133,3 +133,6 @@ export const initialCommunityPosts = [
   { id: 1, author: "Noah Williams", initials: "NW", time: "2 hours ago", title: "A meal-planning habit that finally stuck", body: "Planning just three dinners first made the whole week feel much easier. What small change worked for you?" },
   { id: 2, author: "Emma Chen", initials: "EC", time: "Yesterday", title: "Reading labels without overthinking it", body: "I started checking serving size and fibre first. The Nutrition Foundations module made the process much clearer." },
 ];
+
+// TODO(database): Replace these mock assignment submissions with database-backed assignment submission records.
+export const initialAssignmentSubmissions = [];

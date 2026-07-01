@@ -2,6 +2,7 @@ import { isSupabaseConfigured, supabase, supabaseUrl } from "../lib/supabaseClie
 
 const PDF_BUCKET = "module-pdfs";
 const VIDEO_BUCKET = "module-videos";
+const ASSIGNMENT_BUCKET = "assignment-submissions";
 
 const sanitizeFileName = (name) => {
   const parts = name.split(".");
@@ -29,11 +30,19 @@ function buildPublicUrl(bucket, path) {
 
 async function uploadToBucket(bucket, file, pathPrefix) {
   if (!isSupabaseConfigured) {
-    const configError = new Error(
-      "Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY or VITE_SUPABASE_ANON_KEY.",
-    );
-    console.error(configError);
-    throw configError;
+    const fileName = file?.name || "upload-placeholder";
+    const safeName = sanitizeFileName(fileName);
+    const storagePath = `${pathPrefix}/mock-${Date.now()}-${safeName}`;
+    const publicUrl =
+      typeof URL !== "undefined" && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : "";
+
+    return {
+      bucket,
+      storagePath,
+      fileName,
+      publicUrl,
+      mock: true,
+    };
   }
 
   if (!(file instanceof File || file?.name)) {
@@ -81,4 +90,8 @@ export async function uploadModulePdf(file, moduleId = "module") {
 
 export async function uploadModuleVideo(file, moduleId = "module") {
   return uploadToBucket(VIDEO_BUCKET, file, "videos");
+}
+
+export async function uploadAssignmentFile(file) {
+  return uploadToBucket(ASSIGNMENT_BUCKET, file, "submissions");
 }

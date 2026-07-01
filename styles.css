@@ -109,6 +109,10 @@ td { color: #51645e; }
 td strong { color: var(--ink); }
 .status { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 999px; color: #397355; background: #e7f4ec; font-size: 11px; font-weight: 700; }
 .status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status.submitted { color: #406f9d; background: #e8f2ff; }
+.status.approved { color: #397355; background: #e7f4ec; }
+.status.needs_revision { color: #8a6c25; background: #fff5d7; }
+.status.rejected { color: #9c4744; background: #fdeaea; }
 .status.paused { color: #8a6c25; background: #fff5d7; }
 .status.inactive { color: #7f8885; background: #eef1f0; }
 .status.issued { color: #397355; }
@@ -228,6 +232,20 @@ code { padding: 5px 7px; border-radius: 6px; color: var(--green-800); background
 .lesson-content > p { color: var(--muted); line-height: 1.7; }
 .active-module-note { margin: 0 0 10px; font-size: 12px; }
 .module-assets { display: grid; gap: 10px; margin-top: 14px; }
+.assignment-card { margin-top: 20px; padding: 24px; }
+.assignment-chip-row, .submission-statuses { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.assignment-link { display: inline-flex; margin-top: 10px; color: var(--green-700); font-weight: 700; }
+.assignment-meta { display: grid; gap: 10px; margin-top: 14px; }
+.assignment-meta p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.submission-list { display: grid; gap: 14px; }
+.submission-item { display: grid; gap: 14px; padding: 18px; border: 1px solid #e6ece9; border-radius: 14px; background: var(--green-50); }
+.submission-summary { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; }
+.submission-summary h3 { margin: 6px 0 4px; font-size: 17px; }
+.submission-summary p, .response-block p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.assignment-response { display: grid; gap: 10px; }
+.response-block { padding: 14px; border-radius: 12px; background: #fff; }
+.response-block strong { display: block; margin-bottom: 6px; }
+.review-panel { display: grid; gap: 8px; padding-top: 4px; border-top: 1px solid #dfe8e3; }
 .progress-steps { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .lesson-meta { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; }
 .lesson-meta a { color: var(--green-700); word-break: break-word; }
@@ -270,6 +288,7 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
   .nested-builder-grid, .module-items { grid-template-columns: 1fr; }
   .course-detail-layout { grid-template-columns: 330px minmax(0,1fr); }
   .login-panel { padding-inline: 45px; }
+  .submission-summary { flex-direction: column; }
 }
 
 @media (max-width: 760px) {

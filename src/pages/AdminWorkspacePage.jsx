@@ -1,9 +1,23 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Icon, OverviewCard, Stat, Status, Welcome } from "../components/ui.jsx";
+import {
+  getSubmissionsForAdmin,
+  reviewSubmission,
+} from "../services/assignmentService.js";
 import { uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
 
 function createId() {
   return Date.now() + Math.floor(Math.random() * 100000);
+}
+
+function createAssignmentDraft() {
+  return {
+    id: null,
+    title: "",
+    instructions: "",
+    submissionType: "text",
+    submission_type: "text",
+  };
 }
 
 function createModuleDraft(sortOrder = 1) {
@@ -38,6 +52,7 @@ function createModuleDraft(sortOrder = 1) {
       uploading: false,
       error: "",
     },
+    assignment: null,
   };
 }
 
@@ -79,6 +94,15 @@ function createCourseDraft(course = null) {
         uploading: false,
         error: "",
       },
+      assignment: module.assignment
+        ? {
+            id: module.assignment.id || null,
+            title: module.assignment.title || "",
+            instructions: module.assignment.instructions || "",
+            submissionType: module.assignment.submissionType || module.assignment.submission_type || "text",
+            submission_type: module.assignment.submission_type || module.assignment.submissionType || "text",
+          }
+        : null,
     })),
   };
 }
@@ -117,6 +141,15 @@ function buildCoursePayload(form, editingId, existingCourse) {
           url: module.video.url || module.video_url || module.videoUrl || module.video.link.trim(),
           uploadLabel: module.video.uploadLabel,
         },
+        assignment: module.assignment?.title?.trim()
+          ? {
+              id: module.assignment.id || null,
+              title: module.assignment.title.trim(),
+              instructions: module.assignment.instructions.trim(),
+              submissionType: module.assignment.submissionType || module.assignment.submission_type || "text",
+              submission_type: module.assignment.submission_type || module.assignment.submissionType || "text",
+            }
+          : null,
       })),
   };
 }
@@ -132,6 +165,20 @@ function formatCourseStatus(status) {
 
 function isVisibleToStudents(status) {
   return (status || "published") === "published";
+}
+
+function formatSubmissionType(submissionType) {
+  const value = submissionType || "text";
+  if (value === "text_and_file") return "Text and file";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function createReviewDraft(submission = null) {
+  return {
+    status: submission?.status || "submitted",
+    grade: submission?.grade ?? "",
+    adminFeedback: submission?.adminFeedback || submission?.admin_feedback || "",
+  };
 }
 
 export function AdminWorkspacePage({
@@ -273,6 +320,36 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   const [visibilityMessage, setVisibilityMessage] = useState("");
   const [visibilityError, setVisibilityError] = useState("");
   const [statusUpdatingId, setStatusUpdatingId] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [submissionsError, setSubmissionsError] = useState("");
+  const [reviewForms, setReviewForms] = useState({});
+  const [expandedSubmissionId, setExpandedSubmissionId] = useState(null);
+  const [reviewSavingId, setReviewSavingId] = useState(null);
+  const [reviewMessage, setReviewMessage] = useState("");
+  const [reviewError, setReviewError] = useState("");
+
+  const loadSubmissions = async () => {
+    setSubmissionsLoading(true);
+    setSubmissionsError("");
+
+    try {
+      const rows = await getSubmissionsForAdmin();
+      setSubmissions(rows);
+      setReviewForms(
+        Object.fromEntries(rows.map((submission) => [submission.id, createReviewDraft(submission)])),
+      );
+    } catch (error) {
+      console.error("Loading assignment submissions failed:", error);
+      setSubmissionsError(error.message || "Loading submissions failed.");
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadSubmissions();
+  }, []);
 
   const reset = () => {
     setForm(createCourseDraft());
@@ -281,6 +358,13 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
 
   const updateCourseField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateAssignment = (moduleId, updater) => {
+    updateModule(moduleId, (module) => ({
+      ...module,
+      assignment: updater(module.assignment ?? createAssignmentDraft()),
+    }));
   };
 
   const updateModule = (moduleId, updater) => {
@@ -303,6 +387,20 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
       modules: current.modules
         .filter((module) => module.id !== moduleId)
         .map((module, index) => ({ ...module, sortOrder: index + 1 })),
+    }));
+  };
+
+  const enableAssignment = (moduleId) => {
+    updateModule(moduleId, (module) => ({
+      ...module,
+      assignment: module.assignment ?? createAssignmentDraft(),
+    }));
+  };
+
+  const disableAssignment = (moduleId) => {
+    updateModule(moduleId, (module) => ({
+      ...module,
+      assignment: null,
     }));
   };
 
@@ -330,6 +428,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
           return;
         }
 
+        void loadSubmissions();
         reset();
       })
       .catch((error) => {
@@ -453,6 +552,39 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
           error: error.message || "Video upload failed.",
         },
       }));
+    }
+  };
+
+  const updateReviewForm = (submissionId, field, value) => {
+    setReviewForms((current) => ({
+      ...current,
+      [submissionId]: {
+        ...(current[submissionId] ?? createReviewDraft()),
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveSubmissionReview = async (submissionId) => {
+    const formValues = reviewForms[submissionId] ?? createReviewDraft();
+    setReviewMessage("");
+    setReviewError("");
+    setReviewSavingId(submissionId);
+
+    try {
+      const gradeValue = formValues.grade === "" ? null : Number(formValues.grade);
+      if (gradeValue !== null && (Number.isNaN(gradeValue) || gradeValue < 0 || gradeValue > 100)) {
+        throw new Error("Grade must be between 0 and 100.");
+      }
+
+      await reviewSubmission(submissionId, formValues.status, formValues.adminFeedback, gradeValue);
+      setReviewMessage("Submission review saved.");
+      await loadSubmissions();
+    } catch (error) {
+      console.error("Saving assignment review failed:", error);
+      setReviewError(error.message || "Saving the review failed.");
+    } finally {
+      setReviewSavingId(null);
     }
   };
 
@@ -719,6 +851,78 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                   {module.video.link ? `Video link: ${module.video.link}` : "No video link added."}
                 </small>
               </section>
+
+              <section className="nested-builder single-video-builder">
+                <div className="nested-header">
+                  <span className="eyebrow">ASSIGNMENT</span>
+                  <h5>{module.assignment?.title?.trim() || "No assignment added"}</h5>
+                </div>
+
+                {module.assignment ? (
+                  <>
+                    <label>
+                      Assignment title
+                      <input
+                        value={module.assignment.title}
+                        onChange={(event) =>
+                          updateAssignment(module.id, (assignment) => ({
+                            ...assignment,
+                            title: event.target.value,
+                          }))
+                        }
+                        placeholder="e.g. Weekly meal-planning homework"
+                      />
+                    </label>
+
+                    <label>
+                      Instructions
+                      <textarea
+                        rows="4"
+                        value={module.assignment.instructions}
+                        onChange={(event) =>
+                          updateAssignment(module.id, (assignment) => ({
+                            ...assignment,
+                            instructions: event.target.value,
+                          }))
+                        }
+                        placeholder="Tell students what to submit after reviewing the module PDF and video."
+                      />
+                    </label>
+
+                    <label>
+                      Submission type
+                      <select
+                        value={module.assignment.submissionType || module.assignment.submission_type || "text"}
+                        onChange={(event) =>
+                          updateAssignment(module.id, (assignment) => ({
+                            ...assignment,
+                            submissionType: event.target.value,
+                            submission_type: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="text">Text</option>
+                        <option value="file">File</option>
+                        <option value="text_and_file">Text and file</option>
+                      </select>
+                    </label>
+
+                    <div className="row-actions">
+                      <button type="button" className="danger-text" onClick={() => disableAssignment(module.id)}>
+                        Remove assignment
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="empty-copy">This module does not include homework yet.</p>
+                    <button type="button" className="secondary-btn" onClick={() => enableAssignment(module.id)}>
+                      <Icon name="plus" />
+                      Add assignment
+                    </button>
+                  </>
+                )}
+              </section>
             </article>
           ))}
         </div>
@@ -775,6 +979,10 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                             : module.video_url || module.videoUrl || module.video.link || "No video selected"}
                         </strong>
                       </div>
+                      <div className="preview-item">
+                        <span className="subtle-badge">Homework</span>
+                        <strong>{module.assignment?.title || "No assignment"}</strong>
+                      </div>
                     </div>
                   </article>
                 ))
@@ -826,6 +1034,12 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                     }{" "}
                     videos
                   </span>
+                  <span>
+                    {
+                      (course.modules ?? []).filter((module) => module.assignment?.title?.trim()).length
+                    }{" "}
+                    assignments
+                  </span>
                   <label>
                     <input
                       type="checkbox"
@@ -844,6 +1058,140 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                 </div>
               </article>
             ))}
+          </div>
+        </section>
+
+        <section className="section-card posted-list">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">ASSIGNMENT REVIEW</span>
+              <h2>Student submissions</h2>
+              <p>Review homework, leave feedback, and grade each submission out of 100.</p>
+            </div>
+            <span className="count-badge">{submissions.length} submissions</span>
+          </div>
+
+          {submissionsLoading && <small className="field-note">Loading submissions...</small>}
+          {submissionsError && <small className="field-note danger-text">{submissionsError}</small>}
+          {reviewMessage && <small className="field-note">{reviewMessage}</small>}
+          {reviewError && <small className="field-note danger-text">{reviewError}</small>}
+
+          <div className="submission-list">
+            {!submissionsLoading && !submissions.length ? (
+              <p className="empty-copy">No assignment submissions yet.</p>
+            ) : (
+              submissions.map((submission) => {
+                const reviewForm = reviewForms[submission.id] ?? createReviewDraft(submission);
+
+                return (
+                  <article key={submission.id} className="submission-item">
+                    <div className="submission-summary">
+                      <div>
+                        <span className="eyebrow">SUBMISSION</span>
+                        <h3>{submission.assignmentTitle || "Module assignment"}</h3>
+                        <p>
+                          {submission.studentName || "Student"} · {submission.courseTitle || "Course"} ·{" "}
+                          {submission.moduleTitle || "Module"}
+                        </p>
+                      </div>
+                      <div className="submission-statuses">
+                        <Status status={submission.status || "submitted"} />
+                        <span className="subtle-badge">
+                          {submission.grade === null || submission.grade === undefined
+                            ? "Not graded yet"
+                            : `Grade: ${submission.grade}/100`}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="assignment-response">
+                      <p>
+                        <strong>Submission type:</strong>{" "}
+                        {formatSubmissionType(submission.assignment?.submissionType || submission.assignment?.submission_type)}
+                      </p>
+
+                      {submission.textResponse ? (
+                        <div className="response-block">
+                          <strong>Student response</strong>
+                          <p>{submission.textResponse}</p>
+                        </div>
+                      ) : (
+                        <small className="field-note">No text response submitted.</small>
+                      )}
+
+                      {submission.fileUrl ? (
+                        <a href={submission.fileUrl} target="_blank" rel="noreferrer">
+                          Open submitted file
+                        </a>
+                      ) : (
+                        <small className="field-note">No file submitted.</small>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={() =>
+                        setExpandedSubmissionId((current) => (current === submission.id ? null : submission.id))
+                      }
+                    >
+                      {expandedSubmissionId === submission.id ? "Hide review" : "Review submission"}
+                    </button>
+
+                    {expandedSubmissionId === submission.id && (
+                      <div className="review-panel">
+                        <label>
+                          Review status
+                          <select
+                            value={reviewForm.status}
+                            onChange={(event) => updateReviewForm(submission.id, "status", event.target.value)}
+                          >
+                            <option value="submitted">Submitted</option>
+                            <option value="approved">Approved</option>
+                            <option value="needs_revision">Needs revision</option>
+                            <option value="rejected">Rejected</option>
+                          </select>
+                        </label>
+
+                        <label>
+                          Grade out of 100
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={reviewForm.grade}
+                            onChange={(event) => updateReviewForm(submission.id, "grade", event.target.value)}
+                            placeholder="0 - 100"
+                          />
+                        </label>
+
+                        <label>
+                          Feedback
+                          <textarea
+                            rows="4"
+                            value={reviewForm.adminFeedback}
+                            onChange={(event) => updateReviewForm(submission.id, "adminFeedback", event.target.value)}
+                            placeholder="Share clear feedback for the student."
+                          />
+                        </label>
+
+                        <div className="form-actions compact">
+                          <button
+                            type="button"
+                            className="primary-btn"
+                            disabled={reviewSavingId === submission.id}
+                            onClick={() => void saveSubmissionReview(submission.id)}
+                          >
+                            <Icon name="check" />
+                            {reviewSavingId === submission.id ? "Saving..." : "Save review"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                );
+              })
+            )}
           </div>
         </section>
       </div>

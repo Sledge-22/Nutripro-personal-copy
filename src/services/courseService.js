@@ -47,6 +47,16 @@ function normalizeModules(modules = []) {
       url: module.video?.url ?? module.video_url ?? module.videoUrl ?? module.video?.link ?? "",
       uploadLabel: module.video?.uploadLabel ?? module.videoName ?? module.video_file_name ?? "No video selected",
     },
+    assignment: module.assignment
+      ? {
+          id: module.assignment.id ?? null,
+          moduleId: module.assignment.moduleId ?? module.id ?? null,
+          title: module.assignment.title ?? "",
+          instructions: module.assignment.instructions ?? "",
+          submissionType: module.assignment.submissionType ?? module.assignment.submission_type ?? "text",
+          submission_type: module.assignment.submission_type ?? module.assignment.submissionType ?? "text",
+        }
+      : null,
   }));
 }
 

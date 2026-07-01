@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { getMockCourses, setMockCourses } from "./mockStore.js";
+import { deleteAssignmentsForModuleIds, getAssignmentsByModuleIds, syncAssignmentsForModules } from "./assignmentService.js";
 
 function fileNameFromUrl(url, fallback) {
   if (!url) return fallback;
@@ -42,6 +43,7 @@ function mapModuleRow(module) {
       url: videoUrl,
       uploadLabel: videoName,
     },
+    assignment: module.assignment ?? null,
   };
 }
 
@@ -94,7 +96,11 @@ export async function getModulesByCourse(courseId) {
     }
 
     console.log("Fetched Supabase module rows:", data);
-    return data.map(mapModuleRow);
+    const assignmentMap = await getAssignmentsByModuleIds(data.map((module) => module.id));
+    return data.map((module) => ({
+      ...mapModuleRow(module),
+      assignment: assignmentMap.get(String(module.id)) ?? null,
+    }));
   } catch (error) {
     console.error("Failed module fetch from Supabase:", error);
     throw error;
@@ -104,6 +110,21 @@ export async function getModulesByCourse(courseId) {
 export async function replaceModulesForCourse(courseId, modules) {
   if (!isSupabaseConfigured) {
     return updateMockModules(courseId, modules);
+  }
+
+  const { data: existingModules, error: existingModuleError } = await supabase
+    .from("modules")
+    .select("id")
+    .eq("course_id", courseId);
+
+  if (existingModuleError) {
+    console.error("Failed to load existing modules before replacement:", existingModuleError);
+    throw existingModuleError;
+  }
+
+  const existingModuleIds = (existingModules ?? []).map((module) => module.id).filter(Boolean);
+  if (existingModuleIds.length) {
+    await deleteAssignmentsForModuleIds(existingModuleIds);
   }
 
   const { error: deleteError } = await supabase.from("modules").delete().eq("course_id", courseId);
@@ -127,13 +148,14 @@ export async function replaceModulesForCourse(courseId, modules) {
   }
 
   const mapped = (data ?? []).map(mapModuleRow);
+  const modulesWithAssignments = await syncAssignmentsForModules(mapped, modules);
   console.log("Created module response:", mapped);
-  mapped.forEach((module, index) => {
+  modulesWithAssignments.forEach((module, index) => {
     const source = modules[index];
     const sourcePdfUrl = source?.pdf_url || source?.pdfUrl;
     const sourceVideoUrl = source?.video_url || source?.videoUrl || source?.video?.url || source?.video?.link;
     if (sourcePdfUrl && !module.pdf_url) console.error("Module save succeeded but pdf_url is missing:", module);
     if (sourceVideoUrl && !module.video_url) console.error("Module save succeeded but video_url is missing:", module);
   });
-  return mapped;
+  return modulesWithAssignments;
 }

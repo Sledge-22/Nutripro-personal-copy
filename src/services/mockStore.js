@@ -2,6 +2,7 @@ import {
   initialCertificates,
   initialCommunityPosts,
   initialCourses,
+  initialAssignmentSubmissions,
   initialStudentProgress,
   initialUsers,
 } from "../data/mockData.js";
@@ -20,6 +21,7 @@ const state = {
   certificates: clone(initialCertificates),
   progress: clone(initialStudentProgress),
   communityPosts: clone(initialCommunityPosts),
+  assignmentSubmissions: clone(initialAssignmentSubmissions),
 };
 
 export function getMockUsers() {
@@ -65,6 +67,15 @@ export function getMockCommunityPosts() {
 export function setMockCommunityPosts(nextPosts) {
   state.communityPosts = clone(nextPosts);
   return getMockCommunityPosts();
+}
+
+export function getMockAssignmentSubmissions() {
+  return clone(state.assignmentSubmissions);
+}
+
+export function setMockAssignmentSubmissions(nextSubmissions) {
+  state.assignmentSubmissions = clone(nextSubmissions);
+  return getMockAssignmentSubmissions();
 }
 
 export function createMockId(items) {
