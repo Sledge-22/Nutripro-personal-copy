@@ -3,6 +3,20 @@ import { isSupabaseConfigured, supabase, supabaseUrl } from "../lib/supabaseClie
 const PDF_BUCKET = "module-pdfs";
 const VIDEO_BUCKET = "module-videos";
 
+const sanitizeFileName = (name) => {
+  const parts = name.split(".");
+  const extension = parts.length > 1 ? parts.pop().toLowerCase() : "";
+  const baseName = parts.join(".") || "file";
+
+  const safeBaseName = baseName
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return extension ? `${safeBaseName}.${extension}` : safeBaseName;
+};
+
 function buildPublicUrl(bucket, path) {
   if (!supabaseUrl || !bucket || !path) return "";
   const encodedPath = path
@@ -27,7 +41,8 @@ async function uploadToBucket(bucket, file, pathPrefix) {
   }
 
   const fileName = file.name || "upload-placeholder";
-  const storagePath = `${pathPrefix}/${Date.now()}-${fileName}`;
+  const safeName = sanitizeFileName(fileName);
+  const storagePath = `${pathPrefix}/${Date.now()}-${safeName}`;
   const { error } = await supabase.storage.from(bucket).upload(storagePath, file, { upsert: true });
   if (error) {
     console.error(`Supabase upload failed for bucket ${bucket}:`, error);
