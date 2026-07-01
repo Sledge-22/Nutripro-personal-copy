@@ -106,17 +106,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .mini-progress span { display: block; width: 68%; height: 100%; border-radius: inherit; background: #d7f1df; }
 
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 258px minmax(0, 1fr); }
-.sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 30px 22px; color: #eef7f2; background: var(--green-950); }
+.sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 30px 22px; color: #eef7f2; background: var(--green-950); overflow: visible; }
 .sidebar .brand small { color: #a7c2b6; }
 .sidebar .brand-mark { color: var(--green-950); background: #caebd7; }
 .role-pill { display: flex; align-items: center; gap: 8px; margin: 34px 0 18px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; color: #bdd3c9; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 .role-dot { width: 7px; height: 7px; border-radius: 50%; background: #8fd2a9; box-shadow: 0 0 0 4px rgba(143,210,169,.12); }
-.sidebar nav { display: grid; gap: 5px; }
+.sidebar nav { display: grid; gap: 5px; overflow: visible; }
 .nav-item, .logout { display: flex; align-items: center; gap: 12px; padding: 12px 13px; border: 0; border-radius: 10px; color: #b9cec5; background: transparent; cursor: pointer; text-align: left; font-weight: 600; }
 .nav-item:hover, .nav-item.active { color: #fff; background: rgba(255,255,255,.09); }
 .nav-item.active { box-shadow: inset 3px 0 #9fd8b5; }
 .logout { margin-top: auto; color: #b9cec5; border-top: 1px solid rgba(255,255,255,.1); border-radius: 0; padding-top: 22px; }
-.workspace { min-width: 0; }
+.workspace { min-width: 0; overflow: visible; }
 .topbar { height: 96px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(28px, 4vw, 60px); border-bottom: 1px solid var(--line); background: rgba(255,255,255,.76); backdrop-filter: blur(12px); }
 .topbar h1 { margin: 5px 0 0; font-size: 25px; letter-spacing: -.03em; }
 .profile { display: flex; align-items: center; gap: 11px; }
@@ -124,7 +124,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .profile strong { font-size: 13px; }
 .profile small { margin-top: 3px; color: var(--muted); font-size: 12px; }
 .avatar, .post-avatar { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--green-700); font-weight: 700; font-size: 12px; }
-.content { padding: 36px clamp(28px, 4vw, 60px) 60px; max-width: 1540px; margin: 0 auto; }
+.content { padding: 36px clamp(28px, 4vw, 60px) 60px; max-width: 1540px; margin: 0 auto; overflow: visible; }
 .welcome { position: relative; overflow: hidden; display: flex; justify-content: space-between; align-items: center; min-height: 190px; padding: 38px 42px; border-radius: 24px; color: #fff; background: linear-gradient(120deg, var(--green-800), #387b5e); box-shadow: var(--shadow); }
 .welcome::after { content: ""; position: absolute; width: 280px; height: 280px; right: 30px; border: 1px solid rgba(255,255,255,.12); border-radius: 50%; }
 .welcome .eyebrow { color: #bee5cd; }
@@ -198,7 +198,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
 .item-row small, .field-note { font-size: 11px; }
 .field-note { display: block; margin-top: 10px; }
 .placeholder-btn { width: 100%; margin-top: 8px; }
-.preview-card { position: sticky; top: 20px; }
+.preview-card { position: static; top: auto; z-index: auto; transform: none; }
 .preview-shell { display: grid; gap: 14px; }
 .preview-shell h3 { font-size: 22px; }
 .preview-tree { display: grid; gap: 12px; }
@@ -356,10 +356,12 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  overflow: visible;
 }
 
 .language-dropdown {
   position: relative;
+  z-index: 10000;
 }
 
 .language-trigger,
@@ -384,7 +386,7 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  z-index: 30;
+  z-index: 10001;
   display: grid;
   gap: 8px;
   min-width: 180px;
@@ -457,6 +459,9 @@ dt,
   border-bottom: 1px solid var(--color-border);
   background: rgba(18, 18, 18, .78);
   backdrop-filter: blur(18px);
+  position: relative;
+  z-index: 100;
+  overflow: visible;
 }
 
 .topbar h1,
