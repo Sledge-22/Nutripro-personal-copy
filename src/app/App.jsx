@@ -11,7 +11,7 @@ import { ROUTES, isAdminRoute, isStudentRoute } from "../routes/appRoutes.js";
 import { LoginPage } from "../pages/LoginPage.jsx";
 import { AdminWorkspacePage } from "../pages/AdminWorkspacePage.jsx";
 import { StudentWorkspacePage } from "../pages/StudentWorkspacePage.jsx";
-import { getUsers, updateUserStatus, deleteUser } from "../services/userService.js";
+import { DEMO_STUDENT_EMAIL, ensureDemoStudent, getUsers, updateUserStatus, deleteUser } from "../services/userService.js";
 import {
   getCourses,
   createCourse,
@@ -24,8 +24,6 @@ import {
 import { getCertificates, generateCertificate, getStudentCertificates } from "../services/certificateService.js";
 import { getStudentProgress, updateStudentProgress } from "../services/progressService.js";
 import { getCommunityPosts, createCommunityPost } from "../services/communityService.js";
-
-const DEMO_STUDENT_ID = 1;
 
 function getPathname() {
   return window.location.pathname || ROUTES.login;
@@ -55,12 +53,19 @@ function upsertCourseList(courses, nextCourse) {
 }
 
 export function App() {
+  const initialDemoStudent = initialUsers.find((user) => user.email?.toLowerCase() === DEMO_STUDENT_EMAIL) ?? initialUsers[0] ?? null;
   const [pathname, setPathname] = useState(getPathname());
   const [users, setUsers] = useState(initialUsers);
   const [courses, setCourses] = useState(initialCourses);
-  const [studentCourses, setStudentCourses] = useState(initialCourses.filter((course) => course.owners.includes(DEMO_STUDENT_ID)));
+  const [demoStudent, setDemoStudent] = useState(initialDemoStudent);
+  const demoStudentId = demoStudent?.id ?? initialDemoStudent?.id ?? 1;
+  const [studentCourses, setStudentCourses] = useState(
+    initialCourses.filter((course) => Array.isArray(course.owners) && course.owners.includes(demoStudentId)),
+  );
   const [certificates, setCertificates] = useState(initialCertificates);
-  const [studentCertificates, setStudentCertificates] = useState(initialCertificates.filter((certificate) => certificate.studentId === DEMO_STUDENT_ID));
+  const [studentCertificates, setStudentCertificates] = useState(
+    initialCertificates.filter((certificate) => certificate.studentId === demoStudentId),
+  );
   const [posts, setPosts] = useState(initialCommunityPosts);
   const [progressState, setProgressState] = useState(initialStudentProgress);
 
@@ -74,9 +79,29 @@ export function App() {
     void loadWorkspaceData();
   }, []);
 
+  async function resolveDemoStudent() {
+    try {
+      return await ensureDemoStudent();
+    } catch (error) {
+      console.error("Failed to resolve the Maya Laurent demo student:", error);
+      return null;
+    }
+  }
+
   async function loadWorkspaceData() {
+    const resolvedDemoStudent = await resolveDemoStudent();
+    const nextUsers = await getUsers();
+    const activeDemoStudent =
+      nextUsers.find((user) => user.email?.toLowerCase() === DEMO_STUDENT_EMAIL) ??
+      resolvedDemoStudent ??
+      initialDemoStudent;
+    const activeStudentId = activeDemoStudent?.id;
+
+    if (!activeStudentId) {
+      console.error("Student course access failed because the Maya Laurent demo student user is missing.");
+    }
+
     const [
-      nextUsers,
       nextCourses,
       nextStudentCourses,
       nextCertificates,
@@ -84,16 +109,16 @@ export function App() {
       nextPosts,
       nextProgress,
     ] = await Promise.all([
-      getUsers(),
       getCourses(),
-      getStudentCourses(DEMO_STUDENT_ID),
+      activeStudentId ? getStudentCourses(activeStudentId) : Promise.resolve([]),
       getCertificates(),
-      getStudentCertificates(DEMO_STUDENT_ID),
+      activeStudentId ? getStudentCertificates(activeStudentId) : Promise.resolve([]),
       getCommunityPosts(),
-      getStudentProgress(DEMO_STUDENT_ID),
+      activeStudentId ? getStudentProgress(activeStudentId) : Promise.resolve(initialStudentProgress),
     ]);
 
     setUsers(nextUsers);
+    setDemoStudent(activeDemoStudent ?? null);
     setCourses(nextCourses);
     setStudentCourses(nextStudentCourses);
     setCertificates(nextCertificates);
@@ -102,10 +127,10 @@ export function App() {
     setProgressState(nextProgress);
   }
 
-  async function refreshCourses() {
+  async function refreshCourses(nextStudentId = demoStudentId) {
     const [allCoursesResult, ownedCoursesResult] = await Promise.allSettled([
       getCourses(),
-      getStudentCourses(DEMO_STUDENT_ID),
+      nextStudentId ? getStudentCourses(nextStudentId) : Promise.resolve([]),
     ]);
 
     if (allCoursesResult.status === "rejected") {
@@ -122,10 +147,10 @@ export function App() {
     }
   }
 
-  async function refreshCertificates() {
+  async function refreshCertificates(nextStudentId = demoStudentId) {
     const [allCertificates, ownedCertificates] = await Promise.all([
       getCertificates(),
-      getStudentCertificates(DEMO_STUDENT_ID),
+      nextStudentId ? getStudentCertificates(nextStudentId) : Promise.resolve([]),
     ]);
     setCertificates(allCertificates);
     setStudentCertificates(ownedCertificates);
@@ -183,10 +208,12 @@ export function App() {
   async function handleSaveCourse(course, editingId) {
     try {
       const savedCourse = editingId ? await updateCourse(editingId, course) : await createCourse(course);
+      const activeStudentId = demoStudent?.id;
 
       setCourses((currentCourses) => upsertCourseList(currentCourses, savedCourse));
       setStudentCourses((currentCourses) => {
-        const shouldOwnCourse = Array.isArray(savedCourse.owners) && savedCourse.owners.includes(DEMO_STUDENT_ID);
+        const shouldOwnCourse =
+          Boolean(activeStudentId) && Array.isArray(savedCourse.owners) && savedCourse.owners.includes(activeStudentId);
         if (!shouldOwnCourse) return currentCourses.filter((existingCourse) => existingCourse.id !== savedCourse.id);
         return upsertCourseList(currentCourses, savedCourse);
       });
@@ -209,13 +236,17 @@ export function App() {
   async function handleUpdateCourseVisibility(courseId, visibleToStudents) {
     try {
       const updatedCourse = visibleToStudents ? await publishCourse(courseId) : await unpublishCourse(courseId);
+      const activeStudentId = demoStudent?.id;
 
       setCourses((currentCourses) => upsertCourseList(currentCourses, updatedCourse));
       setStudentCourses((currentCourses) => {
         if (!visibleToStudents) return currentCourses.filter((course) => course.id !== courseId);
 
         const shouldShowCourse =
-          Array.isArray(updatedCourse.owners) && updatedCourse.owners.includes(DEMO_STUDENT_ID) && updatedCourse.status === "published";
+          Boolean(activeStudentId) &&
+          Array.isArray(updatedCourse.owners) &&
+          updatedCourse.owners.includes(activeStudentId) &&
+          updatedCourse.status === "published";
 
         if (!shouldShowCourse) return currentCourses;
         return upsertCourseList(currentCourses, updatedCourse);
@@ -246,11 +277,16 @@ export function App() {
   }
 
   async function handleUpdateProgress(updates) {
-    const nextProgress = await updateStudentProgress(DEMO_STUDENT_ID, updates);
+    if (!demoStudentId) {
+      console.error("Student progress update failed because the Maya Laurent demo student user is missing.");
+      return;
+    }
+
+    const nextProgress = await updateStudentProgress(demoStudentId, updates);
     setProgressState(nextProgress);
   }
 
   if (!role) return <LoginPage onChoose={handleLogin} />;
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={handleLogout} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? "Courses" : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} onUpdateUserStatus={handleUpdateUserStatus} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={DEMO_STUDENT_ID} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={handleLogout} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? "Courses" : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} onUpdateUserStatus={handleUpdateUserStatus} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={demoStudentId} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }
