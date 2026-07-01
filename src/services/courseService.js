@@ -8,6 +8,14 @@ function normalizeCourseStatus(status) {
   return "published";
 }
 
+function normalizeEntityId(value) {
+  const trimmedValue = `${value ?? ""}`.trim();
+  if (!trimmedValue) return "";
+
+  const numericValue = Number(trimmedValue);
+  return Number.isNaN(numericValue) ? trimmedValue : numericValue;
+}
+
 function ownersForStatus(status, owners = [], demoStudentId = 1) {
   if (normalizeCourseStatus(status) !== "published") return [];
   return Array.from(new Set([...(Array.isArray(owners) ? owners : []), demoStudentId]));
@@ -381,6 +389,110 @@ export async function getStudentCourses(studentId) {
     result.push(normalizeCourse(course, ownersForCourse(course.id, allEnrollments), modules));
   }
   return result;
+}
+
+export async function getStudentCourseAccess(studentId, courseId) {
+  const normalizedCourseId = normalizeEntityId(courseId);
+  console.log("Maya student id:", studentId);
+
+  if (!studentId) {
+    console.error("Student course access failed because the Maya Laurent demo student user is missing.");
+    return { reason: "missing-student", course: null, enrollment: null, courseStatus: null };
+  }
+
+  if (!normalizedCourseId) {
+    console.error("Student course access failed because the selected course id is missing.");
+    return { reason: "missing-id", course: null, enrollment: null, courseStatus: null };
+  }
+
+  if (!isSupabaseConfigured) {
+    const mockCourse = getMockCourses().find((course) => String(course.id) === String(normalizedCourseId)) ?? null;
+
+    if (!mockCourse) {
+      console.error("Student course access failed because the course is not assigned in mock data:", normalizedCourseId);
+      return { reason: "missing-enrollment", course: null, enrollment: null, courseStatus: null };
+    }
+
+    const mockEnrollmentExists = Array.isArray(mockCourse.owners) && mockCourse.owners.includes(studentId);
+    console.log("Enrollment result:", mockEnrollmentExists ? [{ course_id: mockCourse.id, student_id: studentId }] : []);
+    console.log("Course status:", mockCourse.status ?? "published");
+
+    if (!mockEnrollmentExists) {
+      console.error("Student course access failed because the course is not assigned to Maya Laurent in mock data.");
+      return { reason: "missing-enrollment", course: null, enrollment: null, courseStatus: mockCourse.status ?? null };
+    }
+
+    if (normalizeCourseStatus(mockCourse.status) !== "published") {
+      console.error("Student course access failed because the course is not published in mock data:", mockCourse.status);
+      return { reason: "not-published", course: mockCourse, enrollment: { course_id: mockCourse.id, student_id: studentId }, courseStatus: mockCourse.status ?? null };
+    }
+
+    return {
+      reason: null,
+      course: mockCourse,
+      enrollment: { course_id: mockCourse.id, student_id: studentId },
+      courseStatus: mockCourse.status ?? "published",
+    };
+  }
+
+  const { data: enrollmentRows, error: enrollmentError } = await supabase
+    .from("enrollments")
+    .select("*")
+    .eq("student_id", studentId)
+    .eq("course_id", normalizedCourseId)
+    .limit(1);
+
+  if (enrollmentError) {
+    console.error("Failed to load the exact student enrollment from Supabase:", enrollmentError);
+    throw enrollmentError;
+  }
+
+  console.log("Enrollment result:", enrollmentRows ?? []);
+
+  if (!(enrollmentRows ?? []).length) {
+    console.error("Student course access failed because the course is not assigned to Maya Laurent:", normalizedCourseId);
+    return { reason: "missing-enrollment", course: null, enrollment: null, courseStatus: null };
+  }
+
+  const { data: courseRow, error: courseError } = await supabase
+    .from("courses")
+    .select("*")
+    .eq("id", normalizedCourseId)
+    .limit(1)
+    .maybeSingle();
+
+  if (courseError) {
+    console.error("Failed to load the selected course from Supabase:", courseError);
+    throw courseError;
+  }
+
+  const courseStatus = courseRow?.status ?? null;
+  console.log("Course status:", courseStatus);
+
+  if (!courseRow) {
+    console.error("Student course access failed because the selected course record could not be found:", normalizedCourseId);
+    return { reason: "missing-enrollment", course: null, enrollment: enrollmentRows?.[0] ?? null, courseStatus: null };
+  }
+
+  const modules = await getModulesByCourse(courseRow.id);
+  const normalizedCourse = normalizeCourse(courseRow, [studentId], modules);
+
+  if (normalizeCourseStatus(courseRow.status) !== "published") {
+    console.error("Student course access failed because the selected course is not published:", courseRow.status);
+    return {
+      reason: "not-published",
+      course: normalizedCourse,
+      enrollment: enrollmentRows?.[0] ?? null,
+      courseStatus: courseRow.status ?? null,
+    };
+  }
+
+  return {
+    reason: null,
+    course: normalizedCourse,
+    enrollment: enrollmentRows?.[0] ?? null,
+    courseStatus: courseRow.status ?? "published",
+  };
 }
 
 export async function updateCourseStatus(courseId, status) {

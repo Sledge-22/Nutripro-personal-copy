@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { CertificateModal, Icon, Progress, Stat, Status, Welcome } from "../components/ui.jsx";
 import { ROUTES } from "../routes/appRoutes.js";
+import { getStudentCourseAccess } from "../services/courseService.js";
 
 function goTo(pathname) {
   window.history.pushState({}, "", pathname);
@@ -24,6 +25,15 @@ export function StudentWorkspacePage({
   const ownedCourses = Array.isArray(courses) ? courses : [];
   const studentCertificates = certificates.filter((certificate) => certificate.studentId === studentId);
   const [previewCertificate, setPreviewCertificate] = useState(null);
+  const [detailState, setDetailState] = useState({
+    loading: false,
+    reason: null,
+    course: null,
+    enrollment: null,
+    courseStatus: null,
+  });
+  const isCourseDetailRoute = pathname.startsWith("/student/courses/");
+  const routeCourseId = isCourseDetailRoute ? `${pathname.split("/").pop() ?? ""}`.trim() : "";
 
   const progressFor = (course) => {
     const modules = getCourseModules(course);
@@ -32,24 +42,134 @@ export function StudentWorkspacePage({
       : 0;
   };
 
-  if (pathname.startsWith("/student/courses/")) {
-    const courseId = Number(pathname.split("/").pop());
-    const course = ownedCourses.find((entry) => entry.id === courseId);
+  useEffect(() => {
+    if (!isCourseDetailRoute) return undefined;
+
+    console.log(
+      "studentCourses list with ids:",
+      ownedCourses.map((course) => ({ id: course?.id, title: course?.title, status: course?.status })),
+    );
+    console.log("selected course id on detail page:", routeCourseId || "(missing)");
+
+    let cancelled = false;
+
+    const loadCourseDetail = async () => {
+      if (!routeCourseId) {
+        if (!cancelled) {
+          setDetailState({
+            loading: false,
+            reason: "missing-id",
+            course: null,
+            enrollment: null,
+            courseStatus: null,
+          });
+        }
+        return;
+      }
+
+      const localCourse = ownedCourses.find((entry) => String(entry?.id) === routeCourseId) ?? null;
+
+      if (!cancelled) {
+        setDetailState({
+          loading: true,
+          reason: null,
+          course: localCourse,
+          enrollment: null,
+          courseStatus: localCourse?.status ?? null,
+        });
+      }
+
+      try {
+        const result = await getStudentCourseAccess(studentId, routeCourseId);
+
+        if (!cancelled) {
+          setDetailState({
+            loading: false,
+            reason: result.reason,
+            course: result.course ?? localCourse,
+            enrollment: result.enrollment ?? null,
+            courseStatus: result.courseStatus ?? result.course?.status ?? localCourse?.status ?? null,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load the selected student course detail:", error);
+
+        if (!cancelled) {
+          setDetailState({
+            loading: false,
+            reason: "load-error",
+            course: localCourse,
+            enrollment: null,
+            courseStatus: localCourse?.status ?? null,
+          });
+        }
+      }
+    };
+
+    void loadCourseDetail();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isCourseDetailRoute, ownedCourses, routeCourseId, studentId]);
+
+  if (isCourseDetailRoute) {
+    const selectedCourse = detailState.course ?? ownedCourses.find((entry) => String(entry?.id) === routeCourseId) ?? null;
+
+    if (detailState.loading && !selectedCourse) {
+      return (
+        <section className="section-card">
+          <span className="eyebrow">COURSE DETAIL</span>
+          <h2>Loading course...</h2>
+          <p>Checking Maya Laurent&apos;s enrollment and the selected course record.</p>
+        </section>
+      );
+    }
 
     return (
       <>
-        {course ? (
+        {detailState.reason === "missing-id" ? (
+          <section className="section-card">
+            <span className="eyebrow">COURSE DETAIL</span>
+            <h2>Course id missing.</h2>
+            <p>The selected course link does not include a valid course id.</p>
+          </section>
+        ) : detailState.reason === "missing-enrollment" ? (
+          <section className="section-card">
+            <span className="eyebrow">COURSE DETAIL</span>
+            <h2>Course not assigned.</h2>
+            <p>Maya Laurent is not enrolled in this exact course id.</p>
+          </section>
+        ) : detailState.reason === "not-published" ? (
+          <section className="section-card">
+            <span className="eyebrow">COURSE DETAIL</span>
+            <h2>Course not published.</h2>
+            <p>This course is currently hidden from the student workspace.</p>
+          </section>
+        ) : detailState.reason === "missing-student" ? (
+          <section className="section-card">
+            <span className="eyebrow">COURSE DETAIL</span>
+            <h2>Student account missing.</h2>
+            <p>The Maya Laurent demo student could not be resolved.</p>
+          </section>
+        ) : detailState.reason === "load-error" && !selectedCourse ? (
+          <section className="section-card">
+            <span className="eyebrow">COURSE DETAIL</span>
+            <h2>Course detail failed to load.</h2>
+            <p>The selected course could not be loaded right now.</p>
+          </section>
+        ) : selectedCourse ? (
           <StudentModuleDetail
-            course={course}
+            course={selectedCourse}
             completed={progressState}
             onUpdateProgress={onUpdateProgress}
-            progress={progressFor(course)}
+            progress={progressFor(selectedCourse)}
           />
         ) : (
           <section className="section-card">
             <span className="eyebrow">COURSE DETAIL</span>
-            <h2>This course is not currently available.</h2>
-            <p>The course may be hidden, unpublished, archived, or not assigned to your student workspace.</p>
+            <h2>Course detail failed to load.</h2>
+            <p>The selected course record could not be resolved.</p>
           </section>
         )}
       </>
@@ -143,7 +263,13 @@ function OwnedCoursesPage({ courses, progressFor }) {
                   <strong>{progress}%</strong>
                 </div>
                 <Progress value={progress} />
-                <button className="primary-btn" onClick={() => goTo(ROUTES.student.courseDetail(course.id))}>
+                <button
+                  className="primary-btn"
+                  onClick={() => {
+                    console.log("clicked course id:", course.id);
+                    goTo(ROUTES.student.courseDetail(course.id));
+                  }}
+                >
                   Continue course <Icon name="arrow" />
                 </button>
               </div>
@@ -159,6 +285,13 @@ function StudentModuleDetail({ course, completed, onUpdateProgress, progress }) 
   const modules = getCourseModules(course);
   const [activeModuleId, setActiveModuleId] = useState(modules[0]?.id || null);
   const [viewError, setViewError] = useState("");
+
+  console.log("selected course id on detail page:", course?.id);
+
+  useEffect(() => {
+    setActiveModuleId(modules[0]?.id || null);
+    setViewError("");
+  }, [course?.id, modules]);
 
   if (course?.status && course.status !== "published") {
     return (

@@ -185,8 +185,12 @@ export function App() {
     };
 
     if (pathname.startsWith("/student/courses/")) {
-      const courseId = Number(pathname.split("/").pop());
-      return studentCourses.find((course) => course.id === courseId)?.title || courses.find((course) => course.id === courseId)?.title || "Course detail";
+      const courseId = `${pathname.split("/").pop() ?? ""}`.trim();
+      return (
+        studentCourses.find((course) => String(course.id) === courseId)?.title ||
+        courses.find((course) => String(course.id) === courseId)?.title ||
+        "Course detail"
+      );
     }
 
     return map[pathname] || "Nutripro";
