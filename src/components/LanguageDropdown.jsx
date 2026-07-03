@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "./ui.jsx";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 
-const LANGUAGE_OPTIONS = [
+const languageOptions = [
   { code: "es", label: "Español", flag: "🇪🇸" },
   { code: "en", label: "English", flag: "🇬🇧" },
 ];
@@ -23,8 +23,8 @@ export function LanguageDropdown() {
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const currentOption =
-    LANGUAGE_OPTIONS.find((option) => option.code === language) ?? LANGUAGE_OPTIONS[0];
+  const selectedLanguage =
+    languageOptions.find((option) => option.code === language) ?? languageOptions[0];
 
   return (
     <div className="language-dropdown" ref={wrapperRef}>
@@ -36,15 +36,15 @@ export function LanguageDropdown() {
         onClick={() => setOpen((current) => !current)}
       >
         <span className="language-label">
-          <span className="language-flag" aria-hidden="true">{currentOption.flag}</span>
-          <span>{currentOption.label}</span>
+          <span className="language-flag" aria-hidden="true">{selectedLanguage.flag}</span>
+          <span className="language-label-text">{selectedLanguage.label}</span>
         </span>
         <Icon name="chevron" size={16} />
       </button>
 
       {open ? (
         <div className="language-menu" role="menu">
-          {LANGUAGE_OPTIONS.map((option) => (
+          {languageOptions.map((option) => (
             <button
               key={option.code}
               type="button"
@@ -56,7 +56,7 @@ export function LanguageDropdown() {
             >
               <span className="language-label">
                 <span className="language-flag" aria-hidden="true">{option.flag}</span>
-                <span>{option.label}</span>
+                <span className="language-label-text">{option.label}</span>
               </span>
             </button>
           ))}
