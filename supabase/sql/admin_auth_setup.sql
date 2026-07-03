@@ -2,6 +2,7 @@
 -- Run this in Supabase SQL Editor after reviewing it for your project.
 
 alter table public.users
+  add column if not exists auth_user_id uuid unique,
   add column if not exists username text unique,
   add column if not exists must_change_password boolean not null default false,
   add column if not exists password_updated_at timestamptz,
@@ -35,7 +36,7 @@ as $$
   select exists (
     select 1
     from public.users
-    where id = auth.uid()
+    where auth_user_id = auth.uid()
       and lower(role) = 'admin'
       and lower(status) = 'active'
   )
@@ -55,7 +56,8 @@ begin
       or new.password_updated_at is distinct from old.password_updated_at
       or new.last_login_at is distinct from old.last_login_at
       or new.email is distinct from old.email
-      or new.username is distinct from old.username then
+      or new.username is distinct from old.username
+      or new.auth_user_id is distinct from old.auth_user_id then
       raise exception 'You are not allowed to update protected user fields.';
     end if;
   end if;
@@ -85,14 +87,7 @@ create policy "Users can update their own editable profile fields"
 on public.users
 for update
 to authenticated
-using (id = auth.uid() or public.is_admin())
+using (auth_user_id = auth.uid() or public.is_admin())
 with check (
-  id = auth.uid() or public.is_admin()
+  auth_user_id = auth.uid() or public.is_admin()
 );
-
--- If your current public.users.id values are not UUIDs matching auth.users.id,
--- stop here and migrate carefully before enabling production auth:
--- 1. back up public.users
--- 2. create matching auth users
--- 3. copy public.users rows into a new UUID-based table keyed by auth.users.id
--- 4. swap the tables only after verifying foreign keys and enrollments

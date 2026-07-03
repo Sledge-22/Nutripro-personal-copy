@@ -11,6 +11,7 @@ const ADMIN_USER_FUNCTION =
   import.meta.env.VITE_SUPABASE_ADMIN_FUNCTION_NAME?.trim() || DEFAULT_ADMIN_USER_FUNCTION;
 
 const OPTIONAL_USER_COLUMNS = [
+  "auth_user_id",
   "username",
   "profile_picture_url",
   "country",
@@ -67,9 +68,12 @@ function normalizeUser(row = {}) {
   const status = normalizeStatusValue(row.status ?? "active");
   const mustChangePassword = Boolean(row.must_change_password ?? row.mustChangePassword ?? false);
   const profilePictureUrl = row.profile_picture_url ?? row.profilePictureUrl ?? "";
+  const authUserId = row.auth_user_id ?? row.authUserId ?? "";
 
   return {
     id: row.id,
+    authUserId,
+    auth_user_id: authUserId,
     name: row.name ?? row.full_name ?? row.display_name ?? "Unknown user",
     email: row.email ?? "",
     username: row.username ?? "",
@@ -159,6 +163,7 @@ function buildMockUser(payload, existingId = null) {
   const id = existingId ?? createMockId(users);
   return {
     id,
+    auth_user_id: payload.auth_user_id ?? "",
     name: payload.name ?? "New user",
     email: payload.email ?? "",
     username: payload.username ?? "",
@@ -291,15 +296,10 @@ export async function getUserProfileForAuthUser(authUser) {
   const { data: profileById, error: byIdError } = await supabase
     .from("users")
     .select("*")
-    .eq("id", authUser.id)
+    .eq("auth_user_id", authUser.id)
     .maybeSingle();
 
   if (byIdError) {
-    if (byIdError.message?.toLowerCase().includes("invalid input syntax")) {
-      throw new Error(
-        "The public.users id column is not aligned with auth.users.id. Run the UUID alignment migration before using real auth.",
-      );
-    }
     console.error("Loading the signed-in profile by auth id failed:", byIdError);
     throw byIdError;
   }
@@ -323,14 +323,25 @@ export async function getUserProfileForAuthUser(authUser) {
     throw byEmailError;
   }
 
-  if (profileByEmail && String(profileByEmail.id) !== String(authUser.id)) {
-    throw new Error(
-      "The public.users profile id does not match auth.users.id for this account. Run the user id alignment migration before using real auth.",
-    );
+  if (profileByEmail && profileByEmail.auth_user_id && String(profileByEmail.auth_user_id) !== String(authUser.id)) {
+    throw new Error("This email is already linked to a different authenticated account.");
   }
 
   if (!profileByEmail) {
     throw new Error("No public.users profile was found for this authenticated account.");
+  }
+
+  if (!profileByEmail.auth_user_id) {
+    const linkedProfile = await runUserMutationWithOptionalColumnRetry(
+      (payload) =>
+        supabase.from("users").update(payload).eq("id", profileByEmail.id).select("*").single(),
+      {
+        auth_user_id: authUser.id,
+        updated_at: nowIso(),
+      },
+    );
+
+    return normalizeUser(linkedProfile);
   }
 
   return normalizeUser(profileByEmail);
@@ -456,6 +467,7 @@ export async function createAdminUser(payload = {}) {
     bio: normalizeOptionalString(payload.bio) || null,
     profile_picture_url: normalizeOptionalString(payload.profile_picture_url ?? payload.profilePictureUrl) || null,
     must_change_password: true,
+    temporaryPassword: normalizeOptionalString(payload.temporaryPassword) || null,
   };
 
   if (!normalizedPayload.name || !normalizedPayload.email || !normalizedPayload.username) {
@@ -491,7 +503,7 @@ export async function createAdminUser(payload = {}) {
   };
 }
 
-export async function resetAdminUserPassword(userId) {
+export async function resetAdminUserPassword(userId, temporaryPassword = "") {
   if (!userId) {
     throw new Error("A valid user id is required to reset the password.");
   }
@@ -512,6 +524,7 @@ export async function resetAdminUserPassword(userId) {
   const response = await invokeAdminUserFunction({
     action: "reset-user-password",
     userId,
+    temporaryPassword: normalizeOptionalString(temporaryPassword) || null,
   });
 
   return {

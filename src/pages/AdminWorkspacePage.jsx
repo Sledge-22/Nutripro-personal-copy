@@ -572,7 +572,9 @@ function UsersAdminPanel({ users, onUpdateUserStatus, onUpdateUser, onCreateUser
     setPasswordOwner("");
 
     try {
-      const result = await onResetUserPassword(user.id);
+      const customTemporaryPassword =
+        window.prompt(t("auth.optionalResetPasswordPrompt"), "")?.trim() || "";
+      const result = await onResetUserPassword(user.id, customTemporaryPassword);
       setMessage(t("auth.passwordResetSuccess"));
       setTemporaryPassword(result?.temporaryPassword || "");
       setPasswordOwner(user.email || user.name || "");
@@ -657,7 +659,7 @@ function UsersAdminPanel({ users, onUpdateUserStatus, onUpdateUser, onCreateUser
 
         {temporaryPassword ? (
           <div className="credential-card">
-            <strong>{t("auth.temporaryPassword")}</strong>
+            <strong>{t("auth.temporaryCredentials")}</strong>
             <p>{passwordOwner}</p>
             <code>{temporaryPassword}</code>
             <div className="form-actions compact">

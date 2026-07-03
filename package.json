@@ -8,6 +8,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "seed:launch-users": "node scripts/seed-launch-users.mjs",
     "validate": "node scripts/validate.js",
     "check": "node scripts/validate.js && vite build"
   },

@@ -430,8 +430,8 @@ export function App() {
     return result;
   }
 
-  async function handleResetUserPassword(userId) {
-    const result = await resetAdminUserPassword(userId);
+  async function handleResetUserPassword(userId, temporaryPassword = "") {
+    const result = await resetAdminUserPassword(userId, temporaryPassword);
     const nextUsers = await getUsers();
     setUsers(nextUsers);
     return result;

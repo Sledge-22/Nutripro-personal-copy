@@ -16,6 +16,7 @@ type CreateUserPayload = {
   bio?: string | null;
   profile_picture_url?: string | null;
   must_change_password?: boolean;
+  temporaryPassword?: string | null;
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -52,6 +53,74 @@ function normalizeStatus(value: unknown): CreateUserPayload["status"] {
   return "active";
 }
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
+async function upsertPublicProfile(adminClient: ReturnType<typeof createClient>, authUserId: string, payload: CreateUserPayload) {
+  const { data: existingProfile, error: existingProfileError } = await adminClient
+    .from("users")
+    .select("*")
+    .eq("email", payload.email)
+    .maybeSingle();
+
+  if (existingProfileError) {
+    throw existingProfileError;
+  }
+
+  if (existingProfile?.auth_user_id && existingProfile.auth_user_id !== authUserId) {
+    throw new Error("This email is already linked to another auth account.");
+  }
+
+  if (existingProfile) {
+    const { data, error } = await adminClient
+      .from("users")
+      .update({
+        auth_user_id: authUserId,
+        name: payload.name,
+        email: payload.email,
+        username: payload.username,
+        role: payload.role,
+        status: payload.status,
+        country: payload.country,
+        bio: payload.bio,
+        profile_picture_url: payload.profile_picture_url,
+        must_change_password: true,
+        password_updated_at: null,
+        updated_at: nowIso(),
+      })
+      .eq("id", existingProfile.id)
+      .select("*")
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  const { data, error } = await adminClient
+    .from("users")
+    .insert({
+      auth_user_id: authUserId,
+      name: payload.name,
+      email: payload.email,
+      username: payload.username,
+      role: payload.role,
+      status: payload.status,
+      country: payload.country,
+      bio: payload.bio,
+      profile_picture_url: payload.profile_picture_url,
+      must_change_password: true,
+      password_updated_at: null,
+      last_login_at: null,
+      updated_at: nowIso(),
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 async function requireActiveAdmin(request: Request) {
   const authHeader = request.headers.get("Authorization");
   if (!authHeader) {
@@ -74,7 +143,7 @@ async function requireActiveAdmin(request: Request) {
   const { data: profile, error: profileError } = await callerClient
     .from("users")
     .select("id, role, status")
-    .eq("id", authData.user.id)
+    .eq("auth_user_id", authData.user.id)
     .maybeSingle();
 
   if (profileError) {
@@ -126,13 +195,14 @@ serve(async (request) => {
         bio: normalizeOptionalString(user.bio),
         profile_picture_url: normalizeOptionalString(user.profile_picture_url),
         must_change_password: true,
+        temporaryPassword: normalizeOptionalString(user.temporaryPassword),
       };
 
       if (!payload.name || !payload.email || !payload.username) {
         return jsonResponse({ error: "Name, email, and username are required." }, 400);
       }
 
-      const temporaryPassword = createTemporaryPassword();
+      const temporaryPassword = payload.temporaryPassword || createTemporaryPassword();
       const { data: authUserData, error: authUserError } = await adminClient.auth.admin.createUser({
         email: payload.email,
         password: temporaryPassword,
@@ -148,46 +218,38 @@ serve(async (request) => {
         return jsonResponse({ error: authUserError?.message ?? "Creating the auth user failed." }, 400);
       }
 
-      const { data: profileRow, error: profileError } = await adminClient
-        .from("users")
-        .upsert(
-          {
-            id: authUserData.user.id,
-            name: payload.name,
-            email: payload.email,
-            username: payload.username,
-            role: payload.role,
-            status: payload.status,
-            country: payload.country,
-            bio: payload.bio,
-            profile_picture_url: payload.profile_picture_url,
-            must_change_password: true,
-            password_updated_at: null,
-            last_login_at: null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" },
-        )
-        .select("*")
-        .single();
-
-      if (profileError) {
+      try {
+        const profileRow = await upsertPublicProfile(adminClient, authUserData.user.id, payload);
+        return jsonResponse({
+          user: profileRow,
+          temporaryPassword,
+        });
+      } catch (profileError) {
         await adminClient.auth.admin.deleteUser(authUserData.user.id);
-        return jsonResponse({ error: profileError.message }, 400);
+        return jsonResponse({ error: profileError instanceof Error ? profileError.message : "Profile upsert failed." }, 400);
       }
-
-      return jsonResponse({
-        user: profileRow,
-        temporaryPassword,
-      });
     }
 
     if (action === "reset-user-password") {
       const userId = String(body?.userId ?? "").trim();
       if (!userId) return jsonResponse({ error: "A valid user id is required." }, 400);
 
-      const temporaryPassword = createTemporaryPassword();
-      const { error: passwordError } = await adminClient.auth.admin.updateUserById(userId, {
+      const { data: profileRow, error: profileLookupError } = await adminClient
+        .from("users")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (profileLookupError) {
+        return jsonResponse({ error: profileLookupError.message }, 400);
+      }
+
+      if (!profileRow?.auth_user_id) {
+        return jsonResponse({ error: "This user is not linked to a Supabase Auth account yet." }, 400);
+      }
+
+      const temporaryPassword = normalizeOptionalString(body?.temporaryPassword) || createTemporaryPassword();
+      const { error: passwordError } = await adminClient.auth.admin.updateUserById(profileRow.auth_user_id, {
         password: temporaryPassword,
       });
 
@@ -195,12 +257,12 @@ serve(async (request) => {
         return jsonResponse({ error: passwordError.message }, 400);
       }
 
-      const { data: profileRow, error: profileError } = await adminClient
+      const { data: updatedProfileRow, error: profileError } = await adminClient
         .from("users")
         .update({
           must_change_password: true,
           password_updated_at: null,
-          updated_at: new Date().toISOString(),
+          updated_at: nowIso(),
         })
         .eq("id", userId)
         .select("*")
@@ -211,7 +273,7 @@ serve(async (request) => {
       }
 
       return jsonResponse({
-        user: profileRow,
+        user: updatedProfileRow,
         temporaryPassword,
       });
     }
