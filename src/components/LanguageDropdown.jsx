@@ -2,6 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "./ui.jsx";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 
+const LANGUAGE_OPTIONS = [
+  { code: "es", label: "Español", flag: "🇪🇸" },
+  { code: "en", label: "English", flag: "🇬🇧" },
+];
+
 export function LanguageDropdown() {
   const { language, setLanguage, t } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -18,7 +23,8 @@ export function LanguageDropdown() {
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const currentLabel = t(`languages.${language}`);
+  const currentOption =
+    LANGUAGE_OPTIONS.find((option) => option.code === language) ?? LANGUAGE_OPTIONS[0];
 
   return (
     <div className="language-dropdown" ref={wrapperRef}>
@@ -29,23 +35,29 @@ export function LanguageDropdown() {
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        <span>{currentLabel}</span>
+        <span className="language-label">
+          <span className="language-flag" aria-hidden="true">{currentOption.flag}</span>
+          <span>{currentOption.label}</span>
+        </span>
         <Icon name="chevron" size={16} />
       </button>
 
       {open ? (
         <div className="language-menu" role="menu">
-          {["es", "en"].map((option) => (
+          {LANGUAGE_OPTIONS.map((option) => (
             <button
-              key={option}
+              key={option.code}
               type="button"
-              className={`language-option ${language === option ? "active" : ""}`}
+              className={`language-option ${language === option.code ? "active" : ""}`}
               onClick={() => {
-                setLanguage(option);
+                setLanguage(option.code);
                 setOpen(false);
               }}
             >
-              {t(`languages.${option}`)}
+              <span className="language-label">
+                <span className="language-flag" aria-hidden="true">{option.flag}</span>
+                <span>{option.label}</span>
+              </span>
             </button>
           ))}
         </div>

@@ -396,6 +396,17 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
   padding: 10px 14px;
 }
 
+.language-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.language-flag {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
 .language-menu {
   position: absolute;
   top: calc(100% + 10px);
