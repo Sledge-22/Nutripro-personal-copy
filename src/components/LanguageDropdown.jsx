@@ -3,8 +3,8 @@ import { Icon } from "./ui.jsx";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 
 const languageOptions = [
-  { code: "es", label: "Español", flag: "🇪🇸" },
-  { code: "en", label: "English", flag: "🇬🇧" },
+  { code: "es", label: "Espa\u00F1ol", flag: "\uD83C\uDDEA\uD83C\uDDF8" },
+  { code: "en", label: "English", flag: "\uD83C\uDDEC\uD83C\uDDE7" },
 ];
 
 export function LanguageDropdown() {
@@ -35,10 +35,8 @@ export function LanguageDropdown() {
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className="language-label">
-          <span className="language-flag" aria-hidden="true">{selectedLanguage.flag}</span>
-          <span className="language-label-text">{selectedLanguage.label}</span>
-        </span>
+        <span className="language-flag" aria-hidden="true">{selectedLanguage.flag}</span>
+        <span className="language-label">{selectedLanguage.label}</span>
         <Icon name="chevron" size={16} />
       </button>
 
@@ -54,10 +52,8 @@ export function LanguageDropdown() {
                 setOpen(false);
               }}
             >
-              <span className="language-label">
-                <span className="language-flag" aria-hidden="true">{option.flag}</span>
-                <span className="language-label-text">{option.label}</span>
-              </span>
+              <span className="language-flag" aria-hidden="true">{option.flag}</span>
+              <span className="language-label">{option.label}</span>
             </button>
           ))}
         </div>

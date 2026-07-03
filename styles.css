@@ -397,14 +397,14 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
 }
 
 .language-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .language-flag {
   font-size: 1.05rem;
   line-height: 1;
+  display: inline-block;
 }
 
 .language-menu {
