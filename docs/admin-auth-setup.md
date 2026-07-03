@@ -16,9 +16,9 @@ Required frontend environment variables:
 
 Required Supabase Edge Function secrets:
 
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `NUTRIPRO_SUPABASE_URL`
+- `NUTRIPRO_SUPABASE_ANON_KEY`
+- `NUTRIPRO_SERVICE_ROLE_KEY`
 
 Required local-only environment variables for the launch seed script:
 
@@ -45,6 +45,6 @@ node scripts/seed-launch-users.mjs
 
 Important:
 
-- Do not put `SUPABASE_SERVICE_ROLE_KEY` in Vercel frontend environment variables.
+- Do not put `NUTRIPRO_SERVICE_ROLE_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in Vercel frontend environment variables.
 - The service role key belongs only in Supabase Edge Function secrets or another secure backend.
 - This setup uses `public.users.auth_user_id` as the safe bridge to `auth.users.id`, so your existing `public.users.id` values can stay in place.
