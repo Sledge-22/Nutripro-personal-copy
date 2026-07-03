@@ -458,7 +458,12 @@ export async function syncAssignmentsForModules(savedModules = [], sourceModules
 
     const sourceAssignment = sourceModule?.assignment ?? null;
 
-    if (sourceAssignment?.title?.trim()) {
+    const requiresAssignment =
+      sourceModule?.requires_assignment ??
+      sourceModule?.requiresAssignment ??
+      Boolean(sourceAssignment?.title?.trim());
+
+    if (requiresAssignment && sourceAssignment?.title?.trim()) {
       const createdAssignment = await createAssignment(savedModule.id, sourceAssignment);
       nextModules.push({
         ...savedModule,
@@ -517,16 +522,17 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
         String(submission.student_id ?? submission.studentId) === String(normalizedStudentId),
     );
 
+    if (existingSubmission) {
+      throw new Error("This assignment has already been submitted. Resubmission is not allowed.");
+    }
+
     const nextSubmission = {
-      id: existingSubmission?.id ?? createMockId(submissions),
-      ...(existingSubmission ?? {}),
+      id: createMockId(submissions),
       ...payload,
-      created_at: existingSubmission?.created_at ?? submittedAt,
+      created_at: submittedAt,
     };
 
-    const nextSubmissions = existingSubmission
-      ? submissions.map((submission) => (submission.id === existingSubmission.id ? nextSubmission : submission))
-      : [...submissions, nextSubmission];
+    const nextSubmissions = [...submissions, nextSubmission];
 
     setMockAssignmentSubmissions(nextSubmissions);
     return hydrateMockSubmission(nextSubmission);
@@ -545,19 +551,7 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
   }
 
   if ((existingRows ?? []).length) {
-    const { data, error } = await supabase
-      .from("assignment_submissions")
-      .update(payload)
-      .eq("id", existingRows[0].id)
-      .select("*")
-      .single();
-
-    if (error) {
-      console.error("Failed to update assignment submission in Supabase:", error);
-      throw error;
-    }
-
-    return (await hydrateSubmissions([data]))[0] ?? null;
+    throw new Error("This assignment has already been submitted. Resubmission is not allowed.");
   }
 
   const { data, error } = await supabase.from("assignment_submissions").insert([payload]).select("*").single();

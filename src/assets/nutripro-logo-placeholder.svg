@@ -1,0 +1,7 @@
+<svg width="220" height="64" viewBox="0 0 220 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="4" y="8" width="48" height="48" rx="18" fill="#4FCAD6"/>
+  <path d="M20 18H28L36 32V18H44V46H36L28 32V46H20V18Z" fill="#06292B"/>
+  <circle cx="38" cy="20" r="4" fill="#F5F1E9"/>
+  <text x="66" y="32" fill="#F5F1E9" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="800">Nutripro</text>
+  <text x="66" y="50" fill="#D9D3C6" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="500">Logo placeholder</text>
+</svg>

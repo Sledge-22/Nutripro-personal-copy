@@ -9,6 +9,7 @@ export const ROUTES = {
   },
   student: {
     dashboard: "/student",
+    profile: "/student/profile",
     certificates: "/student/certificates",
     courses: "/student/courses",
     community: "/student/community",

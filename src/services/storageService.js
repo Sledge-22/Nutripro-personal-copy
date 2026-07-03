@@ -3,6 +3,8 @@ import { isSupabaseConfigured, supabase, supabaseUrl } from "../lib/supabaseClie
 const PDF_BUCKET = "module-pdfs";
 const VIDEO_BUCKET = "module-videos";
 const ASSIGNMENT_BUCKET = "assignment-submissions";
+const PROFILE_PICTURE_BUCKET = "profile-pictures";
+const COURSE_IMAGE_BUCKET = "course-images";
 
 const sanitizeFileName = (name) => {
   const parts = name.split(".");
@@ -98,4 +100,12 @@ export async function uploadModuleVideo(file, moduleId = "module") {
 
 export async function uploadAssignmentFile(file) {
   return uploadToBucket(ASSIGNMENT_BUCKET, file, "submissions");
+}
+
+export async function uploadProfilePicture(file) {
+  return uploadToBucket(PROFILE_PICTURE_BUCKET, file, "profiles");
+}
+
+export async function uploadCourseImage(file) {
+  return uploadToBucket(COURSE_IMAGE_BUCKET, file, "courses");
 }

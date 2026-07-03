@@ -1,6 +1,7 @@
 import React from "react";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 import { LanguageDropdown } from "./LanguageDropdown.jsx";
+import logoPlaceholder from "../assets/nutripro-logo-placeholder.svg";
 
 const icons = {
   dashboard: <path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z" />,
@@ -22,7 +23,7 @@ export function Icon({ name, size = 20 }) {
 
 export function Brand() {
   const { t } = useLanguage();
-  return <div className="brand"><div className="brand-mark"><span>N</span></div><div><strong>Nutripro</strong><small>{t("brand.tagline")}</small></div></div>;
+  return <div className="brand"><img className="brand-logo" src={logoPlaceholder} alt="Nutripro logo" /><div><strong>Nutripro</strong><small>{t("brand.tagline")}</small></div></div>;
 }
 
 export function Status({ status }) {
@@ -48,9 +49,17 @@ export function OverviewCard({ icon, title, text }) {
   return <article className="overview-card"><span><Icon name={icon} /></span><h3>{title}</h3><p>{text}</p></article>;
 }
 
-export function Header({ role, title, detailTitle }) {
+export function Header({ role, title, detailTitle, profile }) {
   const { t, translateRole } = useLanguage();
-  return <header className="topbar"><div>{detailTitle ? <><button className="back-label">{t("header.coursesCourseDetail")}</button><h1>{detailTitle}</h1></> : <><span className="eyebrow">{role === "Admin" ? t("common.adminArea") : t("common.studentArea")}</span><h1>{title}</h1></>}</div><div className="topbar-actions"><LanguageDropdown /><div className="profile"><div className="avatar">{role === "Admin" ? "AM" : "ML"}</div><div><strong>{role === "Admin" ? t("header.AlexMorgan") : t("header.MayaLaurent")}</strong><small>{translateRole(role)}</small></div></div></div></header>;
+  const profileName = profile?.name || (role === "Admin" ? t("header.AlexMorgan") : t("header.MayaLaurent"));
+  const initials = (profileName || "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || (role === "Admin" ? "AM" : "ML");
+
+  return <header className="topbar"><div>{detailTitle ? <><button className="back-label">{t("header.coursesCourseDetail")}</button><h1>{detailTitle}</h1></> : <><span className="eyebrow">{role === "Admin" ? t("common.adminArea") : t("common.studentArea")}</span><h1>{title}</h1></>}</div><div className="topbar-actions"><LanguageDropdown /><div className="profile">{profile?.profilePictureUrl || profile?.profile_picture_url ? <img className="avatar avatar-image" src={profile.profilePictureUrl || profile.profile_picture_url} alt={profileName} /> : <div className="avatar">{initials}</div>}<div><strong>{profileName}</strong><small>{translateRole(role)}</small></div></div></div></header>;
 }
 
 export function Sidebar({ role, navItems, currentPath, onNavigate, onLogout }) {

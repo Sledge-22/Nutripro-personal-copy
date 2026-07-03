@@ -1,9 +1,9 @@
 // TODO(database): Replace these in-memory users with database-backed users.
 export const initialUsers = [
-  { id: 1, name: "Maya Laurent", email: "maya@nutripro.demo", status: "Active", role: "Student" },
-  { id: 2, name: "Noah Williams", email: "noah@nutripro.demo", status: "Paused", role: "Student" },
-  { id: 3, name: "Emma Chen", email: "emma@nutripro.demo", status: "Inactive", role: "Student" },
-  { id: 4, name: "Alex Morgan", email: "admin@nutripro.demo", status: "Active", role: "Admin" },
+  { id: 1, name: "Maya Laurent", email: "maya@nutripro.demo", status: "Active", role: "Student", country: "Argentina", bio: "Fanática del rendimiento y la nutrición deportiva.", profile_picture_url: "" },
+  { id: 2, name: "Noah Williams", email: "noah@nutripro.demo", status: "Paused", role: "Student", country: "Canada", bio: "", profile_picture_url: "" },
+  { id: 3, name: "Emma Chen", email: "emma@nutripro.demo", status: "Inactive", role: "Student", country: "Spain", bio: "", profile_picture_url: "" },
+  { id: 4, name: "Alex Morgan", email: "admin@nutripro.demo", status: "Active", role: "Admin", country: "United States", bio: "", profile_picture_url: "" },
 ];
 
 // TODO(database): Replace these mock course and module records with database-backed courses and modules.
@@ -15,12 +15,14 @@ export const initialCourses = [
     title: "Nutrition Foundations",
     description: "Build a practical understanding of nutrients, balanced meals, and everyday food choices.",
     status: "published",
+    image_url: "",
     owners: [1, 2],
     modules: [
       {
         id: 11,
         title: "The building blocks",
         description: "Start with the core nutrient groups and how they work together.",
+        requires_assignment: false,
         pdfLabel: "building-blocks.pdf",
         video: {
           id: 111,
@@ -35,6 +37,7 @@ export const initialCourses = [
         id: 12,
         title: "Nutrition in practice",
         description: "Apply nutrition basics to labels, habits, and meal structure.",
+        requires_assignment: false,
         pdfLabel: "nutrition-in-practice.pdf",
         video: {
           id: 121,
@@ -52,12 +55,14 @@ export const initialCourses = [
     title: "Healthy Meal Planning",
     description: "Turn nutrition principles into a simple weekly meal-planning routine.",
     status: "published",
+    image_url: "",
     owners: [1],
     modules: [
       {
         id: 21,
         title: "Planning your week",
         description: "Set up a practical structure for meals across the week.",
+        requires_assignment: true,
         pdfLabel: "planning-your-week.pdf",
         video: {
           id: 211,
@@ -89,12 +94,14 @@ export const initialCourses = [
     title: "Mindful Eating Essentials",
     description: "Learn practical techniques for more attentive and intentional eating.",
     status: "published",
+    image_url: "",
     owners: [2, 3],
     modules: [
       {
         id: 31,
         title: "Mindful foundations",
         description: "Build awareness around cues, habits, and pacing.",
+        requires_assignment: false,
         pdfLabel: "mindful-foundations.pdf",
         video: {
           id: 311,
@@ -130,8 +137,8 @@ export const initialStudentProgress = {
 
 // TODO(database): Replace these mock community posts with database-backed community posts.
 export const initialCommunityPosts = [
-  { id: 1, author: "Noah Williams", initials: "NW", time: "2 hours ago", title: "A meal-planning habit that finally stuck", body: "Planning just three dinners first made the whole week feel much easier. What small change worked for you?" },
-  { id: 2, author: "Emma Chen", initials: "EC", time: "Yesterday", title: "Reading labels without overthinking it", body: "I started checking serving size and fibre first. The Nutrition Foundations module made the process much clearer." },
+  { id: 1, author: "Noah Williams", initials: "NW", country: "Canada", time: "2 hours ago", title: "A meal-planning habit that finally stuck", body: "Planning just three dinners first made the whole week feel much easier. What small change worked for you?", comments: [{ id: 101, author: "Maya Laurent", initials: "ML", country: "Argentina", time: "1 hour ago", body: "I started with breakfasts first and it really helped." }] },
+  { id: 2, author: "Emma Chen", initials: "EC", country: "Spain", time: "Yesterday", title: "Reading labels without overthinking it", body: "I started checking serving size and fibre first. The Nutrition Foundations module made the process much clearer.", comments: [] },
 ];
 
 // TODO(database): Replace these mock assignment submissions with database-backed assignment submission records.

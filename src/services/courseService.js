@@ -3,6 +3,8 @@ import { cloneMockValue, createMockId, getMockCourses, setMockCourses } from "./
 import { getModulesByCourse, replaceModulesForCourse } from "./moduleService.js";
 import { ensureDemoStudent } from "./userService.js";
 
+const OPTIONAL_COURSE_COLUMNS = ["image_url", "image_storage_path"];
+
 function normalizeCourseStatus(status) {
   if (status === "draft" || status === "archived" || status === "published") return status;
   return "published";
@@ -27,6 +29,14 @@ function normalizeModules(modules = []) {
     sortOrder: module.sortOrder ?? index + 1,
     title: module.title ?? "",
     description: module.description ?? "",
+    requiresAssignment:
+      module.requiresAssignment ??
+      module.requires_assignment ??
+      Boolean(module.assignment?.title),
+    requires_assignment:
+      module.requires_assignment ??
+      module.requiresAssignment ??
+      Boolean(module.assignment?.title),
     pdfUrl: module.pdf_url ?? module.pdfUrl ?? "",
     pdf_url: module.pdf_url ?? module.pdfUrl ?? "",
     pdfLabel: module.pdfLabel ?? module.pdfName ?? module.pdf_file_name ?? "No PDF selected",
@@ -53,6 +63,8 @@ function normalizeModules(modules = []) {
           moduleId: module.assignment.moduleId ?? module.id ?? null,
           title: module.assignment.title ?? "",
           instructions: module.assignment.instructions ?? "",
+          dueDate: module.assignment.dueDate ?? module.assignment.due_date ?? "",
+          due_date: module.assignment.due_date ?? module.assignment.dueDate ?? "",
           submissionType: module.assignment.submissionType ?? module.assignment.submission_type ?? "text",
           submission_type: module.assignment.submission_type ?? module.assignment.submissionType ?? "text",
         }
@@ -66,6 +78,10 @@ function normalizeCourse(row, owners = [], modules = []) {
     title: row.title ?? "",
     description: row.description ?? "",
     status: normalizeCourseStatus(row.status),
+    imageUrl: row.image_url ?? row.imageUrl ?? "",
+    image_url: row.image_url ?? row.imageUrl ?? "",
+    imageStoragePath: row.image_storage_path ?? row.imageStoragePath ?? "",
+    image_storage_path: row.image_storage_path ?? row.imageStoragePath ?? "",
     owners,
     modules: Array.isArray(modules) ? modules : [],
   };
@@ -226,6 +242,39 @@ function persistMockCourse(updater) {
   return nextCourses;
 }
 
+function buildCourseRow(course) {
+  return {
+    title: course.title?.trim() ?? "",
+    description: course.description?.trim() ?? "",
+    status: normalizeCourseStatus(course.status),
+    image_url: course.image_url ?? course.imageUrl ?? null,
+    image_storage_path: course.image_storage_path ?? course.imageStoragePath ?? null,
+  };
+}
+
+async function runCourseMutationWithFallback(operation, payload, attempt = 0) {
+  const { data, error } = await operation(payload);
+  if (!error) return data;
+
+  const columnName = OPTIONAL_COURSE_COLUMNS.find(
+    (column) =>
+      column in payload &&
+      (error.message?.includes(`'${column}'`) ||
+        error.message?.includes(`courses.${column}`) ||
+        error.details?.includes(column) ||
+        error.hint?.includes(column)),
+  );
+
+  if (columnName && attempt < OPTIONAL_COURSE_COLUMNS.length) {
+    const nextPayload = { ...payload };
+    delete nextPayload[columnName];
+    console.warn(`Retrying course mutation without optional column ${columnName}. Run the matching SQL later to enable it.`);
+    return runCourseMutationWithFallback(operation, nextPayload, attempt + 1);
+  }
+
+  throw error;
+}
+
 export async function getCourses() {
   if (!isSupabaseConfigured) return getMockCourses();
 
@@ -241,8 +290,7 @@ export async function createCourse(course) {
   const status = normalizeCourseStatus(course.status);
   const demoStudentId = (await ensureDemoStudent())?.id ?? 1;
   const payload = {
-    title: course.title?.trim() ?? "",
-    description: course.description?.trim() ?? "",
+    ...buildCourseRow(course),
     status,
     owners: ownersForStatus(status, course.owners, demoStudentId),
     modules: normalizeModules(course.modules),
@@ -257,11 +305,10 @@ export async function createCourse(course) {
 
   const { owners, modules, ...courseRow } = payload;
   console.log("Course modules right before create:", modules);
-  const { data, error } = await supabase.from("courses").insert(courseRow).select("*").single();
-  if (error) {
-    console.error("Course insert error:", error);
-    throw error;
-  }
+  const data = await runCourseMutationWithFallback(
+    (nextPayload) => supabase.from("courses").insert(nextPayload).select("*").single(),
+    courseRow,
+  );
   console.log("Created course response:", data);
 
   let savedModules = [];
@@ -286,25 +333,26 @@ export async function updateCourse(courseId, updates) {
   const status = normalizeCourseStatus(updates.status);
   const demoStudentId = (await ensureDemoStudent())?.id ?? 1;
   const payload = {
-    title: updates.title?.trim() ?? "",
-    description: updates.description?.trim() ?? "",
+    ...buildCourseRow(updates),
     status,
     owners: ownersForStatus(status, updates.owners, demoStudentId),
     modules: normalizeModules(updates.modules),
   };
 
   if (!isSupabaseConfigured) {
-    const nextCourses = persistMockCourse((courses) => courses.map((course) => course.id === courseId ? { ...course, ...cloneMockValue(payload) } : course));
+    const nextCourses = persistMockCourse((courses) =>
+      courses.map((course) => (course.id === courseId ? { ...course, ...cloneMockValue(payload) } : course)),
+    );
     return nextCourses.find((course) => course.id === courseId) ?? null;
   }
 
   const { owners, modules, ...courseRow } = payload;
   console.log("Course modules right before update:", modules);
-  const { data, error } = await supabase.from("courses").update(courseRow).eq("id", courseId).select("*").single();
-  if (error) {
-    console.error("Course update error:", error);
-    throw error;
-  }
+  const data = await runCourseMutationWithFallback(
+    (nextPayload) =>
+      supabase.from("courses").update(nextPayload).eq("id", courseId).select("*").single(),
+    courseRow,
+  );
   console.log("Updated course response:", data);
 
   const savedModules = await replaceModulesForCourse(courseId, modules);
@@ -434,7 +482,12 @@ export async function getStudentCourseAccess(studentId, courseId) {
 
     if (normalizeCourseStatus(mockCourse.status) !== "published") {
       console.error("Student course access failed because the course is not published in mock data:", mockCourse.status);
-      return { reason: "not-published", course: mockCourse, enrollment: { course_id: mockCourse.id, student_id: studentId }, courseStatus: mockCourse.status ?? null };
+      return {
+        reason: "not-published",
+        course: mockCourse,
+        enrollment: { course_id: mockCourse.id, student_id: studentId },
+        courseStatus: mockCourse.status ?? null,
+      };
     }
 
     return {

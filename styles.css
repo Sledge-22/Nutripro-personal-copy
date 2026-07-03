@@ -74,6 +74,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .login-page { min-height: 100vh; display: grid; grid-template-columns: minmax(520px, 47%) 1fr; background: #fdfcf9; }
 .login-panel { padding: 44px clamp(48px, 7vw, 110px); display: flex; flex-direction: column; }
 .brand { display: flex; align-items: center; gap: 12px; }
+.brand-logo { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; box-shadow: var(--shadow-glow); }
 .brand-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px 13px 13px 4px; color: #fff; background: var(--green-700); box-shadow: 0 8px 20px rgba(35, 91, 71, .18); font-family: "Manrope"; font-weight: 800; }
 .brand strong { display: block; font-size: 20px; line-height: 1.1; letter-spacing: -.5px; }
 .brand small { color: var(--muted); font-size: 11px; }
@@ -85,8 +86,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .role-options button { width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; padding: 16px; text-align: left; border: 1px solid var(--line); border-radius: 16px; background: var(--white); cursor: pointer; transition: .2s ease; }
 .role-options button:hover { border-color: var(--green-500); transform: translateY(-2px); box-shadow: var(--shadow); }
 .role-options strong, .role-options small { display: block; }
-.role-options strong { margin-bottom: 4px; font-family: "Manrope"; }
+.role-options strong { margin-bottom: 4px; font-family: var(--font-heading); font-size: 21px; }
 .role-options small { color: var(--muted); }
+.login-slogan { display: inline-block; margin-top: 18px; color: var(--color-primary); font-family: var(--font-heading); font-size: 24px; }
+.login-footer { margin-top: auto; padding-top: 20px; color: var(--color-muted); font-size: 12px; }
 .role-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; }
 .role-icon.admin { color: var(--green-800); background: var(--green-100); }
 .role-icon.student { color: #706323; background: #fff4bd; }
@@ -99,6 +102,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .visual-orbit.one { width: 580px; height: 580px; }
 .visual-orbit.two { width: 760px; height: 760px; }
 .visual-card { position: relative; z-index: 1; width: min(420px, 70%); padding: 42px; border: 1px solid rgba(255,255,255,.23); border-radius: 28px; color: #fff; background: rgba(255,255,255,.12); box-shadow: 0 30px 80px rgba(18, 52, 40, .25); backdrop-filter: blur(14px); }
+.hero-placeholder-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .24; }
 .leaf { width: 64px; height: 64px; display: grid; place-items: center; margin-bottom: 60px; border-radius: 50% 50% 50% 12px; color: var(--green-800); background: #dff2e6; font: 800 26px "Manrope"; transform: rotate(-8deg); }
 .visual-card p { margin-bottom: 12px; color: #d9eee2; }
 .visual-card strong { font: 700 clamp(28px, 3vw, 42px)/1.2 "Manrope"; }
@@ -124,6 +128,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .profile strong { font-size: 13px; }
 .profile small { margin-top: 3px; color: var(--muted); font-size: 12px; }
 .avatar, .post-avatar { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--green-700); font-weight: 700; font-size: 12px; }
+.avatar-image { object-fit: cover; }
 .content { padding: 36px clamp(28px, 4vw, 60px) 60px; max-width: 1540px; margin: 0 auto; overflow: visible; }
 .welcome { position: relative; overflow: hidden; display: flex; justify-content: space-between; align-items: center; min-height: 190px; padding: 38px 42px; border-radius: 24px; color: #fff; background: linear-gradient(120deg, var(--green-800), #387b5e); box-shadow: var(--shadow); }
 .welcome::after { content: ""; position: absolute; width: 280px; height: 280px; right: 30px; border: 1px solid rgba(255,255,255,.12); border-radius: 50%; }
@@ -165,6 +170,7 @@ td strong { color: var(--ink); }
 .status.inactive { color: #7f8885; background: #eef1f0; }
 .status.issued { color: #397355; }
 .table-actions, .row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.filters-row { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(180px, .5fr)); gap: 12px; margin-bottom: 20px; }
 .table-actions button, .row-actions button { padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: #fff; font-size: 11px; cursor: pointer; }
 .table-actions button:hover, .row-actions button:hover { border-color: var(--green-500); }
 .danger-text { color: var(--danger) !important; }
@@ -215,6 +221,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
 .course-admin-list article { display: grid; grid-template-columns: auto 1fr auto; gap: 15px; padding: 16px; border: 1px solid #e6ece9; border-radius: 13px; }
 .course-symbol { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 11px; color: var(--green-700); background: var(--green-100); }
 .course-info h3 { margin: 2px 0 5px; font-size: 15px; }
+.admin-course-thumb-wrap { margin-bottom: 10px; }
+.admin-course-thumb, .course-image-preview, .profile-hero-image, .course-cover-image { width: 100%; border-radius: 16px; object-fit: cover; }
+.admin-course-thumb, .course-image-preview { max-height: 180px; }
 .course-info p { margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .course-info > span { margin-right: 12px; color: #7b8c86; font-size: 11px; }
 .cert-layout { display: grid; grid-template-columns: 350px minmax(0, 1fr); gap: 20px; align-items: start; }
@@ -229,6 +238,7 @@ code { padding: 5px 7px; border-radius: 6px; color: var(--green-800); background
 .owned-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .owned-card { overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: #fff; box-shadow: var(--shadow); }
 .course-cover { height: 150px; display: flex; justify-content: space-between; align-items: flex-end; padding: 25px; color: #fff; background: linear-gradient(135deg, #2b7055, #7ab995); }
+.course-cover-image { height: 100%; object-fit: cover; }
 .course-cover.cover-2 { background: linear-gradient(135deg, #587253, #a7be78); }
 .course-cover > span { font: 800 52px "Manrope"; opacity: .2; }
 .owned-body { padding: 25px; }
@@ -328,8 +338,15 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
 .certificate-modal h4 { margin: 8px 0 35px; font-size: 20px; }
 .certificate-meta { display: flex; justify-content: center; gap: 40px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .community-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(330px, .7fr); gap: 22px; align-items: start; }
+.profile-layout { display: grid; grid-template-columns: minmax(0, 760px); }
+.profile-hero { display: grid; grid-template-columns: 150px 1fr; gap: 24px; align-items: center; margin-bottom: 24px; }
+.profile-hero-avatar { width: 150px; height: 150px; display: grid; place-items: center; border-radius: 28px; background: var(--color-brand-soft); color: var(--color-primary); font-family: var(--font-heading); font-size: 46px; }
+.profile-hero-image { height: 150px; }
 .post-list { display: grid; gap: 13px; }
 .post-list article { display: grid; grid-template-columns: auto 1fr; gap: 15px; padding: 23px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+.community-comments { display: grid; gap: 10px; margin-top: 16px; }
+.community-comment { padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.04); border: 1px solid var(--color-border); }
+.community-comment-form { display: grid; gap: 10px; margin-top: 14px; }
 .post-meta { display: flex; align-items: center; gap: 10px; }
 .post-meta strong { font-size: 12px; }
 .post-meta span { color: var(--muted); font-size: 11px; }
@@ -819,6 +836,8 @@ select:focus {
   .login-panel { padding-inline: 45px; }
   .submission-summary { flex-direction: column; }
   .review-center-layout, .review-meta-grid { grid-template-columns: 1fr; }
+  .filters-row { grid-template-columns: 1fr; }
+  .profile-hero { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {

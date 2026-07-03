@@ -3,7 +3,7 @@ import { CertificateModal, Icon, Progress, Stat, Status, Welcome } from "../comp
 import { ROUTES } from "../routes/appRoutes.js";
 import { getStudentSubmission, submitAssignment } from "../services/assignmentService.js";
 import { getStudentCourseAccess } from "../services/courseService.js";
-import { uploadAssignmentFile } from "../services/storageService.js";
+import { uploadAssignmentFile, uploadProfilePicture } from "../services/storageService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 
 function goTo(pathname) {
@@ -25,14 +25,53 @@ function StudentCourseState({ eyebrow, title, text }) {
   );
 }
 
+function formatDisplayDate(value, language = "es") {
+  if (!value) return "—";
+
+  try {
+    return new Date(value).toLocaleDateString(language === "es" ? "es-ES" : "en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return value;
+  }
+}
+
+function initialsFromName(name) {
+  return (name || "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "ML";
+}
+
+function CourseCover({ course, index }) {
+  if (course?.image_url || course?.imageUrl) {
+    return <div className={`course-cover cover-${index + 1}`}><img className="course-cover-image" src={course.image_url || course.imageUrl} alt={course.title} /></div>;
+  }
+
+  return (
+    <div className={`course-cover cover-${index + 1}`}>
+      <span>{String(index + 1).padStart(2, "0")}</span>
+      <Icon name="courses" size={34} />
+    </div>
+  );
+}
+
 export function StudentWorkspacePage({
   pathname,
   studentId,
+  studentProfile,
   courses,
   certificates,
   posts,
   progressState,
   onCreatePost,
+  onCreateComment,
+  onUpdateProfile,
   onUpdateProgress,
 }) {
   const { t } = useLanguage();
@@ -161,22 +200,24 @@ export function StudentWorkspacePage({
     );
   }
 
-  if (pathname === "/student/certificates") {
+  if (pathname === ROUTES.student.profile) {
+    return <StudentProfilePage profile={studentProfile} onUpdateProfile={onUpdateProfile} />;
+  }
+
+  if (pathname === ROUTES.student.certificates) {
     return (
       <>
-        {previewCertificate && (
-          <CertificateModal certificate={previewCertificate} onClose={() => setPreviewCertificate(null)} />
-        )}
+        {previewCertificate && <CertificateModal certificate={previewCertificate} onClose={() => setPreviewCertificate(null)} />}
         <StudentCertificatesPage certificates={studentCertificates} onPreview={setPreviewCertificate} />
       </>
     );
   }
 
-  if (pathname === "/student/community") {
-    return <CommunityPage posts={posts} onCreatePost={onCreatePost} />;
+  if (pathname === ROUTES.student.community) {
+    return <CommunityPage posts={posts} studentProfile={studentProfile} onCreatePost={onCreatePost} onCreateComment={onCreateComment} />;
   }
 
-  if (pathname === "/student/courses") {
+  if (pathname === ROUTES.student.courses) {
     return <OwnedCoursesPage courses={ownedCourses} progressFor={progressFor} />;
   }
 
@@ -219,6 +260,137 @@ function StudentDashboardPage({ courses, certificates, progressFor }) {
   );
 }
 
+function StudentProfilePage({ profile, onUpdateProfile }) {
+  const { t } = useLanguage();
+  const [form, setForm] = useState({
+    name: profile?.name || "",
+    email: profile?.email || "",
+    country: profile?.country || "",
+    bio: profile?.bio || "",
+    profilePictureUrl: profile?.profilePictureUrl || profile?.profile_picture_url || "",
+  });
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    setForm({
+      name: profile?.name || "",
+      email: profile?.email || "",
+      country: profile?.country || "",
+      bio: profile?.bio || "",
+      profilePictureUrl: profile?.profilePictureUrl || profile?.profile_picture_url || "",
+    });
+  }, [profile]);
+
+  const saveProfile = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const result = await onUpdateProfile({
+        name: form.name,
+        country: form.country,
+        bio: form.bio,
+        profile_picture_url: form.profilePictureUrl,
+      });
+
+      if (!result?.ok) throw new Error(result?.error || t("student.savingProfileFailed"));
+      setMessage(t("student.profileSaved"));
+    } catch (saveError) {
+      console.error("Saving student profile failed:", saveError);
+      setError(saveError.message || t("student.savingProfileFailed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePictureChange = async (file) => {
+    if (!file) return;
+
+    setUploading(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const uploaded = await uploadProfilePicture(file);
+      setForm((current) => ({
+        ...current,
+        profilePictureUrl: uploaded.publicUrl || current.profilePictureUrl,
+      }));
+      setMessage(t("student.profilePictureReady"));
+    } catch (uploadError) {
+      console.error("Uploading the student profile picture failed:", uploadError);
+      setError(uploadError.message || t("student.profilePictureUploadFailed"));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const avatarLabel = initialsFromName(form.name || profile?.name || "Maya Laurent");
+
+  return (
+    <div className="profile-layout">
+      <section className="section-card profile-card">
+        <div className="profile-hero">
+          {form.profilePictureUrl ? (
+            <img className="profile-hero-image" src={form.profilePictureUrl} alt={form.name || profile?.name || "Maya Laurent"} />
+          ) : (
+            <div className="profile-hero-avatar">{avatarLabel}</div>
+          )}
+          <div>
+            <span className="eyebrow">{t("common.myProfile")}</span>
+            <h2>{form.name || profile?.name || "Maya Laurent"}</h2>
+            <p>{form.email || profile?.email || "maya@nutripro.demo"}</p>
+            {form.country ? <span className="subtle-badge">{form.country}</span> : null}
+          </div>
+        </div>
+
+        <form onSubmit={saveProfile}>
+          <label>
+            {t("admin.name")}
+            <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+          </label>
+
+          <label>
+            {t("admin.email")}
+            <input value={form.email} disabled />
+          </label>
+
+          <label>
+            {t("common.country")}
+            <input value={form.country} onChange={(event) => setForm((current) => ({ ...current, country: event.target.value }))} placeholder={t("student.countryPlaceholder")} />
+          </label>
+
+          <label>
+            {t("common.bio")}
+            <textarea rows="5" value={form.bio} onChange={(event) => setForm((current) => ({ ...current, bio: event.target.value }))} placeholder={t("student.bioPlaceholder")} />
+          </label>
+
+          <label>
+            {t("common.profilePicture")}
+            <input type="file" accept="image/*" onChange={(event) => void handlePictureChange(event.target.files?.[0])} />
+          </label>
+
+          {uploading ? <small className="field-note">{t("student.uploadingProfilePicture")}</small> : null}
+          {message ? <small className="field-note">{message}</small> : null}
+          {error ? <small className="field-note danger-text">{error}</small> : null}
+
+          <div className="form-actions">
+            <button className="primary-btn" type="submit" disabled={saving || uploading}>
+              <Icon name="check" />
+              {saving ? t("common.saving") : t("common.saveChanges")}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function OwnedCoursesPage({ courses, progressFor }) {
   const { t } = useLanguage();
 
@@ -238,10 +410,7 @@ function OwnedCoursesPage({ courses, progressFor }) {
 
           return (
             <article className="owned-card" key={course.id}>
-              <div className={`course-cover cover-${index + 1}`}>
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <Icon name="courses" size={34} />
-              </div>
+              <CourseCover course={course} index={index} />
               <div className="owned-body">
                 <span className="eyebrow">{t("dashboard.modulesCount", { count: modules.length })}</span>
                 <h3>{course.title}</h3>
@@ -270,7 +439,7 @@ function OwnedCoursesPage({ courses, progressFor }) {
 }
 
 function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, progress }) {
-  const { t, translateSubmissionType } = useLanguage();
+  const { t, language, translateSubmissionType } = useLanguage();
   const modules = getCourseModules(course);
   const [activeModuleId, setActiveModuleId] = useState(modules[0]?.id || null);
   const [viewError, setViewError] = useState("");
@@ -294,7 +463,9 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   }, [course?.id, modules]);
 
   const activeModule = modules.find((module) => module.id === activeModuleId) || modules[0] || null;
-  const activeAssignment = activeModule?.assignment ?? null;
+  const assignmentRequired =
+    activeModule?.requiresAssignment ?? activeModule?.requires_assignment ?? Boolean(activeModule?.assignment?.id);
+  const activeAssignment = assignmentRequired ? activeModule?.assignment ?? null : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -399,9 +570,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const hasSubmission = Boolean(assignmentState.submission);
   const assignmentHasGrade =
     assignmentState.submission?.grade !== null && assignmentState.submission?.grade !== undefined;
-  const assignmentApprovedForCompletion =
-    assignmentStatus === "approved" ||
-    (assignmentHasGrade && assignmentStatus !== "needs_revision" && assignmentStatus !== "rejected");
+  const assignmentApprovedForCompletion = assignmentStatus === "approved" || assignmentHasGrade;
   const hasPdfRequirement = Boolean(
     pdfSource || (activeModule?.pdfLabel && activeModule.pdfLabel !== t("common.noPdfSelected")) || activeModule?.pdfName,
   );
@@ -410,7 +579,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
       (activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== t("common.noVideoSelected")) ||
       activeModule?.videoName,
   );
-  const hasAssignmentRequirement = Boolean(activeAssignment?.id);
+  const hasAssignmentRequirement = Boolean(assignmentRequired && activeAssignment?.id);
   const pdfSeen = activeModule ? completed[`pdf-${activeModule.id}`] : false;
   const videoSeen = activeModule ? completed[`video-${activeModule.id}`] : false;
   const moduleDone = activeModule ? completed[`module-${activeModule.id}`] : false;
@@ -431,11 +600,19 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const handleAssignmentSubmit = async () => {
     if (!activeAssignment?.id || !studentId) return;
 
+    if (hasSubmission) {
+      setAssignmentState((current) => ({
+        ...current,
+        submitError: t("common.resubmissionNotAllowed"),
+        submitMessage: "",
+      }));
+      return;
+    }
+
     const submissionType = activeAssignment.submissionType || activeAssignment.submission_type || "text";
     const needsText = submissionType === "text" || submissionType === "text_and_file";
     const needsFile = submissionType === "file" || submissionType === "text_and_file";
     const textResponse = assignmentState.textResponse.trim();
-    const existingSubmission = assignmentState.submission;
 
     if (needsText && !textResponse) {
       setAssignmentState((current) => ({
@@ -446,7 +623,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
       return;
     }
 
-    if (needsFile && !assignmentState.selectedFile && !existingSubmission?.fileUrl) {
+    if (needsFile && !assignmentState.selectedFile) {
       setAssignmentState((current) => ({
         ...current,
         submitError: t("validation.assignmentFileRequired"),
@@ -463,11 +640,11 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     }));
 
     try {
-      let filePublicUrl = existingSubmission?.filePublicUrl || existingSubmission?.fileUrl || "";
-      let fileName = existingSubmission?.fileName || "";
-      let fileStoragePath = existingSubmission?.fileStoragePath || "";
-      let fileType = existingSubmission?.fileType || "";
-      let fileSize = existingSubmission?.fileSize ?? null;
+      let filePublicUrl = "";
+      let fileName = "";
+      let fileStoragePath = "";
+      let fileType = "";
+      let fileSize = null;
 
       if (assignmentState.selectedFile) {
         const uploaded = await uploadAssignmentFile(assignmentState.selectedFile);
@@ -487,12 +664,6 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
         fileSize,
       });
 
-      const submitMessage = !existingSubmission
-        ? t("common.assignmentSubmittedSuccess")
-        : existingSubmission.status === "needs_revision" || existingSubmission.status === "rejected"
-          ? t("common.assignmentResubmittedSuccess")
-          : t("common.assignmentUpdatedSuccess");
-
       setAssignmentState({
         loading: false,
         error: "",
@@ -500,7 +671,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
         textResponse: savedSubmission?.textResponse || textResponse,
         selectedFile: null,
         selectedFileName: savedSubmission?.fileName || fileName,
-        submitMessage,
+        submitMessage: t("common.assignmentSubmittedSuccess"),
         submitError: "",
         uploading: false,
       });
@@ -544,20 +715,16 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     );
   }
 
-  const canEditAssignment =
-    !hasSubmission ||
-    assignmentStatus === "submitted" ||
-    assignmentStatus === "needs_revision" ||
-    assignmentStatus === "rejected";
+  const isAssignmentLocked = hasSubmission;
   const assignmentButtonLabel = assignmentState.uploading
     ? t("common.submitting")
     : !hasSubmission
       ? t("common.submitAssignment")
       : assignmentStatus === "approved"
         ? t("common.assignmentApprovedButton")
-        : assignmentStatus === "needs_revision" || assignmentStatus === "rejected"
-          ? t("common.resubmitAssignment")
-          : t("common.updateSubmission");
+        : assignmentStatus === "submitted"
+          ? t("common.updateSubmission")
+          : t("common.resubmitAssignment");
 
   return (
     <>
@@ -608,13 +775,6 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
         </aside>
 
         <section className="lesson-content">
-          <div className="video-stage">
-            <div className="play-large">
-              <Icon name="courses" size={28} />
-            </div>
-            <span>{t("common.moduleAssets")}</span>
-          </div>
-
           <span className="eyebrow">{t("common.currentModule")}</span>
           <h2>{activeModule?.title || t("common.selectModule")}</h2>
           <p>{activeModule?.description || t("student.currentModuleDescriptionFallback")}</p>
@@ -681,7 +841,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
               <div className="assignment-chip-row">
                 <span className="subtle-badge">{t("student.assignmentType", { type: translateSubmissionType(assignmentType) })}</span>
                 {activeAssignment.dueDate || activeAssignment.due_date ? (
-                  <span className="subtle-badge">{t("student.dueDate", { date: activeAssignment.dueDate || activeAssignment.due_date })}</span>
+                  <span className="subtle-badge">{t("student.dueDate", { date: formatDisplayDate(activeAssignment.dueDate || activeAssignment.due_date, language) })}</span>
                 ) : null}
                 {assignmentState.submission?.status ? <Status status={assignmentState.submission.status} /> : null}
               </div>
@@ -699,7 +859,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                   <textarea
                     rows="5"
                     value={assignmentState.textResponse}
-                    disabled={!canEditAssignment || assignmentState.loading || assignmentState.uploading}
+                    disabled={isAssignmentLocked || assignmentState.loading || assignmentState.uploading}
                     onChange={(event) =>
                       setAssignmentState((current) => ({
                         ...current,
@@ -718,7 +878,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                   {t("common.uploadFile")}
                   <input
                     type="file"
-                    disabled={!canEditAssignment || assignmentState.loading || assignmentState.uploading}
+                    disabled={isAssignmentLocked || assignmentState.loading || assignmentState.uploading}
                     onChange={(event) =>
                       setAssignmentState((current) => ({
                         ...current,
@@ -736,8 +896,8 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                 <small className="field-note">{t("common.selectedFile", { name: assignmentState.selectedFileName })}</small>
               ) : null}
 
-              {assignmentState.submission?.fileUrl ? (
-                <a className="assignment-link" href={assignmentState.submission.fileUrl} target="_blank" rel="noreferrer">
+              {assignmentState.submission?.filePublicUrl || assignmentState.submission?.fileUrl ? (
+                <a className="assignment-link" href={assignmentState.submission.filePublicUrl || assignmentState.submission.fileUrl} target="_blank" rel="noreferrer">
                   {t("common.openSubmittedFile")}
                 </a>
               ) : null}
@@ -755,23 +915,21 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                     assignmentState.submission?.admin_feedback ||
                     t("common.noFeedbackYet")}
                 </p>
+                <p>
+                  <strong>{t("common.status")}:</strong>{" "}
+                  {assignmentState.submission?.status ? t(`status.${assignmentState.submission.status}`) : t("common.assignmentPending")}
+                </p>
               </div>
 
-              {assignmentStatus === "needs_revision" ? (
-                <small className="field-note">{t("common.assignmentNeedsRevisionHelp")}</small>
-              ) : assignmentStatus === "approved" ? (
-                <small className="field-note">{t("common.assignmentApprovedHelp")}</small>
-              ) : assignmentStatus === "rejected" ? (
-                <small className="field-note">{t("common.assignmentRejectedHelp")}</small>
-              ) : assignmentStatus === "submitted" ? (
-                <small className="field-note">{t("common.assignmentSubmittedHelp")}</small>
+              {assignmentState.submission ? (
+                <small className="field-note">{t("common.assignmentAlreadySubmitted")}</small>
               ) : null}
 
               <div className="form-actions compact">
                 <button
                   type="button"
                   className="primary-btn"
-                  disabled={!canEditAssignment || assignmentState.uploading || assignmentState.loading}
+                  disabled={isAssignmentLocked || assignmentState.uploading || assignmentState.loading}
                   onClick={() => void handleAssignmentSubmit()}
                 >
                   <Icon name="check" />
@@ -872,14 +1030,38 @@ function StudentCertificatesPage({ certificates, onPreview }) {
   );
 }
 
-function CommunityPage({ posts, onCreatePost }) {
+function CommunityPage({ posts, studentProfile, onCreatePost, onCreateComment }) {
   const { t } = useLanguage();
   const [form, setForm] = useState({ title: "", body: "" });
+  const [commentDrafts, setCommentDrafts] = useState({});
 
   const submit = (event) => {
     event.preventDefault();
-    void onCreatePost({ author: "Maya Laurent", initials: "ML", title: form.title, body: form.body });
+    void onCreatePost({
+      studentId: studentProfile?.id,
+      studentProfile,
+      author: studentProfile?.name || "Maya Laurent",
+      title: form.title,
+      body: form.body,
+    });
     setForm({ title: "", body: "" });
+  };
+
+  const submitComment = (postId) => {
+    const body = `${commentDrafts[postId] ?? ""}`.trim();
+    if (!body) return;
+
+    void onCreateComment(postId, {
+      studentId: studentProfile?.id,
+      studentProfile,
+      author: studentProfile?.name || "Maya Laurent",
+      body,
+    });
+
+    setCommentDrafts((current) => ({
+      ...current,
+      [postId]: "",
+    }));
   };
 
   return (
@@ -895,14 +1077,49 @@ function CommunityPage({ posts, onCreatePost }) {
         <div className="post-list">
           {posts.map((post) => (
             <article key={post.id}>
-              <div className="post-avatar">{post.initials}</div>
+              {post.profilePictureUrl || post.profile_picture_url ? (
+                <img className="post-avatar avatar-image" src={post.profilePictureUrl || post.profile_picture_url} alt={post.author} />
+              ) : (
+                <div className="post-avatar">{post.initials}</div>
+              )}
               <div>
                 <div className="post-meta">
                   <strong>{post.author}</strong>
+                  {post.country ? <span>{post.country}</span> : null}
                   <span>{post.time}</span>
                 </div>
                 <h3>{post.title}</h3>
                 <p>{post.body}</p>
+
+                <div className="community-comments">
+                  {(post.comments ?? []).map((comment) => (
+                    <div className="community-comment" key={comment.id}>
+                      <div className="post-meta">
+                        <strong>{comment.author}</strong>
+                        {comment.country ? <span>{comment.country}</span> : null}
+                        <span>{comment.time}</span>
+                      </div>
+                      <p>{comment.body}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="community-comment-form">
+                  <textarea
+                    rows="3"
+                    value={commentDrafts[post.id] ?? ""}
+                    onChange={(event) =>
+                      setCommentDrafts((current) => ({
+                        ...current,
+                        [post.id]: event.target.value,
+                      }))
+                    }
+                    placeholder={t("student.writeComment")}
+                  />
+                  <button className="secondary-btn" type="button" onClick={() => submitComment(post.id)}>
+                    {t("student.publishComment")}
+                  </button>
+                </div>
               </div>
             </article>
           ))}

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Icon, OverviewCard, Stat, Status, Welcome } from "../components/ui.jsx";
 import { getSubmissionsForAdmin, reviewSubmission } from "../services/assignmentService.js";
-import { uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
+import { uploadCourseImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 
 function createId() {
@@ -26,6 +26,8 @@ function createModuleDraft(sortOrder = 1) {
     sortOrder,
     title: "",
     description: "",
+    requiresAssignment: false,
+    requires_assignment: false,
     pdfUrl: "",
     pdf_url: "",
     pdfLabel: "No PDF selected",
@@ -57,17 +59,46 @@ function createModuleDraft(sortOrder = 1) {
 }
 
 function createCourseDraft(course = null) {
-  if (!course) return { title: "", description: "", status: "published", modules: [createModuleDraft()] };
+  if (!course) {
+    return {
+      title: "",
+      description: "",
+      status: "published",
+      imageUrl: "",
+      image_url: "",
+      imageStoragePath: "",
+      image_storage_path: "",
+      imageLabel: "",
+      imageUploading: false,
+      imageError: "",
+      modules: [createModuleDraft()],
+    };
+  }
 
   return {
     title: course.title,
     description: course.description,
     status: course.status || "published",
+    imageUrl: course.image_url || course.imageUrl || "",
+    image_url: course.image_url || course.imageUrl || "",
+    imageStoragePath: course.image_storage_path || course.imageStoragePath || "",
+    image_storage_path: course.image_storage_path || course.imageStoragePath || "",
+    imageLabel: course.imageLabel || course.image_file_name || course.imageName || "",
+    imageUploading: false,
+    imageError: "",
     modules: (course.modules || []).map((module, index) => ({
       id: module.id || createId(),
       sortOrder: module.sortOrder ?? index + 1,
       title: module.title || "",
       description: module.description || "",
+      requiresAssignment:
+        module.requiresAssignment ??
+        module.requires_assignment ??
+        Boolean(module.assignment?.title),
+      requires_assignment:
+        module.requires_assignment ??
+        module.requiresAssignment ??
+        Boolean(module.assignment?.title),
       pdfUrl: module.pdf_url || module.pdfUrl || "",
       pdf_url: module.pdf_url || module.pdfUrl || "",
       pdfLabel: module.pdfLabel || module.pdf_file_name || module.pdfName || "No PDF selected",
@@ -115,6 +146,10 @@ function buildCoursePayload(form, editingId, existingCourse) {
     title: form.title.trim(),
     description: form.description.trim(),
     status: form.status || "published",
+    imageUrl: form.image_url || form.imageUrl || "",
+    image_url: form.image_url || form.imageUrl || "",
+    imageStoragePath: form.image_storage_path || form.imageStoragePath || "",
+    image_storage_path: form.image_storage_path || form.imageStoragePath || "",
     owners: existingCourse?.owners?.length ? existingCourse.owners : [1],
     modules: form.modules
       .filter((module) => module.title.trim())
@@ -123,6 +158,14 @@ function buildCoursePayload(form, editingId, existingCourse) {
         sortOrder: index + 1,
         title: module.title.trim(),
         description: module.description.trim(),
+        requiresAssignment:
+          module.requiresAssignment ??
+          module.requires_assignment ??
+          Boolean(module.assignment?.title),
+        requires_assignment:
+          module.requires_assignment ??
+          module.requiresAssignment ??
+          Boolean(module.assignment?.title),
         pdfUrl: module.pdf_url || module.pdfUrl || "",
         pdf_url: module.pdf_url || module.pdfUrl || "",
         pdfLabel: module.pdfLabel || module.pdf_file_name || module.pdfName || "No PDF selected",
@@ -143,7 +186,8 @@ function buildCoursePayload(form, editingId, existingCourse) {
           url: module.video.url || module.video_url || module.videoUrl || module.video.link.trim(),
           uploadLabel: module.video.uploadLabel || "No video selected",
         },
-        assignment: module.assignment?.title?.trim()
+        assignment:
+          (module.requiresAssignment ?? module.requires_assignment) && module.assignment?.title?.trim()
           ? {
               id: module.assignment.id || null,
               title: module.assignment.title.trim(),
@@ -190,6 +234,7 @@ export function AdminWorkspacePage({
   courses,
   certificates,
   onUpdateUserStatus,
+  onUpdateUser,
   onDeleteUser,
   onSaveCourse,
   onDeleteCourse,
@@ -197,7 +242,14 @@ export function AdminWorkspacePage({
   onGenerateCertificate,
 }) {
   if (pathname === "/admin/users") {
-    return <UsersAdminPage users={users} onUpdateUserStatus={onUpdateUserStatus} onDeleteUser={onDeleteUser} />;
+    return (
+      <UsersAdminPage
+        users={users}
+        onUpdateUserStatus={onUpdateUserStatus}
+        onUpdateUser={onUpdateUser}
+        onDeleteUser={onDeleteUser}
+      />
+    );
   }
 
   if (pathname === "/admin/post-courses") {
@@ -264,8 +316,52 @@ function AdminDashboardPage({ users, courses, certificates }) {
   );
 }
 
-function UsersAdminPage({ users, onUpdateUserStatus, onDeleteUser }) {
-  const { t, translateRole } = useLanguage();
+function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser }) {
+  const { t, language } = useLanguage();
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [editingUserId, setEditingUserId] = useState(null);
+  const [draft, setDraft] = useState({ name: "", role: "student", status: "active", country: "" });
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const filteredUsers = users.filter((user) => {
+    const matchesSearch =
+      !search ||
+      user.name?.toLowerCase().includes(search.toLowerCase()) ||
+      user.email?.toLowerCase().includes(search.toLowerCase());
+    const matchesRole = roleFilter === "all" || user.role?.toLowerCase() === roleFilter;
+    const matchesStatus = statusFilter === "all" || user.status?.toLowerCase() === statusFilter;
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+
+  const startEditing = (user) => {
+    setEditingUserId(user.id);
+    setDraft({
+      name: user.name || "",
+      role: user.role?.toLowerCase() || "student",
+      status: user.status?.toLowerCase() || "active",
+      country: user.country || "",
+    });
+    setMessage("");
+    setError("");
+  };
+
+  const saveUser = async () => {
+    if (!editingUserId) return;
+    setMessage("");
+    setError("");
+
+    try {
+      await onUpdateUser(editingUserId, draft);
+      setEditingUserId(null);
+      setMessage(t("admin.userSaved"));
+    } catch (saveError) {
+      console.error("Saving the admin user edit failed:", saveError);
+      setError(saveError.message || t("admin.savingUserFailed"));
+    }
+  };
 
   return (
     <section className="section-card">
@@ -275,8 +371,26 @@ function UsersAdminPage({ users, onUpdateUserStatus, onDeleteUser }) {
           <h2>{t("admin.allUsers")}</h2>
           <p>{t("admin.manageAccess")}</p>
         </div>
-        <span className="count-badge">{t("admin.usersCount", { count: users.length })}</span>
+        <span className="count-badge">{t("admin.usersCount", { count: filteredUsers.length })}</span>
       </div>
+
+      <div className="filters-row">
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("admin.searchUsers")} />
+        <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
+          <option value="all">{t("admin.allRoles")}</option>
+          <option value="admin">{t("roles.Admin")}</option>
+          <option value="student">{t("roles.Student")}</option>
+        </select>
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <option value="all">{t("admin.allStatuses")}</option>
+          <option value="active">{t("status.active")}</option>
+          <option value="inactive">{t("status.inactive")}</option>
+          <option value="paused">{t("status.paused")}</option>
+        </select>
+      </div>
+
+      {message ? <small className="field-note">{message}</small> : null}
+      {error ? <small className="field-note danger-text">{error}</small> : null}
 
       <div className="table-wrap">
         <table>
@@ -286,26 +400,64 @@ function UsersAdminPage({ users, onUpdateUserStatus, onDeleteUser }) {
               <th>{t("admin.email")}</th>
               <th>{t("admin.role")}</th>
               <th>{t("common.status")}</th>
+              <th>{t("common.country")}</th>
+              <th>{t("admin.createdAt")}</th>
               <th>{t("admin.actions")}</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td><strong>{user.name}</strong></td>
-                <td>{user.email}</td>
-                <td><span className="subtle-badge">{translateRole(user.role)}</span></td>
-                <td><Status status={user.status} /></td>
-                <td>
-                  <div className="table-actions">
-                    <button onClick={() => void onUpdateUserStatus(user.id, "Active")}>{t("admin.activate")}</button>
-                    <button onClick={() => void onUpdateUserStatus(user.id, "Inactive")}>{t("admin.deactivate")}</button>
-                    <button onClick={() => void onUpdateUserStatus(user.id, "Paused")}>{t("admin.pause")}</button>
-                    <button className="danger-text" onClick={() => void onDeleteUser(user.id)}>{t("common.delete")}</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {filteredUsers.map((user) => {
+              const isEditing = editingUserId === user.id;
+              return (
+                <tr key={user.id}>
+                  <td>{isEditing ? <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /> : <strong>{user.name}</strong>}</td>
+                  <td>{user.email}</td>
+                  <td>
+                    {isEditing ? (
+                      <select value={draft.role} onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value }))}>
+                        <option value="admin">{t("roles.Admin")}</option>
+                        <option value="student">{t("roles.Student")}</option>
+                      </select>
+                    ) : (
+                      <span className="subtle-badge">{user.role}</span>
+                    )}
+                  </td>
+                  <td>
+                    {isEditing ? (
+                      <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
+                        <option value="active">{t("status.active")}</option>
+                        <option value="inactive">{t("status.inactive")}</option>
+                        <option value="paused">{t("status.paused")}</option>
+                      </select>
+                    ) : (
+                      <Status status={user.status} />
+                    )}
+                  </td>
+                  <td>
+                    {isEditing ? <input value={draft.country} onChange={(event) => setDraft((current) => ({ ...current, country: event.target.value }))} placeholder={t("common.country")} /> : user.country || "—"}
+                  </td>
+                  <td>{user.created_at || user.createdAt ? formatDisplayDate(user.created_at || user.createdAt, language) : "—"}</td>
+                  <td>
+                    <div className="table-actions">
+                      {isEditing ? (
+                        <>
+                          <button onClick={() => void saveUser()}>{t("common.save")}</button>
+                          <button onClick={() => setEditingUserId(null)}>{t("common.cancel")}</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => startEditing(user)}>{t("common.edit")}</button>
+                          <button onClick={() => void onUpdateUserStatus(user.id, "Active")}>{t("admin.activate")}</button>
+                          <button onClick={() => void onUpdateUserStatus(user.id, "Inactive")}>{t("admin.deactivate")}</button>
+                          <button onClick={() => void onUpdateUserStatus(user.id, "Paused")}>{t("admin.pause")}</button>
+                          <button className="danger-text" onClick={() => void onDeleteUser(user.id)}>{t("common.delete")}</button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -521,10 +673,30 @@ function ModuleEditor({
       <section className="nested-builder single-video-builder">
         <div className="nested-header">
           <span className="eyebrow">{t("admin.assignment")}</span>
-          <h5>{module.assignment?.title?.trim() || t("admin.noAssignmentAdded")}</h5>
+          <h5>
+            {module.requiresAssignment || module.requires_assignment
+              ? module.assignment?.title?.trim() || t("admin.noAssignmentAdded")
+              : t("common.noAssignmentRequired")}
+          </h5>
         </div>
 
-        {module.assignment ? (
+        <label className="inline-toggle">
+          <input
+            type="checkbox"
+            checked={Boolean(module.requiresAssignment || module.requires_assignment)}
+            onChange={(event) =>
+              updateModule(module.id, (currentModule) => ({
+                ...currentModule,
+                requiresAssignment: event.target.checked,
+                requires_assignment: event.target.checked,
+                assignment: event.target.checked ? currentModule.assignment ?? createAssignmentDraft() : null,
+              }))
+            }
+          />{" "}
+          {t("common.requiresAssignment")}
+        </label>
+
+        {module.requiresAssignment || module.requires_assignment ? (
           <>
             <label>
               {t("admin.assignmentTitle")}
@@ -589,18 +761,25 @@ function ModuleEditor({
             </label>
 
             <div className="row-actions">
-              <button type="button" className="danger-text" onClick={() => disableAssignment(module.id)}>
-                {t("admin.removeAssignment")}
+              <button
+                type="button"
+                className="danger-text"
+                onClick={() =>
+                  updateModule(module.id, (currentModule) => ({
+                    ...currentModule,
+                    requiresAssignment: false,
+                    requires_assignment: false,
+                    assignment: null,
+                  }))
+                }
+              >
+                {t("common.doesNotRequireAssignment")}
               </button>
             </div>
           </>
         ) : (
           <>
-            <p className="empty-copy">{t("admin.noHomeworkYet")}</p>
-            <button type="button" className="secondary-btn" onClick={() => enableAssignment(module.id)}>
-              <Icon name="plus" />
-              {t("admin.addAssignment")}
-            </button>
+            <p className="empty-copy">{t("common.noAssignmentRequired")}</p>
           </>
         )}
       </section>
@@ -713,6 +892,38 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
       setVisibilityError(t("admin.updatingCourseVisibilityFailed"));
     } finally {
       setStatusUpdatingId(null);
+    }
+  };
+
+  const uploadImage = async (file) => {
+    if (!file) return;
+
+    setForm((current) => ({
+      ...current,
+      imageUploading: true,
+      imageError: "",
+      imageLabel: file.name,
+    }));
+
+    try {
+      const uploaded = await uploadCourseImage(file);
+      setForm((current) => ({
+        ...current,
+        imageUploading: false,
+        imageError: "",
+        imageLabel: uploaded.fileName,
+        imageUrl: uploaded.publicUrl,
+        image_url: uploaded.publicUrl,
+        imageStoragePath: uploaded.storagePath,
+        image_storage_path: uploaded.storagePath,
+      }));
+    } catch (error) {
+      console.error("Course image upload failed:", error);
+      setForm((current) => ({
+        ...current,
+        imageUploading: false,
+        imageError: error.message || t("admin.courseImageUploadFailed"),
+      }));
     }
   };
 
@@ -835,6 +1046,19 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
         </label>
 
         <label>
+          {t("common.courseImage")}
+          <input type="file" accept="image/*" onChange={(event) => void uploadImage(event.target.files?.[0])} />
+        </label>
+
+        {form.imageUploading ? <small className="field-note">{t("common.uploading")}</small> : null}
+        {form.imageError ? <small className="field-note danger-text">{form.imageError}</small> : null}
+        {form.image_url || form.imageUrl ? (
+          <div className="image-preview-shell">
+            <img className="course-image-preview" src={form.image_url || form.imageUrl} alt={form.title || "Course image"} />
+          </div>
+        ) : null}
+
+        <label>
           <input type="checkbox" checked={isVisibleToStudents(form.status)} onChange={(event) => updateCourseField("status", event.target.checked ? "published" : "draft")} />{" "}
           {t("common.visibleToStudents")}
         </label>
@@ -893,6 +1117,11 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
             </div>
           </div>
           <div className="preview-shell">
+            {previewCourse.image_url || previewCourse.imageUrl ? (
+              <div className="image-preview-shell">
+                <img className="course-image-preview" src={previewCourse.image_url || previewCourse.imageUrl} alt={previewCourse.title || "Course image"} />
+              </div>
+            ) : null}
             <h3>{previewCourse.title || t("admin.courseTitle")}</h3>
             <p>{previewCourse.description || t("admin.courseDescription")}</p>
             <div className="row-actions">
@@ -918,8 +1147,12 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                       </div>
                       <div className="preview-item">
                         <span className="subtle-badge">{t("common.assignment")}</span>
-                        <strong>{module.assignment?.title || t("admin.noAssignmentAdded")}</strong>
-                        {module.assignment?.dueDate || module.assignment?.due_date ? (
+                        <strong>
+                          {module.requiresAssignment || module.requires_assignment
+                            ? module.assignment?.title || t("admin.noAssignmentAdded")
+                            : t("common.noAssignmentRequired")}
+                        </strong>
+                        {(module.requiresAssignment || module.requires_assignment) && (module.assignment?.dueDate || module.assignment?.due_date) ? (
                           <small>{t("common.due")} {formatDisplayDate(module.assignment?.dueDate || module.assignment?.due_date, language)}</small>
                         ) : null}
                       </div>
@@ -950,6 +1183,11 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
               <article key={course.id}>
                 <div className="course-symbol"><Icon name="courses" /></div>
                 <div className="course-info">
+                  {course.image_url || course.imageUrl ? (
+                    <div className="admin-course-thumb-wrap">
+                      <img className="admin-course-thumb" src={course.image_url || course.imageUrl} alt={course.title} />
+                    </div>
+                  ) : null}
                   <div className="row-actions">
                     <h3>{course.title}</h3>
                     <Status status={course.status || "published"} />
@@ -1198,15 +1436,17 @@ function AssignmentReviewsPage() {
 }
 
 function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCertificate }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const students = users.filter((user) => user.role === "Student");
   const [studentId, setStudentId] = useState(students[0]?.id || "");
   const [courseId, setCourseId] = useState(courses[0]?.id || "");
+  const selectedStudent = students.find((user) => String(user.id) === String(studentId)) ?? students[0] ?? null;
+  const selectedCourse = courses.find((entry) => String(entry.id) === String(courseId)) ?? courses[0] ?? null;
 
   const generate = (event) => {
     event.preventDefault();
-    const student = students.find((user) => user.id === Number(studentId));
-    const course = courses.find((entry) => entry.id === Number(courseId));
+    const student = students.find((user) => String(user.id) === String(studentId));
+    const course = courses.find((entry) => String(entry.id) === String(courseId));
     if (!student || !course) return;
 
     void onGenerateCertificate({
@@ -1251,6 +1491,22 @@ function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCer
           {t("admin.generateCertificate")}
         </button>
       </form>
+
+      <section className="section-card certificate-template-card">
+        <span className="eyebrow">{t("admin.certificateTemplate")}</span>
+        <div className="certificate-template-preview">
+          <span className="eyebrow">NUTRIPRO</span>
+          <h2>{t("student.certificateOfCompletion")}</h2>
+          <p>{t("certificateModal.certifiesThat")}</p>
+          <h3>{selectedStudent?.name || "Maya Laurent"}</h3>
+          <p>{t("certificateModal.successfullyCompleted")}</p>
+          <h4>{selectedCourse?.title || t("common.course")}</h4>
+          <div className="certificate-template-meta">
+            <span>{t("admin.issueDate")}: {formatDisplayDate(new Date().toISOString(), language)}</span>
+            <span>{t("admin.certificateNumber")}: NP-{new Date().getFullYear()}-DEMO</span>
+          </div>
+        </div>
+      </section>
 
       <section className="section-card">
         <div className="section-heading">

@@ -2,6 +2,8 @@ import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { getMockCourses, setMockCourses } from "./mockStore.js";
 import { deleteAssignmentsForModuleIds, getAssignmentsByModuleIds, syncAssignmentsForModules } from "./assignmentService.js";
 
+const OPTIONAL_MODULE_COLUMNS = ["requires_assignment"];
+
 function fileNameFromUrl(url, fallback) {
   if (!url) return fallback;
   try {
@@ -16,6 +18,10 @@ function mapModuleRow(module) {
   const pdfUrl = module.pdf_url ?? module.pdfUrl ?? "";
   const pdfName = module.pdf_file_name ?? module.pdfName ?? module.pdf_label ?? fileNameFromUrl(pdfUrl, "No PDF selected");
   const videoName = module.video_file_name ?? module.videoName ?? module.video_upload_label ?? fileNameFromUrl(videoUrl, "No video selected");
+  const requiresAssignment =
+    module.requires_assignment ??
+    module.requiresAssignment ??
+    Boolean(module.assignment?.title);
 
   return {
     id: module.id,
@@ -23,6 +29,8 @@ function mapModuleRow(module) {
     sortOrder: module.sort_order ?? module.sortOrder ?? 0,
     title: module.title ?? "",
     description: module.description ?? "",
+    requiresAssignment,
+    requires_assignment: requiresAssignment,
     pdfUrl,
     pdf_url: pdfUrl,
     pdfLabel: pdfName,
@@ -47,11 +55,11 @@ function mapModuleRow(module) {
   };
 }
 
-function toModuleRow(courseId, module, index) {
+function toModuleRow(courseId, module, index, allowOptionalColumns = true) {
   const pdfUrl = module.pdf_url ?? module.pdfUrl ?? null;
   const videoUrl = module.video_url ?? module.videoUrl ?? module.video?.url ?? module.video?.link ?? null;
 
-  return {
+  const row = {
     course_id: courseId,
     title: module.title ?? "",
     description: module.description ?? "",
@@ -63,17 +71,47 @@ function toModuleRow(courseId, module, index) {
     pdf_storage_path: module.pdf_storage_path ?? module.pdfStoragePath ?? null,
     video_storage_path: module.video_storage_path ?? module.videoStoragePath ?? null,
   };
+
+  if (allowOptionalColumns) {
+    row.requires_assignment = module.requires_assignment ?? module.requiresAssignment ?? Boolean(module.assignment?.title);
+  }
+
+  return row;
 }
 
 function updateMockModules(courseId, modules) {
-  const nextCourses = getMockCourses().map((course) => course.id === courseId ? { ...course, modules } : course);
+  const nextCourses = getMockCourses().map((course) => (course.id === courseId ? { ...course, modules } : course));
   setMockCourses(nextCourses);
   return modules;
 }
 
+async function insertModuleRows(rows, allowOptionalColumns = true) {
+  const { data, error } = await supabase.from("modules").insert(rows).select("*");
+
+  if (!error) return data ?? [];
+
+  const shouldRetryWithoutOptionalColumns =
+    allowOptionalColumns &&
+    OPTIONAL_MODULE_COLUMNS.some(
+      (column) =>
+        error.message?.includes(`'${column}'`) ||
+        error.message?.includes(`modules.${column}`) ||
+        error.details?.includes(column) ||
+        error.hint?.includes(column),
+    );
+
+  if (shouldRetryWithoutOptionalColumns) {
+    console.warn("Retrying module insert without requires_assignment. Run the matching SQL later to enable it.");
+    const fallbackRows = rows.map(({ requires_assignment, ...rest }) => rest);
+    return insertModuleRows(fallbackRows, false);
+  }
+
+  throw error;
+}
+
 export async function getModulesByCourse(courseId) {
   if (!isSupabaseConfigured) {
-    const course = getMockCourses().find((entry) => entry.id === courseId);
+    const course = getMockCourses().find((entry) => String(entry.id) === String(courseId));
     return course?.modules ?? [];
   }
 
@@ -137,19 +175,12 @@ export async function replaceModulesForCourse(courseId, modules) {
 
   const rows = modules.map((module, index) => toModuleRow(courseId, module, index + 1));
   console.log("Final module object sent to Supabase:", rows);
-  const { data, error } = await supabase
-    .from("modules")
-    .insert(rows)
-    .select("*");
 
-  if (error) {
-    console.error("Failed to insert modules in Supabase:", error);
-    throw error;
-  }
-
+  const data = await insertModuleRows(rows);
   const mapped = (data ?? []).map(mapModuleRow);
   const modulesWithAssignments = await syncAssignmentsForModules(mapped, modules);
   console.log("Created module response:", mapped);
+
   modulesWithAssignments.forEach((module, index) => {
     const source = modules[index];
     const sourcePdfUrl = source?.pdf_url || source?.pdfUrl;
@@ -157,5 +188,6 @@ export async function replaceModulesForCourse(courseId, modules) {
     if (sourcePdfUrl && !module.pdf_url) console.error("Module save succeeded but pdf_url is missing:", module);
     if (sourceVideoUrl && !module.video_url) console.error("Module save succeeded but video_url is missing:", module);
   });
+
   return modulesWithAssignments;
 }

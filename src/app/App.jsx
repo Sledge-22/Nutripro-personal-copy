@@ -11,7 +11,15 @@ import { ROUTES, isAdminRoute, isStudentRoute } from "../routes/appRoutes.js";
 import { LoginPage } from "../pages/LoginPage.jsx";
 import { AdminWorkspacePage } from "../pages/AdminWorkspacePage.jsx";
 import { StudentWorkspacePage } from "../pages/StudentWorkspacePage.jsx";
-import { DEMO_STUDENT_EMAIL, ensureDemoStudent, getUsers, updateUserStatus, deleteUser } from "../services/userService.js";
+import {
+  DEMO_STUDENT_EMAIL,
+  ensureDemoStudent,
+  getUsers,
+  updateUserStatus,
+  deleteUser,
+  updateUser,
+  updateStudentProfile,
+} from "../services/userService.js";
 import {
   getCourses,
   createCourse,
@@ -23,7 +31,7 @@ import {
 } from "../services/courseService.js";
 import { getCertificates, generateCertificate, getStudentCertificates } from "../services/certificateService.js";
 import { getStudentProgress, updateStudentProgress } from "../services/progressService.js";
-import { getCommunityPosts, createCommunityPost } from "../services/communityService.js";
+import { getCommunityPosts, createCommunityPost, createCommunityComment } from "../services/communityService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 
 function getPathname() {
@@ -170,6 +178,7 @@ export function App() {
 
   const studentNav = useMemo(() => ([
     { path: ROUTES.student.dashboard, label: t("common.dashboard"), icon: "dashboard" },
+    { path: ROUTES.student.profile, label: t("common.myProfile"), icon: "users" },
     { path: ROUTES.student.certificates, label: t("common.certificates"), icon: "certificate" },
     { path: ROUTES.student.courses, label: t("common.courses"), icon: "courses" },
     { path: ROUTES.student.community, label: t("common.community"), icon: "community" },
@@ -183,6 +192,7 @@ export function App() {
       [ROUTES.admin.assignmentReviews]: t("common.assignmentReviews"),
       [ROUTES.admin.certificates]: t("common.certificatesGenerator"),
       [ROUTES.student.dashboard]: t("common.dashboard"),
+      [ROUTES.student.profile]: t("common.myProfile"),
       [ROUTES.student.certificates]: t("common.certificates"),
       [ROUTES.student.courses]: t("common.courses"),
       [ROUTES.student.community]: t("common.community"),
@@ -205,6 +215,11 @@ export function App() {
 
   async function handleUpdateUserStatus(userId, status) {
     await updateUserStatus(userId, status);
+    setUsers(await getUsers());
+  }
+
+  async function handleUpdateUser(userId, updates) {
+    await updateUser(userId, updates);
     setUsers(await getUsers());
   }
 
@@ -284,6 +299,27 @@ export function App() {
     setPosts(await getCommunityPosts());
   }
 
+  async function handleCreateComment(postId, payload) {
+    await createCommunityComment(postId, payload);
+    setPosts(await getCommunityPosts());
+  }
+
+  async function handleUpdateStudentProfile(updates) {
+    if (!demoStudentId) return { ok: false, error: t("student.demoStudentMissing") };
+
+    try {
+      const savedProfile = await updateStudentProfile(demoStudentId, updates);
+      const nextUsers = await getUsers();
+      setUsers(nextUsers);
+      setDemoStudent(savedProfile ?? nextUsers.find((user) => String(user.id) === String(demoStudentId)) ?? demoStudent);
+      setPosts(await getCommunityPosts());
+      return { ok: true, profile: savedProfile };
+    } catch (error) {
+      console.error("Updating the student profile failed:", error);
+      return { ok: false, error: formatSupabaseError(error, t("student.savingProfileFailed")) };
+    }
+  }
+
   async function handleUpdateProgress(updates) {
     if (!demoStudentId) {
       console.error("Student progress update failed because the Maya Laurent demo student user is missing.");
@@ -296,5 +332,5 @@ export function App() {
 
   if (!role) return <LoginPage onChoose={handleLogin} />;
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={handleLogout} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} onUpdateUserStatus={handleUpdateUserStatus} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={demoStudentId} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={handleLogout} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={role === "Admin" ? users.find((user) => user.role === "Admin") : demoStudent} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={demoStudentId} studentProfile={demoStudent} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }
