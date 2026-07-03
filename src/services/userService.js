@@ -1,12 +1,43 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
-import { getMockUsers, setMockUsers } from "./mockStore.js";
+import { createMockId, getMockUsers, setMockUsers } from "./mockStore.js";
 
 export const DEMO_STUDENT_NAME = "Maya Laurent";
 export const DEMO_STUDENT_EMAIL = "maya@nutripro.demo";
 
 const DEMO_STUDENT_ROLE = "student";
 const DEMO_STUDENT_STATUS = "active";
-const OPTIONAL_USER_COLUMNS = ["profile_picture_url", "country", "bio"];
+const DEFAULT_ADMIN_USER_FUNCTION = "admin-user-management";
+const ADMIN_USER_FUNCTION =
+  import.meta.env.VITE_SUPABASE_ADMIN_FUNCTION_NAME?.trim() || DEFAULT_ADMIN_USER_FUNCTION;
+
+const OPTIONAL_USER_COLUMNS = [
+  "username",
+  "profile_picture_url",
+  "country",
+  "bio",
+  "must_change_password",
+  "password_updated_at",
+  "last_login_at",
+  "updated_at",
+];
+
+function normalizeOptionalString(value) {
+  const normalizedValue = `${value ?? ""}`.trim();
+  return normalizedValue || "";
+}
+
+function normalizeRoleValue(value, fallback = "student") {
+  const normalizedValue = `${value ?? fallback}`.trim().toLowerCase();
+  if (["admin", "student", "instructor", "support"].includes(normalizedValue)) return normalizedValue;
+  return fallback;
+}
+
+function normalizeStatusValue(value, fallback = "active") {
+  const normalizedValue = `${value ?? fallback}`.trim().toLowerCase();
+  if (normalizedValue === "paused") return "suspended";
+  if (["active", "inactive", "suspended"].includes(normalizedValue)) return normalizedValue;
+  return fallback;
+}
 
 function toDisplayCase(value, fallback) {
   const normalizedValue = `${value ?? fallback}`.trim();
@@ -14,24 +45,52 @@ function toDisplayCase(value, fallback) {
   return normalizedValue.charAt(0).toUpperCase() + normalizedValue.slice(1).toLowerCase();
 }
 
-function normalizeOptionalString(value) {
-  const normalizedValue = `${value ?? ""}`.trim();
-  return normalizedValue || "";
+function toDisplayRole(role) {
+  return toDisplayCase(normalizeRoleValue(role), "Student");
 }
 
-function normalizeUser(row) {
+function toDisplayStatus(status) {
+  return toDisplayCase(normalizeStatusValue(status), "Active");
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function createTemporaryPassword(length = 14) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*";
+  return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+}
+
+function normalizeUser(row = {}) {
+  const role = normalizeRoleValue(row.role ?? row.user_role ?? "student");
+  const status = normalizeStatusValue(row.status ?? "active");
+  const mustChangePassword = Boolean(row.must_change_password ?? row.mustChangePassword ?? false);
+  const profilePictureUrl = row.profile_picture_url ?? row.profilePictureUrl ?? "";
+
   return {
     id: row.id,
     name: row.name ?? row.full_name ?? row.display_name ?? "Unknown user",
     email: row.email ?? "",
-    status: toDisplayCase(row.status, "Active"),
-    role: toDisplayCase(row.role ?? row.user_role, "Student"),
+    username: row.username ?? "",
+    role: toDisplayRole(role),
+    roleKey: role,
+    status: toDisplayStatus(status),
+    statusKey: status,
     country: normalizeOptionalString(row.country),
     bio: normalizeOptionalString(row.bio),
-    profilePictureUrl: row.profile_picture_url ?? row.profilePictureUrl ?? "",
-    profile_picture_url: row.profile_picture_url ?? row.profilePictureUrl ?? "",
+    profilePictureUrl,
+    profile_picture_url: profilePictureUrl,
+    mustChangePassword,
+    must_change_password: mustChangePassword,
+    passwordUpdatedAt: row.password_updated_at ?? row.passwordUpdatedAt ?? "",
+    password_updated_at: row.password_updated_at ?? row.passwordUpdatedAt ?? "",
+    lastLoginAt: row.last_login_at ?? row.lastLoginAt ?? "",
+    last_login_at: row.last_login_at ?? row.lastLoginAt ?? "",
     createdAt: row.created_at ?? row.createdAt ?? "",
     created_at: row.created_at ?? row.createdAt ?? "",
+    updatedAt: row.updated_at ?? row.updatedAt ?? "",
+    updated_at: row.updated_at ?? row.updatedAt ?? "",
   };
 }
 
@@ -39,19 +98,31 @@ function normalizeUserUpdate(updates = {}) {
   const payload = {};
 
   if ("name" in updates) payload.name = normalizeOptionalString(updates.name) || null;
-  if ("role" in updates) payload.role = `${updates.role ?? ""}`.trim().toLowerCase() || null;
-  if ("status" in updates) payload.status = `${updates.status ?? ""}`.trim().toLowerCase() || null;
+  if ("email" in updates) payload.email = normalizeOptionalString(updates.email).toLowerCase() || null;
+  if ("username" in updates) payload.username = normalizeOptionalString(updates.username).toLowerCase() || null;
+  if ("role" in updates) payload.role = normalizeRoleValue(updates.role);
+  if ("status" in updates) payload.status = normalizeStatusValue(updates.status);
   if ("country" in updates) payload.country = normalizeOptionalString(updates.country) || null;
   if ("bio" in updates) payload.bio = normalizeOptionalString(updates.bio) || null;
+  if ("must_change_password" in updates || "mustChangePassword" in updates) {
+    payload.must_change_password = Boolean(updates.must_change_password ?? updates.mustChangePassword);
+  }
   if ("profile_picture_url" in updates || "profilePictureUrl" in updates) {
-    payload.profile_picture_url = normalizeOptionalString(updates.profile_picture_url ?? updates.profilePictureUrl) || null;
+    payload.profile_picture_url = normalizeOptionalString(
+      updates.profile_picture_url ?? updates.profilePictureUrl,
+    ) || null;
   }
 
+  payload.updated_at = nowIso();
   return payload;
 }
 
 function findDemoStudent(users = []) {
-  return users.find((user) => user.email?.toLowerCase() === DEMO_STUDENT_EMAIL || user.name === DEMO_STUDENT_NAME) ?? null;
+  return (
+    users.find((user) => user.email?.toLowerCase() === DEMO_STUDENT_EMAIL) ??
+    users.find((user) => user.name === DEMO_STUDENT_NAME) ??
+    null
+  );
 }
 
 function updateMockUsers(userId, updater) {
@@ -60,7 +131,7 @@ function updateMockUsers(userId, updater) {
   return users.find((user) => String(user.id) === String(userId)) ?? null;
 }
 
-async function runUserMutationWithFallback(operation, payload, attempt = 0) {
+async function runUserMutationWithOptionalColumnRetry(operation, payload, attempt = 0) {
   const { data, error } = await operation(payload);
   if (!error) return data;
 
@@ -76,31 +147,102 @@ async function runUserMutationWithFallback(operation, payload, attempt = 0) {
   if (columnName && attempt < OPTIONAL_USER_COLUMNS.length) {
     const nextPayload = { ...payload };
     delete nextPayload[columnName];
-    console.warn(`Retrying user mutation without optional column ${columnName}. Run the matching SQL later to enable it.`);
-    return runUserMutationWithFallback(operation, nextPayload, attempt + 1);
+    console.warn(`Retrying user mutation without optional column ${columnName}. Run the auth setup SQL to enable it.`);
+    return runUserMutationWithOptionalColumnRetry(operation, nextPayload, attempt + 1);
   }
 
   throw error;
 }
 
-export async function getUsers() {
-  if (!isSupabaseConfigured) return getMockUsers().map(normalizeUser);
+function buildMockUser(payload, existingId = null) {
+  const users = getMockUsers();
+  const id = existingId ?? createMockId(users);
+  return {
+    id,
+    name: payload.name ?? "New user",
+    email: payload.email ?? "",
+    username: payload.username ?? "",
+    role: toDisplayRole(payload.role),
+    status: toDisplayStatus(payload.status),
+    country: payload.country ?? "",
+    bio: payload.bio ?? "",
+    profile_picture_url: payload.profile_picture_url ?? "",
+    must_change_password: Boolean(payload.must_change_password),
+    password_updated_at: payload.password_updated_at ?? "",
+    last_login_at: payload.last_login_at ?? "",
+    created_at: payload.created_at ?? nowIso(),
+    updated_at: payload.updated_at ?? nowIso(),
+  };
+}
 
-  try {
-    const { data, error } = await supabase.from("users").select("*").order("id", { ascending: true });
-    if (error) throw error;
-    return (data ?? []).map(normalizeUser);
-  } catch (error) {
-    console.error("Loading users from Supabase failed. Falling back to mock users:", error);
-    return getMockUsers().map(normalizeUser);
+async function invokeAdminUserFunction(body) {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("Supabase is not configured.");
   }
+
+  const { data, error } = await supabase.functions.invoke(ADMIN_USER_FUNCTION, {
+    body,
+  });
+
+  if (error) {
+    console.error("Admin user function invocation failed:", error);
+    throw error;
+  }
+
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  return data ?? {};
+}
+
+export async function resolveLoginEmail(identifier) {
+  const normalizedIdentifier = normalizeOptionalString(identifier).toLowerCase();
+  if (!normalizedIdentifier) {
+    throw new Error("Email or username is required.");
+  }
+
+  if (normalizedIdentifier.includes("@")) return normalizedIdentifier;
+
+  if (!isSupabaseConfigured || !supabase) {
+    const user = getMockUsers().find((entry) => entry.username?.toLowerCase() === normalizedIdentifier);
+    if (!user?.email) throw new Error("No user found with that username.");
+    return user.email.toLowerCase();
+  }
+
+  const { data, error } = await supabase.rpc("resolve_login_email", {
+    login_identifier: normalizedIdentifier,
+  });
+
+  if (error) {
+    console.error("Resolving the login email by username failed:", error);
+    throw error;
+  }
+
+  if (!data) {
+    throw new Error("No user found with that email or username.");
+  }
+
+  return `${data}`.trim().toLowerCase();
+}
+
+export async function getUsers() {
+  if (!isSupabaseConfigured || !supabase) return getMockUsers().map(normalizeUser);
+
+  const { data, error } = await supabase.from("users").select("*").order("created_at", { ascending: false });
+  if (error) {
+    console.error("Loading users from Supabase failed:", error);
+    throw error;
+  }
+
+  return (data ?? []).map(normalizeUser);
 }
 
 export async function getUserById(userId) {
   if (!userId) return null;
 
-  if (!isSupabaseConfigured) {
-    const user = getMockUsers().find((user) => String(user.id) === String(userId)) ?? null;
+  if (!isSupabaseConfigured || !supabase) {
+    const user = getMockUsers().find((entry) => String(entry.id) === String(userId)) ?? null;
     return user ? normalizeUser(user) : null;
   }
 
@@ -113,54 +255,134 @@ export async function getUserById(userId) {
   return data ? normalizeUser(data) : null;
 }
 
-export async function updateUserStatus(userId, status) {
-  const nextStatus = `${status ?? ""}`.trim().toLowerCase();
+export async function getUserByUsername(username) {
+  const normalizedUsername = normalizeOptionalString(username).toLowerCase();
+  if (!normalizedUsername) return null;
 
-  if (!isSupabaseConfigured) {
-    return normalizeUser(updateMockUsers(userId, (user) => ({ ...user, status: toDisplayCase(nextStatus, "Active") })));
+  if (!isSupabaseConfigured || !supabase) {
+    const user = getMockUsers().find((entry) => entry.username?.toLowerCase() === normalizedUsername) ?? null;
+    return user ? normalizeUser(user) : null;
   }
 
-  try {
-    const data = await runUserMutationWithFallback(
-      (payload) =>
-        supabase
-          .from("users")
-          .update(payload)
-          .eq("id", userId)
-          .select("*")
-          .single(),
-      { status: nextStatus },
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("username", normalizedUsername)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Loading the selected username failed:", error);
+    throw error;
+  }
+
+  return data ? normalizeUser(data) : null;
+}
+
+export async function getUserProfileForAuthUser(authUser) {
+  if (!authUser?.id) return null;
+
+  if (!isSupabaseConfigured || !supabase) {
+    const existingUser =
+      getMockUsers().find((entry) => entry.email?.toLowerCase() === authUser.email?.toLowerCase()) ?? null;
+    return existingUser ? normalizeUser(existingUser) : null;
+  }
+
+  const { data: profileById, error: byIdError } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", authUser.id)
+    .maybeSingle();
+
+  if (byIdError) {
+    if (byIdError.message?.toLowerCase().includes("invalid input syntax")) {
+      throw new Error(
+        "The public.users id column is not aligned with auth.users.id. Run the UUID alignment migration before using real auth.",
+      );
+    }
+    console.error("Loading the signed-in profile by auth id failed:", byIdError);
+    throw byIdError;
+  }
+
+  if (profileById) return normalizeUser(profileById);
+
+  const authEmail = normalizeOptionalString(authUser.email).toLowerCase();
+  if (!authEmail) {
+    throw new Error("The signed-in auth user does not have an email address.");
+  }
+
+  const { data: profileByEmail, error: byEmailError } = await supabase
+    .from("users")
+    .select("*")
+    .eq("email", authEmail)
+    .limit(1)
+    .maybeSingle();
+
+  if (byEmailError) {
+    console.error("Loading the signed-in profile by email failed:", byEmailError);
+    throw byEmailError;
+  }
+
+  if (profileByEmail && String(profileByEmail.id) !== String(authUser.id)) {
+    throw new Error(
+      "The public.users profile id does not match auth.users.id for this account. Run the user id alignment migration before using real auth.",
     );
-
-    return normalizeUser(data);
-  } catch (error) {
-    console.error("Updating the user status in Supabase failed. Falling back to mock data:", error);
-    return normalizeUser(updateMockUsers(userId, (user) => ({ ...user, status: toDisplayCase(nextStatus, "Active") })));
   }
+
+  if (!profileByEmail) {
+    throw new Error("No public.users profile was found for this authenticated account.");
+  }
+
+  return normalizeUser(profileByEmail);
+}
+
+export async function updateUserStatus(userId, status) {
+  const nextStatus = normalizeStatusValue(status);
+
+  if (!isSupabaseConfigured || !supabase) {
+    return normalizeUser(
+      updateMockUsers(userId, (user) => ({
+        ...user,
+        status: toDisplayStatus(nextStatus),
+        updated_at: nowIso(),
+      })),
+    );
+  }
+
+  const data = await runUserMutationWithOptionalColumnRetry(
+    (payload) =>
+      supabase.from("users").update(payload).eq("id", userId).select("*").single(),
+    {
+      status: nextStatus,
+      updated_at: nowIso(),
+    },
+  );
+
+  return normalizeUser(data);
 }
 
 export async function updateUser(userId, updates = {}) {
   const payload = normalizeUserUpdate(updates);
 
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured || !supabase) {
     return normalizeUser(
-      updateMockUsers(userId, (user) => ({
-        ...user,
-        ...payload,
-        status: payload.status ? toDisplayCase(payload.status, user.status ?? "Active") : user.status,
-        role: payload.role ? toDisplayCase(payload.role, user.role ?? "Student") : user.role,
-      })),
+      updateMockUsers(userId, (user) => {
+        const nextRole = "role" in payload ? payload.role : normalizeRoleValue(user.role, "student");
+        const nextStatus = "status" in payload ? payload.status : normalizeStatusValue(user.status, "active");
+        return {
+          ...user,
+          ...payload,
+          role: toDisplayRole(nextRole),
+          status: toDisplayStatus(nextStatus),
+          updated_at: nowIso(),
+        };
+      }),
     );
   }
 
-  const data = await runUserMutationWithFallback(
+  const data = await runUserMutationWithOptionalColumnRetry(
     (nextPayload) =>
-      supabase
-        .from("users")
-        .update(nextPayload)
-        .eq("id", userId)
-        .select("*")
-        .single(),
+      supabase.from("users").update(nextPayload).eq("id", userId).select("*").single(),
     payload,
   );
 
@@ -171,22 +393,150 @@ export async function updateStudentProfile(studentId, updates = {}) {
   return updateUser(studentId, updates);
 }
 
+export async function recordUserLogin(userId) {
+  if (!userId) return null;
+
+  if (!isSupabaseConfigured || !supabase) {
+    return normalizeUser(
+      updateMockUsers(userId, (user) => ({
+        ...user,
+        last_login_at: nowIso(),
+        updated_at: nowIso(),
+      })),
+    );
+  }
+
+  const data = await runUserMutationWithOptionalColumnRetry(
+    (payload) =>
+      supabase.from("users").update(payload).eq("id", userId).select("*").single(),
+    {
+      last_login_at: nowIso(),
+      updated_at: nowIso(),
+    },
+  );
+
+  return normalizeUser(data);
+}
+
+export async function markPasswordChanged(userId) {
+  if (!userId) return null;
+
+  if (!isSupabaseConfigured || !supabase) {
+    return normalizeUser(
+      updateMockUsers(userId, (user) => ({
+        ...user,
+        must_change_password: false,
+        password_updated_at: nowIso(),
+        updated_at: nowIso(),
+      })),
+    );
+  }
+
+  const data = await runUserMutationWithOptionalColumnRetry(
+    (payload) =>
+      supabase.from("users").update(payload).eq("id", userId).select("*").single(),
+    {
+      must_change_password: false,
+      password_updated_at: nowIso(),
+      updated_at: nowIso(),
+    },
+  );
+
+  return normalizeUser(data);
+}
+
+export async function createAdminUser(payload = {}) {
+  const normalizedPayload = {
+    name: normalizeOptionalString(payload.name),
+    email: normalizeOptionalString(payload.email).toLowerCase(),
+    username: normalizeOptionalString(payload.username).toLowerCase(),
+    role: normalizeRoleValue(payload.role),
+    status: normalizeStatusValue(payload.status),
+    country: normalizeOptionalString(payload.country) || null,
+    bio: normalizeOptionalString(payload.bio) || null,
+    profile_picture_url: normalizeOptionalString(payload.profile_picture_url ?? payload.profilePictureUrl) || null,
+    must_change_password: true,
+  };
+
+  if (!normalizedPayload.name || !normalizedPayload.email || !normalizedPayload.username) {
+    throw new Error("Name, email, and username are required.");
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    const temporaryPassword = createTemporaryPassword();
+    const nextUser = buildMockUser(
+      {
+        ...normalizedPayload,
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      },
+      null,
+    );
+
+    setMockUsers([nextUser, ...getMockUsers()]);
+    return {
+      user: normalizeUser(nextUser),
+      temporaryPassword,
+    };
+  }
+
+  const response = await invokeAdminUserFunction({
+    action: "create-user",
+    user: normalizedPayload,
+  });
+
+  return {
+    user: normalizeUser(response.user ?? {}),
+    temporaryPassword: response.temporaryPassword ?? "",
+  };
+}
+
+export async function resetAdminUserPassword(userId) {
+  if (!userId) {
+    throw new Error("A valid user id is required to reset the password.");
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    const user = updateMockUsers(userId, (entry) => ({
+      ...entry,
+      must_change_password: true,
+      updated_at: nowIso(),
+    }));
+
+    return {
+      user: normalizeUser(user ?? {}),
+      temporaryPassword: createTemporaryPassword(),
+    };
+  }
+
+  const response = await invokeAdminUserFunction({
+    action: "reset-user-password",
+    userId,
+  });
+
+  return {
+    user: normalizeUser(response.user ?? {}),
+    temporaryPassword: response.temporaryPassword ?? "",
+  };
+}
+
 export async function ensureDemoStudent() {
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured || !supabase) {
     const mockUsers = getMockUsers();
     const existingUser = findDemoStudent(mockUsers);
     if (existingUser) return normalizeUser(existingUser);
 
-    const nextUser = {
-      id: Math.max(0, ...mockUsers.map((user) => user.id ?? 0)) + 1,
+    const nextUser = buildMockUser({
       name: DEMO_STUDENT_NAME,
       email: DEMO_STUDENT_EMAIL,
+      username: "maya",
       role: DEMO_STUDENT_ROLE,
       status: DEMO_STUDENT_STATUS,
       country: "",
       bio: "",
       profile_picture_url: "",
-    };
+      must_change_password: false,
+    });
 
     setMockUsers([...mockUsers, nextUser]);
     return normalizeUser(nextUser);
@@ -203,16 +553,19 @@ export async function ensureDemoStudent() {
 
   console.error("Maya Laurent was missing in Supabase users. Creating the demo student now.");
 
-  const dataRow = await runUserMutationWithFallback(
+  const dataRow = await runUserMutationWithOptionalColumnRetry(
     (payload) => supabase.from("users").insert([payload]).select("*").single(),
     {
       name: DEMO_STUDENT_NAME,
       email: DEMO_STUDENT_EMAIL,
+      username: "maya",
       role: DEMO_STUDENT_ROLE,
       status: DEMO_STUDENT_STATUS,
       country: null,
       bio: null,
       profile_picture_url: null,
+      must_change_password: false,
+      updated_at: nowIso(),
     },
   );
 
@@ -220,18 +573,16 @@ export async function ensureDemoStudent() {
 }
 
 export async function deleteUser(userId) {
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured || !supabase) {
     setMockUsers(getMockUsers().filter((user) => String(user.id) !== String(userId)));
     return true;
   }
 
-  try {
-    const { error } = await supabase.from("users").delete().eq("id", userId);
-    if (error) throw error;
-    return true;
-  } catch (error) {
-    console.error("Deleting the user in Supabase failed. Falling back to mock cleanup:", error);
-    setMockUsers(getMockUsers().filter((user) => String(user.id) !== String(userId)));
-    return true;
+  const { error } = await supabase.from("users").delete().eq("id", userId);
+  if (error) {
+    console.error("Deleting the user profile in Supabase failed:", error);
+    throw error;
   }
+
+  return true;
 }

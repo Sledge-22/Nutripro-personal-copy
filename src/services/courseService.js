@@ -195,6 +195,9 @@ async function syncVisibilityEnrollment(courseId, status) {
 async function syncPublishedCoursesForDemoStudent(studentId) {
   if (!isSupabaseConfigured || !studentId) return;
 
+  const demoStudentId = (await ensureDemoStudent())?.id ?? null;
+  if (!demoStudentId || String(demoStudentId) !== String(studentId)) return;
+
   const { data: publishedCourses, error: publishedCoursesError } = await supabase
     .from("courses")
     .select("id")

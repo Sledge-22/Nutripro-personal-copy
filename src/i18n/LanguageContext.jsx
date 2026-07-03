@@ -46,6 +46,15 @@ function normalizeStatusKey(status) {
     .replace(/\s+/g, "_");
 }
 
+function normalizeRoleKey(role) {
+  const normalizedRole = String(role ?? "").trim().toLowerCase();
+  if (normalizedRole === "admin") return "admin";
+  if (normalizedRole === "student") return "student";
+  if (normalizedRole === "instructor") return "instructor";
+  if (normalizedRole === "support") return "support";
+  return String(role ?? "");
+}
+
 function getInitialLanguage() {
   if (typeof window === "undefined") return DEFAULT_LANGUAGE;
 
@@ -76,7 +85,7 @@ export function LanguageProvider({ children }) {
       setLanguage: (nextLanguage) => setLanguageState(nextLanguage === "en" ? "en" : "es"),
       t: translate,
       translateStatus: (status) => translate(`status.${normalizeStatusKey(status)}`) || status,
-      translateRole: (role) => translate(`roles.${role}`) || role,
+      translateRole: (role) => translate(`roles.${normalizeRoleKey(role)}`) || role,
       translateSubmissionType: (submissionType) =>
         translate(`submissionTypes.${normalizeStatusKey(submissionType)}`) || submissionType,
     };

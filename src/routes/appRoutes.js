@@ -1,5 +1,9 @@
 export const ROUTES = {
   login: "/",
+  auth: {
+    changePassword: "/auth/change-password",
+    access: "/auth/access",
+  },
   admin: {
     dashboard: "/admin",
     users: "/admin/users",
@@ -23,4 +27,8 @@ export function isAdminRoute(pathname) {
 
 export function isStudentRoute(pathname) {
   return pathname.startsWith("/student");
+}
+
+export function isAuthUtilityRoute(pathname) {
+  return pathname.startsWith("/auth/");
 }

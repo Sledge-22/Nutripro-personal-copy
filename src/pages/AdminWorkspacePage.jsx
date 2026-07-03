@@ -228,6 +228,19 @@ function createReviewDraft(submission = null) {
   };
 }
 
+function createUserDraft() {
+  return {
+    name: "",
+    email: "",
+    username: "",
+    role: "student",
+    status: "active",
+    country: "",
+    bio: "",
+    profile_picture_url: "",
+  };
+}
+
 export function AdminWorkspacePage({
   pathname,
   users,
@@ -235,6 +248,8 @@ export function AdminWorkspacePage({
   certificates,
   onUpdateUserStatus,
   onUpdateUser,
+  onCreateUser,
+  onResetUserPassword,
   onDeleteUser,
   onSaveCourse,
   onDeleteCourse,
@@ -243,10 +258,12 @@ export function AdminWorkspacePage({
 }) {
   if (pathname === "/admin/users") {
     return (
-      <UsersAdminPage
+      <UsersAdminPanel
         users={users}
         onUpdateUserStatus={onUpdateUserStatus}
         onUpdateUser={onUpdateUser}
+        onCreateUser={onCreateUser}
+        onResetUserPassword={onResetUserPassword}
         onDeleteUser={onDeleteUser}
       />
     );
@@ -462,6 +479,311 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
         </table>
       </div>
     </section>
+  );
+}
+
+function UsersAdminPanel({ users, onUpdateUserStatus, onUpdateUser, onCreateUser, onResetUserPassword }) {
+  const { t, language, translateRole } = useLanguage();
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [editingUserId, setEditingUserId] = useState(null);
+  const [draft, setDraft] = useState(createUserDraft());
+  const [createDraftState, setCreateDraftState] = useState(createUserDraft());
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [passwordOwner, setPasswordOwner] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [resettingUserId, setResettingUserId] = useState(null);
+
+  const filteredUsers = users.filter((user) => {
+    const matchesSearch =
+      !search ||
+      user.name?.toLowerCase().includes(search.toLowerCase()) ||
+      user.email?.toLowerCase().includes(search.toLowerCase()) ||
+      user.username?.toLowerCase().includes(search.toLowerCase());
+    const matchesRole = roleFilter === "all" || (user.roleKey ?? user.role?.toLowerCase()) === roleFilter;
+    const matchesStatus = statusFilter === "all" || (user.statusKey ?? user.status?.toLowerCase()) === statusFilter;
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+
+  const startEditing = (user) => {
+    setEditingUserId(user.id);
+    setDraft({
+      name: user.name || "",
+      email: user.email || "",
+      username: user.username || "",
+      role: user.roleKey || user.role?.toLowerCase() || "student",
+      status: user.statusKey || user.status?.toLowerCase() || "active",
+      country: user.country || "",
+      bio: user.bio || "",
+      profile_picture_url: user.profile_picture_url || user.profilePictureUrl || "",
+    });
+    setMessage("");
+    setError("");
+  };
+
+  const saveUser = async () => {
+    if (!editingUserId) return;
+    setSaving(true);
+    setMessage("");
+    setError("");
+
+    try {
+      await onUpdateUser(editingUserId, draft);
+      setEditingUserId(null);
+      setMessage(t("admin.userSaved"));
+    } catch (saveError) {
+      console.error("Saving the admin user edit failed:", saveError);
+      setError(saveError.message || t("admin.savingUserFailed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const createUser = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    setError("");
+    setTemporaryPassword("");
+    setPasswordOwner("");
+
+    try {
+      const result = await onCreateUser(createDraftState);
+      setCreateDraftState(createUserDraft());
+      setMessage(t("auth.userCreatedSuccessfully"));
+      setTemporaryPassword(result?.temporaryPassword || "");
+      setPasswordOwner(result?.user?.email || result?.user?.name || "");
+    } catch (createError) {
+      console.error("Creating the admin-managed user failed:", createError);
+      setError(createError.message || t("auth.userCreateFailed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetPassword = async (user) => {
+    setResettingUserId(user.id);
+    setMessage("");
+    setError("");
+    setTemporaryPassword("");
+    setPasswordOwner("");
+
+    try {
+      const result = await onResetUserPassword(user.id);
+      setMessage(t("auth.passwordResetSuccess"));
+      setTemporaryPassword(result?.temporaryPassword || "");
+      setPasswordOwner(user.email || user.name || "");
+    } catch (resetError) {
+      console.error("Resetting the admin-managed password failed:", resetError);
+      setError(resetError.message || t("auth.passwordResetFailed"));
+    } finally {
+      setResettingUserId(null);
+    }
+  };
+
+  const copyTemporaryPassword = async () => {
+    if (!temporaryPassword) return;
+    await navigator.clipboard.writeText(temporaryPassword);
+    setMessage(t("auth.passwordCopied"));
+  };
+
+  return (
+    <div className="stack-layout">
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{t("admin.userManagement")}</span>
+            <h2>{t("auth.newUser")}</h2>
+            <p>{t("admin.manageAccess")}</p>
+          </div>
+          <span className="count-badge">{t("admin.usersCount", { count: filteredUsers.length })}</span>
+        </div>
+
+        <form className="admin-user-form-grid" onSubmit={(event) => void createUser(event)}>
+          <label>
+            {t("auth.name")}
+            <input value={createDraftState.name} onChange={(event) => setCreateDraftState((current) => ({ ...current, name: event.target.value }))} required />
+          </label>
+          <label>
+            {t("auth.email")}
+            <input type="email" value={createDraftState.email} onChange={(event) => setCreateDraftState((current) => ({ ...current, email: event.target.value }))} required />
+          </label>
+          <label>
+            {t("auth.username")}
+            <input value={createDraftState.username} onChange={(event) => setCreateDraftState((current) => ({ ...current, username: event.target.value }))} required />
+          </label>
+          <label>
+            {t("auth.role")}
+            <select value={createDraftState.role} onChange={(event) => setCreateDraftState((current) => ({ ...current, role: event.target.value }))}>
+              <option value="student">{translateRole("student")}</option>
+              <option value="admin">{translateRole("admin")}</option>
+              <option value="instructor">{translateRole("instructor")}</option>
+              <option value="support">{translateRole("support")}</option>
+            </select>
+          </label>
+          <label>
+            {t("auth.status")}
+            <select value={createDraftState.status} onChange={(event) => setCreateDraftState((current) => ({ ...current, status: event.target.value }))}>
+              <option value="active">{t("status.active")}</option>
+              <option value="inactive">{t("status.inactive")}</option>
+              <option value="suspended">{t("status.suspended")}</option>
+            </select>
+          </label>
+          <label>
+            {t("auth.country")}
+            <input value={createDraftState.country} onChange={(event) => setCreateDraftState((current) => ({ ...current, country: event.target.value }))} />
+          </label>
+          <label className="wide-field">
+            {t("auth.bio")}
+            <textarea rows="3" value={createDraftState.bio} onChange={(event) => setCreateDraftState((current) => ({ ...current, bio: event.target.value }))} />
+          </label>
+          <label className="wide-field">
+            {t("common.profilePicture")}
+            <input value={createDraftState.profile_picture_url} onChange={(event) => setCreateDraftState((current) => ({ ...current, profile_picture_url: event.target.value }))} placeholder="https://..." />
+          </label>
+
+          <div className="form-actions">
+            <button type="submit" className="primary-btn" disabled={saving}>
+              {saving ? t("common.saving") : t("auth.saveUser")}
+            </button>
+          </div>
+        </form>
+
+        {message ? <small className="field-note">{message}</small> : null}
+        {error ? <small className="field-note danger-text">{error}</small> : null}
+
+        {temporaryPassword ? (
+          <div className="credential-card">
+            <strong>{t("auth.temporaryPassword")}</strong>
+            <p>{passwordOwner}</p>
+            <code>{temporaryPassword}</code>
+            <div className="form-actions compact">
+              <button type="button" onClick={() => void copyTemporaryPassword()}>
+                {t("auth.copyPassword")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="section-card">
+        <div className="filters-row user-filters-row">
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("admin.searchUsers")} />
+          <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
+            <option value="all">{t("admin.allRoles")}</option>
+            <option value="admin">{translateRole("admin")}</option>
+            <option value="student">{translateRole("student")}</option>
+            <option value="instructor">{translateRole("instructor")}</option>
+            <option value="support">{translateRole("support")}</option>
+          </select>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="all">{t("admin.allStatuses")}</option>
+            <option value="active">{t("status.active")}</option>
+            <option value="inactive">{t("status.inactive")}</option>
+            <option value="suspended">{t("status.suspended")}</option>
+          </select>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>{t("auth.name")}</th>
+                <th>{t("auth.email")}</th>
+                <th>{t("auth.username")}</th>
+                <th>{t("auth.role")}</th>
+                <th>{t("auth.status")}</th>
+                <th>{t("auth.country")}</th>
+                <th>{t("auth.mustChangePassword")}</th>
+                <th>{t("auth.lastLoginAt")}</th>
+                <th>{t("admin.actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredUsers.map((user) => {
+                const isEditing = editingUserId === user.id;
+                return (
+                  <tr key={user.id}>
+                    <td>
+                      {isEditing ? (
+                        <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+                      ) : (
+                        <strong>{user.name}</strong>
+                      )}
+                    </td>
+                    <td>{user.email}</td>
+                    <td>
+                      {isEditing ? (
+                        <input value={draft.username} onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value }))} />
+                      ) : (
+                        user.username || "—"
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <select value={draft.role} onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value }))}>
+                          <option value="admin">{translateRole("admin")}</option>
+                          <option value="student">{translateRole("student")}</option>
+                          <option value="instructor">{translateRole("instructor")}</option>
+                          <option value="support">{translateRole("support")}</option>
+                        </select>
+                      ) : (
+                        <span className="subtle-badge">{translateRole(user.roleKey || user.role)}</span>
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
+                          <option value="active">{t("status.active")}</option>
+                          <option value="inactive">{t("status.inactive")}</option>
+                          <option value="suspended">{t("status.suspended")}</option>
+                        </select>
+                      ) : (
+                        <Status status={user.statusKey || user.status} />
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input value={draft.country} onChange={(event) => setDraft((current) => ({ ...current, country: event.target.value }))} placeholder={t("common.country")} />
+                      ) : (
+                        user.country || "—"
+                      )}
+                    </td>
+                    <td>
+                      <span className={`subtle-badge ${user.mustChangePassword ? "warning-badge" : ""}`}>
+                        {user.mustChangePassword ? t("common.yes") : t("common.no")}
+                      </span>
+                    </td>
+                    <td>{user.last_login_at || user.lastLoginAt ? formatDisplayDate(user.last_login_at || user.lastLoginAt, language) : "—"}</td>
+                    <td>
+                      <div className="table-actions">
+                        {isEditing ? (
+                          <>
+                            <button onClick={() => void saveUser()} disabled={saving}>{t("common.save")}</button>
+                            <button onClick={() => setEditingUserId(null)}>{t("common.cancel")}</button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => startEditing(user)}>{t("common.edit")}</button>
+                            <button onClick={() => void resetPassword(user)} disabled={resettingUserId === user.id}>{t("auth.resetPassword")}</button>
+                            <button onClick={() => void onUpdateUserStatus(user.id, "active")}>{t("admin.activate")}</button>
+                            <button onClick={() => void onUpdateUserStatus(user.id, "inactive")}>{t("admin.deactivate")}</button>
+                            <button onClick={() => void onUpdateUserStatus(user.id, "suspended")}>{t("auth.suspendUser")}</button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   );
 }
 
