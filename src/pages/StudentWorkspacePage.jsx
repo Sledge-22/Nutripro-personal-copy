@@ -371,7 +371,7 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
           </label>
 
           <label>
-            {t("common.profilePicture")}
+            {t("common.changePicture")}
             <input type="file" accept="image/*" onChange={(event) => void handlePictureChange(event.target.files?.[0])} />
           </label>
 
@@ -548,7 +548,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     return (
       <>
         <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
-          ‹ {t("common.backToCourses")}
+          ← {t("common.backToCourses")}
         </button>
 
         <section className="section-card">
@@ -690,7 +690,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     return (
       <>
         <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
-          ‹ {t("common.backToCourses")}
+          ← {t("common.backToCourses")}
         </button>
 
         <div className="detail-hero">
@@ -720,16 +720,12 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     ? t("common.submitting")
     : !hasSubmission
       ? t("common.submitAssignment")
-      : assignmentStatus === "approved"
-        ? t("common.assignmentApprovedButton")
-        : assignmentStatus === "submitted"
-          ? t("common.updateSubmission")
-          : t("common.resubmitAssignment");
+      : assignmentStatus === "approved" ? t("common.assignmentApprovedButton") : t("common.assignmentAlreadySubmitted");
 
   return (
     <>
       <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
-        ‹ {t("common.backToCourses")}
+        ← {t("common.backToCourses")}
       </button>
 
       <div className="detail-hero">

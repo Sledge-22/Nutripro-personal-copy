@@ -284,9 +284,6 @@ code { padding: 5px 7px; border-radius: 6px; color: var(--green-800); background
 .lesson-icon { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--green-700); }
 .lesson-icon.done { color: #fff; background: var(--green-700); border-color: var(--green-700); }
 .lesson-content { padding: 28px; }
-.video-stage { height: 280px; display: grid; place-items: center; position: relative; margin-bottom: 28px; border-radius: 15px; color: #fff; background: linear-gradient(145deg, #193d31, #477d66); }
-.video-stage > span { position: absolute; left: 20px; bottom: 16px; color: #c8ddd3; font-size: 12px; }
-.play-large { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; color: var(--green-800); background: #e3f3e9; }
 .lesson-content h2 { margin: 8px 0 10px; font-size: 24px; }
 .lesson-content > p { color: var(--muted); line-height: 1.7; }
 .active-module-note { margin: 0 0 10px; font-size: 12px; }
@@ -435,7 +432,6 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
 .course-symbol,
 .stat-icon,
 .cert-ribbon,
-.play-large,
 .role-icon.admin,
 .role-icon.student {
   color: #06292b;
@@ -559,7 +555,6 @@ dt,
 .generator-card,
 .course-cover,
 .course-cover.cover-2,
-.video-stage,
 .login-visual {
   color: var(--color-text);
   background:

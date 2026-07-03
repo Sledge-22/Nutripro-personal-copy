@@ -14,6 +14,31 @@ function interpolate(template, values = {}) {
   return String(template).replace(/\{(\w+)\}/g, (_, key) => values[key] ?? "");
 }
 
+function fixMojibake(value) {
+  return String(value)
+    .replaceAll("Ã¡", "á")
+    .replaceAll("Ã©", "é")
+    .replaceAll("Ã­", "í")
+    .replaceAll("Ã³", "ó")
+    .replaceAll("Ãº", "ú")
+    .replaceAll("Ã", "Á")
+    .replaceAll("Ã‰", "É")
+    .replaceAll("Ã", "Í")
+    .replaceAll("Ã“", "Ó")
+    .replaceAll("Ãš", "Ú")
+    .replaceAll("Ã±", "ñ")
+    .replaceAll("Ã‘", "Ñ")
+    .replaceAll("Â¿", "¿")
+    .replaceAll("Â¡", "¡")
+    .replaceAll("Â·", "·")
+    .replaceAll("â†’", "→")
+    .replaceAll("â€”", "—")
+    .replaceAll("â€¹", "←")
+    .replaceAll("Ã—", "×")
+    .replaceAll("ðŸ‡ªðŸ‡¸", "🇪🇸")
+    .replaceAll("ðŸ‡¬ðŸ‡§", "🇬🇧");
+}
+
 function normalizeStatusKey(status) {
   return String(status ?? "")
     .trim()
@@ -42,7 +67,7 @@ export function LanguageProvider({ children }) {
       const fallbackValue = getNestedValue(translations[DEFAULT_LANGUAGE], key);
       const resolvedValue = selectedLanguageValue ?? fallbackValue ?? key;
 
-      if (typeof resolvedValue === "string") return interpolate(resolvedValue, values);
+      if (typeof resolvedValue === "string") return fixMojibake(interpolate(resolvedValue, values));
       return resolvedValue;
     };
 

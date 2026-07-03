@@ -1060,7 +1060,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
 
         <label>
           <input type="checkbox" checked={isVisibleToStudents(form.status)} onChange={(event) => updateCourseField("status", event.target.checked ? "published" : "draft")} />{" "}
-          {t("common.visibleToStudents")}
+          {isVisibleToStudents(form.status) ? t("common.visibleToStudents") : t("common.hiddenFromStudents")}
         </label>
 
         {saveError && <small className="field-note danger-text">{saveError}</small>}
@@ -1127,7 +1127,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
             <div className="row-actions">
               <Status status={previewCourse.status || "published"} />
               <span className="subtle-badge">
-                {isVisibleToStudents(previewCourse.status) ? t("admin.courseVisibleNow") : t("student.hiddenFromWorkspace")}
+                {isVisibleToStudents(previewCourse.status) ? t("common.visibleToStudents") : t("common.hiddenFromStudents")}
               </span>
             </div>
             <div className="preview-tree">
@@ -1199,7 +1199,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                   <span>{(course.modules ?? []).filter((module) => module.assignment?.title?.trim()).length} {t("common.assignments") || "assignments"}</span>
                   <label>
                     <input type="checkbox" checked={isVisibleToStudents(course.status)} disabled={statusUpdatingId === course.id} onChange={(event) => void changeCourseVisibility(course, event.target.checked)} />{" "}
-                    {t("common.visibleToStudents")}
+                    {isVisibleToStudents(course.status) ? t("common.visibleToStudents") : t("common.hiddenFromStudents")}
                   </label>
                 </div>
                 <div className="row-actions">
