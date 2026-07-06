@@ -2,6 +2,7 @@ export const ROUTES = {
   login: "/",
   auth: {
     changePassword: "/auth/change-password",
+    setupPreview: "/auth/change-password-preview",
     access: "/auth/access",
   },
   admin: {

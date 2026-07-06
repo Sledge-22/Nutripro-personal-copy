@@ -1,9 +1,10 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import {
+  finalizeUserOnboarding,
   getUserProfileForAuthUser,
-  markPasswordChanged,
   recordUserLogin,
   resolveLoginEmail,
+  isUsernameAvailable,
 } from "./userService.js";
 
 function normalizeIdentifier(identifier) {
@@ -99,6 +100,43 @@ export async function changePassword(userId, nextPassword) {
   }
 
   const profile = data.user ? await getUserProfileForAuthUser(data.user) : null;
+  return {
+    user: data.user ?? null,
+    profile,
+  };
+}
+
+export async function completeFirstTimeSetup(userId, username, nextPassword) {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("Supabase Auth is not configured.");
+  }
+
+  const normalizedUsername = `${username ?? ""}`.trim().toLowerCase();
+  const normalizedPassword = `${nextPassword ?? ""}`;
+
+  if (!normalizedUsername) {
+    throw new Error("Username is required.");
+  }
+
+  if (normalizedPassword.length < 8) {
+    throw new Error("Password must be at least 8 characters.");
+  }
+
+  const available = await isUsernameAvailable(normalizedUsername, userId);
+  if (!available) {
+    throw new Error("Username is not available.");
+  }
+
+  const { data, error } = await supabase.auth.updateUser({ password: normalizedPassword });
+  if (error) throw error;
+
+  let profile = null;
+  if (userId) {
+    profile = await finalizeUserOnboarding(userId, normalizedUsername);
+  } else if (data.user) {
+    profile = await getUserProfileForAuthUser(data.user);
+  }
+
   return {
     user: data.user ?? null,
     profile,

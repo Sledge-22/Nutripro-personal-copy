@@ -284,6 +284,16 @@ export async function getUserByUsername(username) {
   return data ? normalizeUser(data) : null;
 }
 
+export async function isUsernameAvailable(username, excludeUserId = null) {
+  const normalizedUsername = normalizeOptionalString(username).toLowerCase();
+  if (!normalizedUsername) return false;
+
+  const existingUser = await getUserByUsername(normalizedUsername);
+  if (!existingUser) return true;
+  if (excludeUserId && String(existingUser.id) === String(excludeUserId)) return true;
+  return false;
+}
+
 export async function getUserProfileForAuthUser(authUser) {
   if (!authUser?.id) return null;
 
@@ -456,7 +466,48 @@ export async function markPasswordChanged(userId) {
   return normalizeUser(data);
 }
 
-export async function createAdminUser(payload = {}) {
+export async function finalizeUserOnboarding(userId, username) {
+  if (!userId) {
+    throw new Error("A valid user id is required.");
+  }
+
+  const normalizedUsername = normalizeOptionalString(username).toLowerCase();
+  if (!normalizedUsername) {
+    throw new Error("Username is required.");
+  }
+
+  const usernameAvailable = await isUsernameAvailable(normalizedUsername, userId);
+  if (!usernameAvailable) {
+    throw new Error("Username is not available.");
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    return normalizeUser(
+      updateMockUsers(userId, (user) => ({
+        ...user,
+        username: normalizedUsername,
+        must_change_password: false,
+        password_updated_at: nowIso(),
+        updated_at: nowIso(),
+      })),
+    );
+  }
+
+  const data = await runUserMutationWithOptionalColumnRetry(
+    (payload) =>
+      supabase.from("users").update(payload).eq("id", userId).select("*").single(),
+    {
+      username: normalizedUsername,
+      must_change_password: false,
+      password_updated_at: nowIso(),
+      updated_at: nowIso(),
+    },
+  );
+
+  return normalizeUser(data);
+}
+
+async function createUserProfileOnly(payload = {}) {
   const normalizedPayload = {
     name: normalizeOptionalString(payload.name),
     email: normalizeOptionalString(payload.email).toLowerCase(),
@@ -466,8 +517,7 @@ export async function createAdminUser(payload = {}) {
     country: normalizeOptionalString(payload.country) || null,
     bio: normalizeOptionalString(payload.bio) || null,
     profile_picture_url: normalizeOptionalString(payload.profile_picture_url ?? payload.profilePictureUrl) || null,
-    must_change_password: true,
-    temporaryPassword: normalizeOptionalString(payload.temporaryPassword) || null,
+    must_change_password: false,
   };
 
   if (!normalizedPayload.name || !normalizedPayload.email || !normalizedPayload.username) {
@@ -475,7 +525,6 @@ export async function createAdminUser(payload = {}) {
   }
 
   if (!isSupabaseConfigured || !supabase) {
-    const temporaryPassword = createTemporaryPassword();
     const nextUser = buildMockUser(
       {
         ...normalizedPayload,
@@ -488,24 +537,181 @@ export async function createAdminUser(payload = {}) {
     setMockUsers([nextUser, ...getMockUsers()]);
     return {
       user: normalizeUser(nextUser),
-      temporaryPassword,
+      temporaryPassword: createTemporaryPassword(),
+      emailSent: false,
     };
   }
 
-  const response = await invokeAdminUserFunction({
-    action: "create-user",
-    user: normalizedPayload,
-  });
+  const data = await runUserMutationWithOptionalColumnRetry(
+    (nextPayload) => supabase.from("users").insert([nextPayload]).select("*").single(),
+    {
+      ...normalizedPayload,
+      updated_at: nowIso(),
+    },
+  );
 
   return {
-    user: normalizeUser(response.user ?? {}),
-    temporaryPassword: response.temporaryPassword ?? "",
+    user: normalizeUser(data),
+    temporaryPassword: createTemporaryPassword(),
+    emailSent: false,
   };
 }
 
-export async function resetAdminUserPassword(userId, temporaryPassword = "") {
+export async function createAdminUser(payload = {}, options = {}) {
+  const productionAuthEnabled = Boolean(options.productionAuthEnabled);
+  const productionOnboardingTest = Boolean(options.productionOnboardingTest);
+  const normalizedPayload = {
+    name: normalizeOptionalString(payload.name),
+    email: normalizeOptionalString(payload.email).toLowerCase(),
+    username: normalizeOptionalString(payload.username).toLowerCase(),
+    role: normalizeRoleValue(payload.role),
+    status: normalizeStatusValue(payload.status),
+    country: normalizeOptionalString(payload.country) || null,
+    bio: normalizeOptionalString(payload.bio) || null,
+    profile_picture_url: normalizeOptionalString(payload.profile_picture_url ?? payload.profilePictureUrl) || null,
+    must_change_password: true,
+    temporaryPassword: normalizeOptionalString(payload.temporaryPassword) || null,
+    language: normalizeOptionalString(payload.language) || "es",
+  };
+
+  if (productionAuthEnabled) {
+    if (!normalizedPayload.name || !normalizedPayload.email) {
+      throw new Error("Name and email are required.");
+    }
+
+    const response = await invokeAdminUserFunction({
+      action: "create-user",
+      user: {
+        ...normalizedPayload,
+        username: null,
+      },
+      language: normalizedPayload.language,
+    });
+
+    return {
+      user: normalizeUser(response.user ?? {}),
+      emailSent: Boolean(response.emailSent),
+      simulationMode: Boolean(response.simulationMode),
+      temporaryPassword: response.temporaryPassword ?? "",
+    };
+  }
+
+  if (productionOnboardingTest) {
+    const temporaryPassword = normalizeOptionalString(payload.temporaryPassword) || createTemporaryPassword();
+    const simulationPayload = {
+      name: normalizedPayload.name,
+      email: normalizedPayload.email,
+      username: null,
+      role: normalizedPayload.role,
+      status: normalizedPayload.status,
+      country: normalizedPayload.country,
+      bio: normalizedPayload.bio,
+      profile_picture_url: normalizedPayload.profile_picture_url,
+      must_change_password: true,
+      password_updated_at: null,
+    };
+
+    if (!simulationPayload.name || !simulationPayload.email) {
+      throw new Error("Name and email are required.");
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      const nextUser = buildMockUser(
+        {
+          ...simulationPayload,
+          created_at: nowIso(),
+          updated_at: nowIso(),
+        },
+        null,
+      );
+
+      setMockUsers([nextUser, ...getMockUsers()]);
+      return {
+        user: normalizeUser(nextUser),
+        temporaryPassword,
+        emailSent: false,
+        simulationMode: true,
+      };
+    }
+
+    const data = await runUserMutationWithOptionalColumnRetry(
+      (nextPayload) => supabase.from("users").insert([nextPayload]).select("*").single(),
+      {
+        ...simulationPayload,
+        updated_at: nowIso(),
+      },
+    );
+
+    return {
+      user: normalizeUser(data),
+      temporaryPassword,
+      emailSent: false,
+      simulationMode: true,
+    };
+  }
+
+  return createUserProfileOnly(normalizedPayload);
+}
+
+export async function resetAdminUserPassword(userId, temporaryPassword = "", options = {}) {
   if (!userId) {
     throw new Error("A valid user id is required to reset the password.");
+  }
+
+  const productionAuthEnabled = Boolean(options.productionAuthEnabled);
+  const productionOnboardingTest = Boolean(options.productionOnboardingTest);
+
+  if (productionAuthEnabled) {
+    const response = await invokeAdminUserFunction({
+      action: "reset-user-password",
+      userId,
+      temporaryPassword: normalizeOptionalString(temporaryPassword) || null,
+      language: normalizeOptionalString(options.language) || "es",
+    });
+
+    return {
+      user: normalizeUser(response.user ?? {}),
+      emailSent: Boolean(response.emailSent),
+      simulationMode: Boolean(response.simulationMode),
+      temporaryPassword: response.temporaryPassword ?? "",
+    };
+  }
+
+  if (productionOnboardingTest) {
+    if (!isSupabaseConfigured || !supabase) {
+      const user = updateMockUsers(userId, (entry) => ({
+        ...entry,
+        username: "",
+        must_change_password: true,
+        password_updated_at: null,
+        updated_at: nowIso(),
+      }));
+
+      return {
+        user: normalizeUser(user ?? {}),
+        temporaryPassword: normalizeOptionalString(temporaryPassword) || createTemporaryPassword(),
+        emailSent: false,
+        simulationMode: true,
+      };
+    }
+
+    const data = await runUserMutationWithOptionalColumnRetry(
+      (payload) =>
+        supabase.from("users").update(payload).eq("id", userId).select("*").single(),
+      {
+        username: null,
+        must_change_password: true,
+        password_updated_at: null,
+        updated_at: nowIso(),
+      },
+    );
+
+    return {
+      user: normalizeUser(data ?? {}),
+      temporaryPassword: normalizeOptionalString(temporaryPassword) || createTemporaryPassword(),
+      emailSent: false,
+      simulationMode: true,
+    };
   }
 
   if (!isSupabaseConfigured || !supabase) {
@@ -518,18 +724,24 @@ export async function resetAdminUserPassword(userId, temporaryPassword = "") {
     return {
       user: normalizeUser(user ?? {}),
       temporaryPassword: createTemporaryPassword(),
+      emailSent: false,
     };
   }
 
-  const response = await invokeAdminUserFunction({
-    action: "reset-user-password",
-    userId,
-    temporaryPassword: normalizeOptionalString(temporaryPassword) || null,
-  });
+  const data = await runUserMutationWithOptionalColumnRetry(
+    (payload) =>
+      supabase.from("users").update(payload).eq("id", userId).select("*").single(),
+    {
+      must_change_password: true,
+      password_updated_at: null,
+      updated_at: nowIso(),
+    },
+  );
 
   return {
-    user: normalizeUser(response.user ?? {}),
-    temporaryPassword: response.temporaryPassword ?? "",
+    user: normalizeUser(data ?? {}),
+    temporaryPassword: normalizeOptionalString(temporaryPassword) || createTemporaryPassword(),
+    emailSent: false,
   };
 }
 

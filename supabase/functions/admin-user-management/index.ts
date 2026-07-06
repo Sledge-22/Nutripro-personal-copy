@@ -3,13 +3,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.53.0";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const supabaseUrl = Deno.env.get("NUTRIPRO_SUPABASE_URL") ?? "";
-const supabaseAnonKey = Deno.env.get("NUTRIPRO_SUPABASE_ANON_KEY") ?? "";
 const supabaseServiceRoleKey = Deno.env.get("NUTRIPRO_SERVICE_ROLE_KEY") ?? "";
+const emailApiKey = Deno.env.get("NUTRIPRO_EMAIL_API_KEY") ?? "";
+const fromEmail = Deno.env.get("NUTRIPRO_FROM_EMAIL") ?? "";
+const appUrl = Deno.env.get("NUTRIPRO_APP_URL") ?? "";
 
 type CreateUserPayload = {
   name: string;
   email: string;
-  username: string;
+  username?: string | null;
   role: "student" | "admin" | "instructor" | "support";
   status: "active" | "inactive" | "suspended";
   country?: string | null;
@@ -57,6 +59,130 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function normalizeLanguage(value: unknown) {
+  return String(value ?? "es").trim().toLowerCase() === "en" ? "en" : "es";
+}
+
+function getLoginUrl() {
+  return appUrl ? appUrl.replace(/\/$/, "") : "https://your-app-url.example";
+}
+
+function getBearerToken(request: Request) {
+  const authHeader = request.headers.get("Authorization") ?? "";
+  return authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+}
+
+function buildAccessEmail({
+  name,
+  email,
+  temporaryPassword,
+  language,
+}: {
+  name: string;
+  email: string;
+  temporaryPassword: string;
+  language: "es" | "en";
+}) {
+  const loginUrl = getLoginUrl();
+
+  if (language === "en") {
+    return {
+      subject: "Your Nutripro Access",
+      text: `Hi ${name},
+
+An account has been created for you in Nutripro.
+
+You can log in with:
+Username: ${email}
+Temporary password: ${temporaryPassword}
+
+For security, you will be required to change your password and choose your username the first time you log in.
+
+Log in here:
+${loginUrl}
+
+Con Agus Ramon · sports nutrition`,
+      html: `<p>Hi ${name},</p>
+<p>An account has been created for you in Nutripro.</p>
+<p>You can log in with:</p>
+<p><strong>Username:</strong> ${email}<br /><strong>Temporary password:</strong> ${temporaryPassword}</p>
+<p>For security, you will be required to change your password and choose your username the first time you log in.</p>
+<p><a href="${loginUrl}">Log in here</a></p>
+<p>Con Agus Ramon · sports nutrition</p>`,
+    };
+  }
+
+  return {
+    subject: "Tu acceso a Nutripro",
+    text: `Hola ${name},
+
+Se ha creado una cuenta para ti en Nutripro.
+
+Puedes iniciar sesión con:
+Usuario: ${email}
+Contraseña temporal: ${temporaryPassword}
+
+Por seguridad, deberás cambiar tu contraseña y elegir tu nombre de usuario la primera vez que ingreses.
+
+Accede aquí:
+${loginUrl}
+
+Con Agus Ramon · nutrición deportiva`,
+    html: `<p>Hola ${name},</p>
+<p>Se ha creado una cuenta para ti en Nutripro.</p>
+<p>Puedes iniciar sesión con:</p>
+<p><strong>Usuario:</strong> ${email}<br /><strong>Contraseña temporal:</strong> ${temporaryPassword}</p>
+<p>Por seguridad, deberás cambiar tu contraseña y elegir tu nombre de usuario la primera vez que ingreses.</p>
+<p><a href="${loginUrl}">Accede aquí</a></p>
+<p>Con Agus Ramon · nutrición deportiva</p>`,
+  };
+}
+
+async function sendAccessEmail({
+  to,
+  name,
+  temporaryPassword,
+  language,
+}: {
+  to: string;
+  name: string;
+  temporaryPassword: string;
+  language: "es" | "en";
+}) {
+  if (!emailApiKey || !fromEmail) {
+    return { emailSent: false, simulationMode: true };
+  }
+
+  const email = buildAccessEmail({
+    name,
+    email: to,
+    temporaryPassword,
+    language,
+  });
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${emailApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: fromEmail,
+      to: [to],
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+    }),
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Sending the access email failed. ${responseText}`);
+  }
+
+  return { emailSent: true, simulationMode: false };
+}
+
 async function upsertPublicProfile(adminClient: ReturnType<typeof createClient>, authUserId: string, payload: CreateUserPayload) {
   const { data: existingProfile, error: existingProfileError } = await adminClient
     .from("users")
@@ -79,7 +205,7 @@ async function upsertPublicProfile(adminClient: ReturnType<typeof createClient>,
         auth_user_id: authUserId,
         name: payload.name,
         email: payload.email,
-        username: payload.username,
+        username: payload.username ?? null,
         role: payload.role,
         status: payload.status,
         country: payload.country,
@@ -103,7 +229,7 @@ async function upsertPublicProfile(adminClient: ReturnType<typeof createClient>,
       auth_user_id: authUserId,
       name: payload.name,
       email: payload.email,
-      username: payload.username,
+      username: payload.username ?? null,
       role: payload.role,
       status: payload.status,
       country: payload.country,
@@ -121,26 +247,18 @@ async function upsertPublicProfile(adminClient: ReturnType<typeof createClient>,
   return data;
 }
 
-async function requireActiveAdmin(request: Request) {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader) {
+async function requireActiveAdmin(request: Request, adminClient: ReturnType<typeof createClient>) {
+  const token = getBearerToken(request);
+  if (!token) {
     throw new Error("Missing Authorization header.");
   }
 
-  const callerClient = createClient(supabaseUrl, supabaseAnonKey, {
-    global: {
-      headers: {
-        Authorization: authHeader,
-      },
-    },
-  });
-
-  const { data: authData, error: authError } = await callerClient.auth.getUser();
+  const { data: authData, error: authError } = await adminClient.auth.getUser(token);
   if (authError || !authData.user) {
     throw new Error("The caller is not authenticated.");
   }
 
-  const { data: profile, error: profileError } = await callerClient
+  const { data: profile, error: profileError } = await adminClient
     .from("users")
     .select("id, role, status")
     .eq("auth_user_id", authData.user.id)
@@ -167,11 +285,9 @@ serve(async (request) => {
   }
 
   try {
-    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
       return jsonResponse({ error: "Missing Supabase function environment variables." }, 500);
     }
-
-    await requireActiveAdmin(request);
 
     const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: {
@@ -180,15 +296,18 @@ serve(async (request) => {
       },
     });
 
+    await requireActiveAdmin(request, adminClient);
+
     const body = await request.json();
     const action = String(body?.action ?? "").trim();
+    const language = normalizeLanguage(body?.language);
 
     if (action === "create-user") {
       const user = body?.user ?? {};
       const payload: CreateUserPayload = {
         name: String(user.name ?? "").trim(),
         email: String(user.email ?? "").trim().toLowerCase(),
-        username: String(user.username ?? "").trim().toLowerCase(),
+        username: normalizeOptionalString(user.username)?.toLowerCase() ?? null,
         role: normalizeRole(user.role),
         status: normalizeStatus(user.status),
         country: normalizeOptionalString(user.country),
@@ -198,8 +317,8 @@ serve(async (request) => {
         temporaryPassword: normalizeOptionalString(user.temporaryPassword),
       };
 
-      if (!payload.name || !payload.email || !payload.username) {
-        return jsonResponse({ error: "Name, email, and username are required." }, 400);
+      if (!payload.name || !payload.email) {
+        return jsonResponse({ error: "Name and email are required." }, 400);
       }
 
       const temporaryPassword = payload.temporaryPassword || createTemporaryPassword();
@@ -218,15 +337,36 @@ serve(async (request) => {
         return jsonResponse({ error: authUserError?.message ?? "Creating the auth user failed." }, 400);
       }
 
+      let profileRow: unknown;
+
       try {
-        const profileRow = await upsertPublicProfile(adminClient, authUserData.user.id, payload);
-        return jsonResponse({
-          user: profileRow,
-          temporaryPassword,
-        });
+        profileRow = await upsertPublicProfile(adminClient, authUserData.user.id, payload);
       } catch (profileError) {
         await adminClient.auth.admin.deleteUser(authUserData.user.id);
         return jsonResponse({ error: profileError instanceof Error ? profileError.message : "Profile upsert failed." }, 400);
+      }
+
+      try {
+        const emailResult = await sendAccessEmail({
+          to: payload.email,
+          name: payload.name,
+          temporaryPassword,
+          language,
+        });
+        return jsonResponse({
+          user: profileRow,
+          emailSent: emailResult.emailSent,
+          simulationMode: emailResult.simulationMode,
+          temporaryPassword: emailResult.simulationMode ? temporaryPassword : undefined,
+        });
+      } catch (emailError) {
+        return jsonResponse({
+          user: profileRow,
+          emailSent: false,
+          simulationMode: true,
+          temporaryPassword,
+          warning: emailError instanceof Error ? emailError.message : "Access email could not be sent.",
+        });
       }
     }
 
@@ -272,10 +412,29 @@ serve(async (request) => {
         return jsonResponse({ error: profileError.message }, 400);
       }
 
-      return jsonResponse({
-        user: updatedProfileRow,
-        temporaryPassword,
-      });
+      try {
+        const emailResult = await sendAccessEmail({
+          to: profileRow.email,
+          name: profileRow.name ?? profileRow.email,
+          temporaryPassword,
+          language,
+        });
+
+        return jsonResponse({
+          user: updatedProfileRow,
+          emailSent: emailResult.emailSent,
+          simulationMode: emailResult.simulationMode,
+          temporaryPassword: emailResult.simulationMode ? temporaryPassword : undefined,
+        });
+      } catch (emailError) {
+        return jsonResponse({
+          user: updatedProfileRow,
+          emailSent: false,
+          simulationMode: true,
+          temporaryPassword,
+          warning: emailError instanceof Error ? emailError.message : "Access email could not be sent.",
+        });
+      }
     }
 
     return jsonResponse({ error: "Unsupported action." }, 400);

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Sidebar, Header } from "../components/ui.jsx";
-import { AUTH_MODE, isProductionAuthMode } from "../config/authMode.js";
+import { AUTH_MODE, ENABLE_AUTH_TEST_TOOLS, isProductionAuthMode } from "../config/authMode.js";
 import {
   initialCertificates,
   initialCommunityPosts,
@@ -27,7 +27,7 @@ import {
   updateUserStatus,
 } from "../services/userService.js";
 import {
-  changePassword,
+  completeFirstTimeSetup,
   getCurrentSession,
   isAuthConfigured,
   signInWithCredentials,
@@ -169,6 +169,7 @@ export function App() {
   const isDemoAuthMode = AUTH_MODE === "demo";
   const authConfigured = isProductionAuthMode && isAuthConfigured();
   const initialDemoStudent = initialUsers.find((user) => user.email?.toLowerCase() === DEMO_STUDENT_EMAIL) ?? initialUsers[0] ?? null;
+  const showAuthTestTools = ENABLE_AUTH_TEST_TOOLS;
 
   const [pathname, setPathname] = useState(getPathname());
   const [authLoading, setAuthLoading] = useState(authConfigured);
@@ -493,13 +494,16 @@ export function App() {
 
   async function handleForcedPasswordChange(nextPassword) {
     try {
-      const result = await changePassword(currentUser?.id, nextPassword);
+      const result = await completeFirstTimeSetup(currentUser?.id, nextPassword.username, nextPassword.password);
       setCurrentUser(result.profile ?? currentUser);
       navigateTo(dashboardPathForRole(result.profile?.roleKey ?? currentUser?.roleKey), true);
       return { ok: true };
     } catch (error) {
       console.error("Updating the password failed:", error);
-      return { ok: false, error: formatSupabaseError(error, t("auth.passwordChangeFailed")) };
+      const rawMessage = `${error?.message ?? ""}`.trim();
+      const translatedError =
+        rawMessage === "Username is not available." ? t("auth.usernameUnavailable") : formatSupabaseError(error, t("auth.passwordChangeFailed"));
+      return { ok: false, error: translatedError };
     }
   }
 
@@ -523,15 +527,22 @@ export function App() {
     }
   }
 
-  async function handleCreateUser(payload) {
-    const result = await createAdminUser(payload);
+  async function handleCreateUser(payload, options = {}) {
+    const result = await createAdminUser(payload, {
+      productionAuthEnabled: isProductionAuthMode,
+      productionOnboardingTest: Boolean(options.productionOnboardingTest),
+    });
     const nextUsers = await getUsers();
     setUsers(nextUsers);
     return result;
   }
 
-  async function handleResetUserPassword(userId, temporaryPassword = "") {
-    const result = await resetAdminUserPassword(userId, temporaryPassword);
+  async function handleResetUserPassword(userId, temporaryPassword = "", options = {}) {
+    const result = await resetAdminUserPassword(userId, temporaryPassword, {
+      productionAuthEnabled: isProductionAuthMode,
+      productionOnboardingTest: Boolean(options.productionOnboardingTest),
+      language: options.language,
+    });
     const nextUsers = await getUsers();
     setUsers(nextUsers);
     return result;
@@ -645,6 +656,10 @@ export function App() {
     setProgressState(nextProgress);
   }
 
+  if (pathname === ROUTES.auth.setupPreview) {
+    return <ForcedPasswordPage onSubmit={async () => ({ ok: true })} loading={false} />;
+  }
+
   if (isProductionAuthMode && !authConfigured) {
     return (
       <LoginPage
@@ -718,5 +733,5 @@ export function App() {
         DEMO_ACCOUNTS.admin
       : studentProfile ?? demoSession ?? DEMO_ACCOUNTS.student;
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={authConfigured ? currentUser : demoHeaderProfile} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={authConfigured ? currentUser : demoHeaderProfile} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }

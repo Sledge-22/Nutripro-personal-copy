@@ -4,6 +4,7 @@ import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
 import { getSubmissionsForAdmin, reviewSubmission } from "../services/assignmentService.js";
 import { uploadCourseImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+import { ROUTES } from "../routes/appRoutes.js";
 
 function createId() {
   return Date.now() + Math.floor(Math.random() * 100000);
@@ -247,6 +248,7 @@ export function AdminWorkspacePage({
   users,
   courses,
   certificates,
+  showAuthTestTools = true,
   onUpdateUserStatus,
   onUpdateUser,
   onCreateUser,
@@ -261,6 +263,7 @@ export function AdminWorkspacePage({
     return (
       <UsersAdminPanel
         users={users}
+        showAuthTestTools={showAuthTestTools}
         onUpdateUserStatus={onUpdateUserStatus}
         onUpdateUser={onUpdateUser}
         onCreateUser={onCreateUser}
@@ -483,7 +486,7 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
   );
 }
 
-function UsersAdminPanel({ users, onUpdateUserStatus, onUpdateUser, onCreateUser, onResetUserPassword }) {
+function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdateUser, onCreateUser, onResetUserPassword }) {
   const { t, language, translateRole } = useLanguage();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -495,6 +498,7 @@ function UsersAdminPanel({ users, onUpdateUserStatus, onUpdateUser, onCreateUser
   const [error, setError] = useState("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [passwordOwner, setPasswordOwner] = useState("");
+  const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [resettingUserId, setResettingUserId] = useState(null);
 
@@ -543,45 +547,83 @@ function UsersAdminPanel({ users, onUpdateUserStatus, onUpdateUser, onCreateUser
     }
   };
 
-  const createUser = async (event) => {
-    event.preventDefault();
+  const createUser = async (mode = "demo") => {
     setSaving(true);
     setMessage("");
     setError("");
     setTemporaryPassword("");
     setPasswordOwner("");
+    setIsSimulationMode(false);
 
     try {
-      const result = await onCreateUser(createDraftState);
+      const result = await onCreateUser(
+        {
+          ...createDraftState,
+          language,
+        },
+        { productionOnboardingTest: mode === "production" },
+      );
       setCreateDraftState(createUserDraft());
-      setMessage(t("auth.userCreatedSuccessfully"));
+      setMessage(
+        mode === "production"
+          ? result?.emailSent
+            ? t("auth.temporaryPasswordEmailSent")
+            : t("auth.emailSimulationMode")
+          : t("auth.userCreatedSuccessfully"),
+      );
       setTemporaryPassword(result?.temporaryPassword || "");
       setPasswordOwner(result?.user?.email || result?.user?.name || "");
+      setIsSimulationMode(Boolean(result?.simulationMode));
     } catch (createError) {
       console.error("Creating the admin-managed user failed:", createError);
-      setError(createError.message || t("auth.userCreateFailed"));
+      const details = `${createError?.message ?? ""}`.toLowerCase();
+      const isFunctionIssue =
+        mode === "production" &&
+        (details.includes("function") ||
+          details.includes("not authenticated") ||
+          details.includes("authorization") ||
+          details.includes("supabase function"));
+      setError(isFunctionIssue ? t("auth.productionFunctionNotConfigured") : createError.message || t("auth.userCreateFailed"));
     } finally {
       setSaving(false);
     }
   };
 
-  const resetPassword = async (user) => {
+  const resetPassword = async (user, mode = "demo") => {
     setResettingUserId(user.id);
     setMessage("");
     setError("");
     setTemporaryPassword("");
     setPasswordOwner("");
+    setIsSimulationMode(false);
 
     try {
       const customTemporaryPassword =
         window.prompt(t("auth.optionalResetPasswordPrompt"), "")?.trim() || "";
-      const result = await onResetUserPassword(user.id, customTemporaryPassword);
-      setMessage(t("auth.passwordResetSuccess"));
+      const result = await onResetUserPassword(user.id, customTemporaryPassword, {
+        productionOnboardingTest: mode === "production",
+        language,
+      });
+      setMessage(
+        mode === "production"
+          ? result?.emailSent
+            ? t("auth.accessEmailSent")
+            : t("auth.emailSimulationMode")
+          : t("auth.passwordResetSuccess"),
+      );
       setTemporaryPassword(result?.temporaryPassword || "");
       setPasswordOwner(user.email || user.name || "");
+      setIsSimulationMode(Boolean(result?.simulationMode));
     } catch (resetError) {
       console.error("Resetting the admin-managed password failed:", resetError);
-      setError(resetError.message || t("auth.passwordResetFailed"));
+      const details = `${resetError?.message ?? ""}`.toLowerCase();
+      const isFunctionIssue =
+        mode === "production" &&
+        (details.includes("function") ||
+          details.includes("not authenticated") ||
+          details.includes("authorization") ||
+          details.includes("supabase function"));
+      setError(isFunctionIssue ? t("auth.productionFunctionNotConfigured") : resetError.message || t("auth.passwordResetFailed"));
     } finally {
       setResettingUserId(null);
     }
@@ -605,7 +647,7 @@ function UsersAdminPanel({ users, onUpdateUserStatus, onUpdateUser, onCreateUser
           <span className="count-badge">{t("admin.usersCount", { count: filteredUsers.length })}</span>
         </div>
 
-        <form className="admin-user-form-grid" onSubmit={(event) => void createUser(event)}>
+        <form className="admin-user-form-grid" onSubmit={(event) => event.preventDefault()}>
           <label>
             {t("auth.name")}
             <input value={createDraftState.name} onChange={(event) => setCreateDraftState((current) => ({ ...current, name: event.target.value }))} required />
@@ -616,7 +658,7 @@ function UsersAdminPanel({ users, onUpdateUserStatus, onUpdateUser, onCreateUser
           </label>
           <label>
             {t("auth.username")}
-            <input value={createDraftState.username} onChange={(event) => setCreateDraftState((current) => ({ ...current, username: event.target.value }))} required />
+            <input value={createDraftState.username} onChange={(event) => setCreateDraftState((current) => ({ ...current, username: event.target.value }))} />
           </label>
           <label>
             {t("auth.role")}
@@ -649,9 +691,14 @@ function UsersAdminPanel({ users, onUpdateUserStatus, onUpdateUser, onCreateUser
           </label>
 
           <div className="form-actions">
-            <button type="submit" className="primary-btn" disabled={saving}>
+            <button type="button" className="primary-btn" disabled={saving} onClick={() => void createUser("demo")}>
               {saving ? t("common.saving") : t("auth.saveUser")}
             </button>
+            {showAuthTestTools ? (
+              <button type="button" className="secondary-btn" disabled={saving} onClick={() => void createUser("production")}>
+                {t("auth.createProductionUser")}
+              </button>
+            ) : null}
           </div>
         </form>
 
@@ -660,12 +707,25 @@ function UsersAdminPanel({ users, onUpdateUserStatus, onUpdateUser, onCreateUser
 
         {temporaryPassword ? (
           <div className="credential-card">
-            <strong>{t("auth.temporaryCredentials")}</strong>
+            <strong>{isSimulationMode ? t("auth.emailSimulationMode") : t("auth.temporaryCredentials")}</strong>
             <p>{passwordOwner}</p>
             <code>{temporaryPassword}</code>
+            {isSimulationMode ? <small className="field-note">{t("auth.testingOnlyTemporaryPassword")}</small> : null}
             <div className="form-actions compact">
               <button type="button" onClick={() => void copyTemporaryPassword()}>
                 {t("auth.copyPassword")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {showAuthTestTools ? (
+          <div className="credential-card">
+            <strong>{t("auth.productionOnboardingTools")}</strong>
+            <p>{t("auth.productionToolsHelp")}</p>
+            <div className="form-actions compact">
+              <button type="button" onClick={() => window.open(ROUTES.auth.setupPreview, "_blank", "noopener,noreferrer")}>
+                {t("auth.previewFirstTimeSetup")}
               </button>
             </div>
           </div>
@@ -772,6 +832,11 @@ function UsersAdminPanel({ users, onUpdateUserStatus, onUpdateUser, onCreateUser
                           <>
                             <button onClick={() => startEditing(user)}>{t("common.edit")}</button>
                             <button onClick={() => void resetPassword(user)} disabled={resettingUserId === user.id}>{t("auth.resetPassword")}</button>
+                            {showAuthTestTools ? (
+                              <button onClick={() => void resetPassword(user, "production")} disabled={resettingUserId === user.id}>
+                                {t("auth.sendNewTemporaryPassword")}
+                              </button>
+                            ) : null}
                             <button onClick={() => void onUpdateUserStatus(user.id, "active")}>{t("admin.activate")}</button>
                             <button onClick={() => void onUpdateUserStatus(user.id, "inactive")}>{t("admin.deactivate")}</button>
                             <button onClick={() => void onUpdateUserStatus(user.id, "suspended")}>{t("auth.suspendUser")}</button>

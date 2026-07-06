@@ -5,6 +5,7 @@ import { useLanguage } from "../i18n/LanguageContext.jsx";
 
 export function ForcedPasswordPage({ onSubmit, loading = false }) {
   const { t } = useLanguage();
+  const [username, setUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
@@ -14,6 +15,11 @@ export function ForcedPasswordPage({ onSubmit, loading = false }) {
     event.preventDefault();
     setError("");
     setMessage("");
+
+    if (!username.trim()) {
+      setError(t("auth.chooseUsername"));
+      return;
+    }
 
     if (newPassword.length < 8) {
       setError(t("auth.passwordMinLength"));
@@ -25,13 +31,17 @@ export function ForcedPasswordPage({ onSubmit, loading = false }) {
       return;
     }
 
-    const result = await onSubmit(newPassword);
+    const result = await onSubmit({
+      username: username.trim(),
+      password: newPassword,
+    });
     if (!result?.ok) {
       setError(result?.error || t("auth.passwordChangeFailed"));
       return;
     }
 
     setMessage(t("auth.passwordUpdated"));
+    setUsername("");
     setNewPassword("");
     setConfirmPassword("");
   };
@@ -46,11 +56,22 @@ export function ForcedPasswordPage({ onSubmit, loading = false }) {
 
         <div className="login-copy">
           <span className="eyebrow">{t("auth.forcePasswordEyebrow")}</span>
-          <h1>{t("auth.forcePasswordTitle")}</h1>
+          <h1>{t("auth.setUpAccount")}</h1>
           <p>{t("auth.forcePasswordDescription")}</p>
         </div>
 
         <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
+          <label>
+            {t("auth.chooseUsername")}
+            <input
+              type="text"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              autoComplete="username"
+              required
+            />
+          </label>
+
           <label>
             {t("auth.newPassword")}
             <input
