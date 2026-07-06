@@ -1,13 +1,12 @@
 import React, { useState } from "react";
-import { Brand, Icon } from "../components/ui.jsx";
+import { Brand } from "../components/ui.jsx";
 import { LanguageDropdown } from "../components/LanguageDropdown.jsx";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 import heroPlaceholder from "../assets/home-hero-placeholder.svg";
 
 export function LoginPage({
-  onChoose,
   onLogin,
-  authConfigured = false,
+  authMode = "demo",
   loading = false,
   error = "",
   info = "",
@@ -33,50 +32,42 @@ export function LoginPage({
       </div>
       <div className="login-copy"><span className="eyebrow">{t("login.eyebrow")}</span><h1>{t("login.title").split("\n").map((line, index) => <React.Fragment key={line}>{index ? <br /> : null}{line}</React.Fragment>)}</h1><p>{t("login.description")}</p><strong className="login-slogan">{t("login.slogan")}</strong></div>
 
-      {authConfigured ? (
-        <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
-          <label>
-            {t("auth.emailOrUsername")}
-            <input
-              type="text"
-              value={identifier}
-              onChange={(event) => setIdentifier(event.target.value)}
-              placeholder={t("auth.emailOrUsernamePlaceholder")}
-              autoComplete="username"
-              required
-            />
-          </label>
+      <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
+        {authMode === "demo" ? <p className="demo-note">{t("auth.demoMode")}</p> : null}
 
-          <label>
-            {t("auth.password")}
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder={t("auth.passwordPlaceholder")}
-              autoComplete="current-password"
-              required
-            />
-          </label>
+        <label>
+          {t("auth.emailOrUsername")}
+          <input
+            type="text"
+            value={identifier}
+            onChange={(event) => setIdentifier(event.target.value)}
+            placeholder={t("auth.emailOrUsernamePlaceholder")}
+            autoComplete="username"
+            required
+          />
+        </label>
 
-          {info ? <small className="field-note">{info}</small> : null}
-          {error ? <small className="field-note danger-text">{error}</small> : null}
+        <label>
+          {t("auth.password")}
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder={t("auth.passwordPlaceholder")}
+            autoComplete="current-password"
+            required
+          />
+        </label>
 
-          <div className="form-actions">
-            <button type="submit" className="primary-btn" disabled={loading}>
-              {loading ? t("common.loading") : t("auth.signIn")}
-            </button>
-          </div>
-        </form>
-      ) : (
-        <>
-          <div className="role-options">
-            <button onClick={() => onChoose("Admin")}><span className="role-icon admin"><Icon name="users" size={24} /></span><span><strong>{t("login.continueAsAdmin")}</strong><small>{t("login.adminDescription")}</small></span><Icon name="arrow" /></button>
-            <button onClick={() => onChoose("Student")}><span className="role-icon student"><Icon name="courses" size={24} /></span><span><strong>{t("login.continueAsStudent")}</strong><small>{t("login.studentDescription")}</small></span><Icon name="arrow" /></button>
-          </div>
-          <p className="demo-note">{t("login.demoAccess")}</p>
-        </>
-      )}
+        {info ? <small className="field-note">{info}</small> : null}
+        {error ? <small className="field-note danger-text">{error}</small> : null}
+
+        <div className="form-actions">
+          <button type="submit" className="primary-btn" disabled={loading}>
+            {loading ? t("common.loading") : t("auth.signIn")}
+          </button>
+        </div>
+      </form>
 
       <footer className="login-footer">{t("login.footer")}</footer>
     </section>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Sidebar, Header } from "../components/ui.jsx";
+import { AUTH_MODE, isProductionAuthMode } from "../config/authMode.js";
 import {
   initialCertificates,
   initialCommunityPosts,
@@ -46,6 +47,26 @@ import { getCertificates, generateCertificate, getStudentCertificates } from "..
 import { getStudentProgress, updateStudentProgress } from "../services/progressService.js";
 import { getCommunityPosts, createCommunityPost, createCommunityComment } from "../services/communityService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+
+const DEMO_SESSION_STORAGE_KEY = "nutripro-demo-session";
+const DEMO_ACCOUNTS = {
+  admin: {
+    role: "Admin",
+    roleKey: "admin",
+    name: "Alex Morgan",
+    email: "admin@nutripro.demo",
+    identifiers: ["admin", "admin@nutripro.demo"],
+    password: "nutriprotestA",
+  },
+  student: {
+    role: "Student",
+    roleKey: "student",
+    name: "Maya Laurent",
+    email: "maya@nutripro.demo",
+    identifiers: ["maya", "maya@nutripro.demo"],
+    password: "nutriprotestS",
+  },
+};
 
 function getPathname() {
   return window.location.pathname || ROUTES.login;
@@ -102,9 +123,48 @@ function getAccessBlockReason(profile) {
   return null;
 }
 
+function readDemoSession() {
+  try {
+    const rawSession = window.localStorage.getItem(DEMO_SESSION_STORAGE_KEY);
+    if (!rawSession) return null;
+
+    const parsedSession = JSON.parse(rawSession);
+    const roleKey = `${parsedSession?.roleKey ?? ""}`.trim().toLowerCase();
+    return roleKey === "admin" || roleKey === "student" ? parsedSession : null;
+  } catch (error) {
+    console.error("Reading the demo login session failed:", error);
+    return null;
+  }
+}
+
+function persistDemoSession(account) {
+  try {
+    window.localStorage.setItem(
+      DEMO_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        role: account.role,
+        roleKey: account.roleKey,
+        name: account.name,
+        email: account.email,
+      }),
+    );
+  } catch (error) {
+    console.error("Saving the demo login session failed:", error);
+  }
+}
+
+function clearDemoSession() {
+  try {
+    window.localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
+  } catch (error) {
+    console.error("Clearing the demo login session failed:", error);
+  }
+}
+
 export function App() {
   const { t } = useLanguage();
-  const authConfigured = isAuthConfigured();
+  const isDemoAuthMode = AUTH_MODE === "demo";
+  const authConfigured = isProductionAuthMode && isAuthConfigured();
   const initialDemoStudent = initialUsers.find((user) => user.email?.toLowerCase() === DEMO_STUDENT_EMAIL) ?? initialUsers[0] ?? null;
 
   const [pathname, setPathname] = useState(getPathname());
@@ -126,6 +186,7 @@ export function App() {
   );
   const [posts, setPosts] = useState(initialCommunityPosts);
   const [progressState, setProgressState] = useState(initialStudentProgress);
+  const [demoSession, setDemoSession] = useState(() => (isProductionAuthMode ? null : readDemoSession()));
 
   const activeStudentId = authConfigured
     ? currentUser?.roleKey === "student"
@@ -185,6 +246,19 @@ export function App() {
 
     void loadAuthenticatedWorkspace(authSession.user);
   }, [authConfigured, authSession]);
+
+  useEffect(() => {
+    if (isProductionAuthMode) return;
+
+    if (!demoSession) {
+      if (pathname !== ROUTES.login) navigateTo(ROUTES.login, true);
+      return;
+    }
+
+    if (!pathMatchesRole(pathname, demoSession.roleKey)) {
+      navigateTo(dashboardPathForRole(demoSession.roleKey), true);
+    }
+  }, [demoSession, pathname]);
 
   async function loadDemoWorkspace() {
     const resolvedDemoStudent = await ensureDemoStudent();
@@ -312,8 +386,9 @@ export function App() {
 
   const role = useMemo(() => {
     if (authConfigured) return toRoleLabel(currentUser?.roleKey ?? currentUser?.role);
-    return isAdminRoute(pathname) ? "Admin" : isStudentRoute(pathname) ? "Student" : null;
-  }, [authConfigured, currentUser, pathname]);
+    if (demoSession?.role) return toRoleLabel(demoSession.roleKey ?? demoSession.role);
+    return null;
+  }, [authConfigured, currentUser, demoSession]);
 
   const adminNav = useMemo(() => ([
     { path: ROUTES.admin.dashboard, label: t("common.dashboard"), icon: "dashboard" },
@@ -359,7 +434,24 @@ export function App() {
     return map[pathname] || "Nutripro";
   }, [courses, pathname, studentCourses, t]);
 
-  const handleDemoLogin = (nextRole) => navigateTo(nextRole === "Admin" ? ROUTES.admin.dashboard : ROUTES.student.dashboard);
+  async function handleDemoLogin({ identifier, password }) {
+    setLoginError("");
+    setLoginInfo("");
+
+    const normalizedIdentifier = `${identifier ?? ""}`.trim().toLowerCase();
+    const matchedAccount = Object.values(DEMO_ACCOUNTS).find(
+      (account) => account.identifiers.includes(normalizedIdentifier) && account.password === password,
+    );
+
+    if (!matchedAccount) {
+      setLoginError(t("auth.invalidCredentials"));
+      return;
+    }
+
+    persistDemoSession(matchedAccount);
+    setDemoSession(matchedAccount);
+    navigateTo(dashboardPathForRole(matchedAccount.roleKey), true);
+  }
 
   async function handleAuthLogin({ identifier, password }) {
     setLoginError("");
@@ -386,6 +478,11 @@ export function App() {
       }
       setCurrentUser(null);
       setAuthSession(null);
+    } else {
+      clearDemoSession();
+      setDemoSession(null);
+      setLoginError("");
+      setLoginInfo("");
     }
 
     navigateTo(ROUTES.login, true);
@@ -545,13 +642,25 @@ export function App() {
     setProgressState(nextProgress);
   }
 
+  if (isProductionAuthMode && !authConfigured) {
+    return (
+      <LoginPage
+        authMode="production"
+        onLogin={handleAuthLogin}
+        loading={false}
+        error={t("auth.loadingSessionFailed")}
+        info={t("auth.productionConfigMissing")}
+      />
+    );
+  }
+
   if (authConfigured) {
     if (authLoading) {
-      return <LoginPage authConfigured loading error={loginError} info={t("auth.loadingSession")} onLogin={handleAuthLogin} />;
+      return <LoginPage authMode="production" loading error={loginError} info={t("auth.loadingSession")} onLogin={handleAuthLogin} />;
     }
 
     if (!authSession?.user || !currentUser) {
-      return <LoginPage authConfigured onLogin={handleAuthLogin} loading={authLoading} error={loginError} info={loginInfo} />;
+      return <LoginPage authMode="production" onLogin={handleAuthLogin} loading={authLoading} error={loginError} info={loginInfo} />;
     }
 
     const blockedReason = getAccessBlockReason(currentUser);
@@ -596,8 +705,15 @@ export function App() {
       return <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />;
     }
   } else if (!role) {
-    return <LoginPage onChoose={handleDemoLogin} />;
+    return <LoginPage authMode={isDemoAuthMode ? "demo" : "production"} onLogin={handleDemoLogin} loading={false} error={loginError} info={loginInfo} />;
   }
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={authConfigured ? currentUser : role === "Admin" ? users.find((user) => user.role === "Admin") : studentProfile} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  const demoHeaderProfile =
+    role === "Admin"
+      ? users.find((user) => `${user.roleKey ?? user.role ?? ""}`.trim().toLowerCase() === "admin") ??
+        demoSession ??
+        DEMO_ACCOUNTS.admin
+      : studentProfile ?? demoSession ?? DEMO_ACCOUNTS.student;
+
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={authConfigured ? currentUser : demoHeaderProfile} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }

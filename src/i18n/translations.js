@@ -194,7 +194,10 @@ export const translations = {
     },
     auth: {
       signIn: "Iniciar sesi\u00f3n",
+      demoMode: "Modo demo",
       signInFailed: "No se pudo iniciar sesi\u00f3n.",
+      invalidCredentials: "Credenciales inv\u00e1lidas",
+      productionConfigMissing: "La autenticaci\u00f3n de producci\u00f3n requiere VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY o VITE_SUPABASE_ANON_KEY.",
       loadingSession: "Comprobando tu sesi\u00f3n...",
       loadingSessionFailed: "No se pudo cargar la sesi\u00f3n.",
       loadingProfileFailed: "No se pudo cargar el perfil del usuario.",
@@ -633,7 +636,10 @@ export const translations = {
     },
     auth: {
       signIn: "Log in",
+      demoMode: "Demo mode",
       signInFailed: "Log in failed.",
+      invalidCredentials: "Invalid credentials",
+      productionConfigMissing: "Production auth requires VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY or VITE_SUPABASE_ANON_KEY.",
       loadingSession: "Checking your session...",
       loadingSessionFailed: "Loading the session failed.",
       loadingProfileFailed: "Loading the user profile failed.",
