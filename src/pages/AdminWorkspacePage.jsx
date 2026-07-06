@@ -406,7 +406,7 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
           <option value="all">{t("admin.allStatuses")}</option>
           <option value="active">{t("status.active")}</option>
           <option value="inactive">{t("status.inactive")}</option>
-          <option value="paused">{t("status.paused")}</option>
+          <option value="suspended">{t("status.suspended")}</option>
         </select>
       </div>
 
@@ -448,7 +448,7 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
                       <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
                         <option value="active">{t("status.active")}</option>
                         <option value="inactive">{t("status.inactive")}</option>
-                        <option value="paused">{t("status.paused")}</option>
+                        <option value="suspended">{t("status.suspended")}</option>
                       </select>
                     ) : (
                       <Status status={user.status} />
@@ -470,7 +470,7 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
                           <button onClick={() => startEditing(user)}>{t("common.edit")}</button>
                           <button onClick={() => void onUpdateUserStatus(user.id, "Active")}>{t("admin.activate")}</button>
                           <button onClick={() => void onUpdateUserStatus(user.id, "Inactive")}>{t("admin.deactivate")}</button>
-                          <button onClick={() => void onUpdateUserStatus(user.id, "Paused")}>{t("admin.pause")}</button>
+                          <button onClick={() => void onUpdateUserStatus(user.id, "suspended")}>{t("auth.suspendUser")}</button>
                           <button className="danger-text" onClick={() => void onDeleteUser(user.id)}>{t("common.delete")}</button>
                         </>
                       )}
@@ -502,6 +502,7 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
   const [saving, setSaving] = useState(false);
   const [resettingUserId, setResettingUserId] = useState(null);
   const [deletingUserId, setDeletingUserId] = useState(null);
+  const [statusUpdatingUserId, setStatusUpdatingUserId] = useState(null);
   const [pendingDeleteUser, setPendingDeleteUser] = useState(null);
 
   const filteredUsers = users.filter((user) => {
@@ -669,6 +670,32 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
       );
     } finally {
       setDeletingUserId(null);
+    }
+  };
+
+  const applyStatusChange = async (user, nextStatus) => {
+    setStatusUpdatingUserId(user.id);
+    setMessage("");
+    setError("");
+
+    try {
+      await onUpdateUserStatus(user.id, nextStatus);
+      setMessage(
+        nextStatus === "inactive"
+          ? t("common.userDeactivatedSuccessfully")
+          : nextStatus === "active"
+            ? t("admin.activate")
+            : t("auth.suspendUser"),
+      );
+    } catch (statusError) {
+      console.error("Updating the admin-managed user status failed:", statusError);
+      setError(
+        statusError?.code === "PROTECTED_DEMO_USER"
+          ? t("common.protectedDemoUsers")
+          : statusError?.message || t("common.userDeleteFailed"),
+      );
+    } finally {
+      setStatusUpdatingUserId(null);
     }
   };
 
@@ -874,9 +901,9 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
                                 {t("auth.sendNewTemporaryPassword")}
                               </button>
                             ) : null}
-                            <button onClick={() => void onUpdateUserStatus(user.id, "active")}>{t("admin.activate")}</button>
-                            <button onClick={() => void onUpdateUserStatus(user.id, "inactive")}>{t("admin.deactivate")}</button>
-                            <button onClick={() => void onUpdateUserStatus(user.id, "suspended")}>{t("auth.suspendUser")}</button>
+                            <button onClick={() => void applyStatusChange(user, "active")} disabled={statusUpdatingUserId === user.id}>{t("admin.activate")}</button>
+                            <button onClick={() => void applyStatusChange(user, "inactive")} disabled={statusUpdatingUserId === user.id}>{t("admin.deactivate")}</button>
+                            <button onClick={() => void applyStatusChange(user, "suspended")} disabled={statusUpdatingUserId === user.id}>{t("auth.suspendUser")}</button>
                             <button className="danger-text" onClick={() => requestDeleteUser(user)}>
                               {t("common.delete")}
                             </button>

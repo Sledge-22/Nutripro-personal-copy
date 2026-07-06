@@ -20,7 +20,6 @@ const OPTIONAL_USER_COLUMNS = [
   "must_change_password",
   "password_updated_at",
   "last_login_at",
-  "deleted_at",
   "updated_at",
 ];
 
@@ -374,6 +373,13 @@ export async function getUserProfileForAuthUser(authUser) {
 
 export async function updateUserStatus(userId, status) {
   const nextStatus = normalizeStatusValue(status);
+  const existingUser = await getUserById(userId);
+
+  if (existingUser && isProtectedDemoEmail(existingUser.email) && nextStatus !== "active") {
+    const protectedError = new Error("Protected demo users cannot be deactivated.");
+    protectedError.code = "PROTECTED_DEMO_USER";
+    throw protectedError;
+  }
 
   if (!isSupabaseConfigured || !supabase) {
     return normalizeUser(
@@ -399,6 +405,14 @@ export async function updateUserStatus(userId, status) {
 
 export async function updateUser(userId, updates = {}) {
   const payload = normalizeUserUpdate(updates);
+  const existingUser = await getUserById(userId);
+  const nextStatus = "status" in payload ? normalizeStatusValue(payload.status) : null;
+
+  if (existingUser && isProtectedDemoEmail(existingUser.email) && nextStatus && nextStatus !== "active") {
+    const protectedError = new Error("Protected demo users cannot be deactivated.");
+    protectedError.code = "PROTECTED_DEMO_USER";
+    throw protectedError;
+  }
 
   if (!isSupabaseConfigured || !supabase) {
     return normalizeUser(
@@ -812,7 +826,7 @@ export async function ensureDemoStudent() {
   return normalizeUser(dataRow);
 }
 
-export async function deleteUser(userId) {
+export async function deactivateUser(userId) {
   if (!userId) {
     throw new Error("A valid user id is required.");
   }
@@ -838,7 +852,6 @@ export async function deleteUser(userId) {
     const user = updateMockUsers(userId, (entry) => ({
       ...entry,
       status: toDisplayStatus("inactive"),
-      deleted_at: nowIso(),
       updated_at: nowIso(),
     }));
 
@@ -854,7 +867,6 @@ export async function deleteUser(userId) {
       supabase.from("users").update(payload).eq("id", userId).select("*").single(),
     {
       status: "inactive",
-      deleted_at: nowIso(),
       updated_at: nowIso(),
     },
   );
@@ -864,4 +876,8 @@ export async function deleteUser(userId) {
     softDeleted: true,
     user: normalizeUser(data),
   };
+}
+
+export async function deleteUser(userId) {
+  return deactivateUser(userId);
 }
