@@ -6,6 +6,7 @@ export const DEMO_STUDENT_EMAIL = "maya@nutripro.demo";
 
 const DEMO_STUDENT_ROLE = "student";
 const DEMO_STUDENT_STATUS = "active";
+const DEMO_ADMIN_EMAIL = "admin@nutripro.demo";
 const DEFAULT_ADMIN_USER_FUNCTION = "admin-user-management";
 const ADMIN_USER_FUNCTION =
   import.meta.env.VITE_SUPABASE_ADMIN_FUNCTION_NAME?.trim() || DEFAULT_ADMIN_USER_FUNCTION;
@@ -19,8 +20,11 @@ const OPTIONAL_USER_COLUMNS = [
   "must_change_password",
   "password_updated_at",
   "last_login_at",
+  "deleted_at",
   "updated_at",
 ];
+
+const PROTECTED_DEMO_EMAILS = new Set([DEMO_ADMIN_EMAIL, DEMO_STUDENT_EMAIL]);
 
 function normalizeOptionalString(value) {
   const normalizedValue = `${value ?? ""}`.trim();
@@ -127,6 +131,10 @@ function findDemoStudent(users = []) {
     users.find((user) => user.name === DEMO_STUDENT_NAME) ??
     null
   );
+}
+
+function isProtectedDemoEmail(email) {
+  return PROTECTED_DEMO_EMAILS.has(`${email ?? ""}`.trim().toLowerCase());
 }
 
 function updateMockUsers(userId, updater) {
@@ -805,16 +813,55 @@ export async function ensureDemoStudent() {
 }
 
 export async function deleteUser(userId) {
+  if (!userId) {
+    throw new Error("A valid user id is required.");
+  }
+
+  const existingUser = await getUserById(userId);
+  if (!existingUser) {
+    return {
+      ok: true,
+      softDeleted: true,
+      user: null,
+    };
+  }
+
+  if (isProtectedDemoEmail(existingUser.email)) {
+    const protectedError = new Error("Protected demo users cannot be deleted.");
+    protectedError.code = "PROTECTED_DEMO_USER";
+    throw protectedError;
+  }
+
+  // Soft delete for launch safety. This keeps related history like submissions,
+  // posts, enrollments, and progress intact while removing the user from active use.
   if (!isSupabaseConfigured || !supabase) {
-    setMockUsers(getMockUsers().filter((user) => String(user.id) !== String(userId)));
-    return true;
+    const user = updateMockUsers(userId, (entry) => ({
+      ...entry,
+      status: toDisplayStatus("inactive"),
+      deleted_at: nowIso(),
+      updated_at: nowIso(),
+    }));
+
+    return {
+      ok: true,
+      softDeleted: true,
+      user: user ? normalizeUser(user) : null,
+    };
   }
 
-  const { error } = await supabase.from("users").delete().eq("id", userId);
-  if (error) {
-    console.error("Deleting the user profile in Supabase failed:", error);
-    throw error;
-  }
+  const data = await runUserMutationWithOptionalColumnRetry(
+    (payload) =>
+      supabase.from("users").update(payload).eq("id", userId).select("*").single(),
+    {
+      status: "inactive",
+      deleted_at: nowIso(),
+      updated_at: nowIso(),
+    },
+  );
 
-  return true;
+  return {
+    ok: true,
+    softDeleted: true,
+    user: normalizeUser(data),
+  };
 }

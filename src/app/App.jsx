@@ -549,8 +549,9 @@ export function App() {
   }
 
   async function handleDeleteUser(userId) {
-    await deleteUser(userId);
+    const result = await deleteUser(userId);
     setUsers(await getUsers());
+    return result;
   }
 
   async function handleSaveCourse(course, editingId) {

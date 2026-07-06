@@ -978,6 +978,14 @@ select:focus {
   border-color: var(--color-border);
 }
 
+.confirm-modal {
+  width: min(520px, 94vw);
+}
+
+.confirm-modal-actions {
+  justify-content: center;
+}
+
 @media (max-width: 1080px) {
   .app-shell { grid-template-columns: 220px minmax(0,1fr); }
   .sidebar { padding-inline: 16px; }

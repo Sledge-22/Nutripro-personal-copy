@@ -486,7 +486,7 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
   );
 }
 
-function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdateUser, onCreateUser, onResetUserPassword }) {
+function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdateUser, onCreateUser, onResetUserPassword, onDeleteUser }) {
   const { t, language, translateRole } = useLanguage();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -501,6 +501,8 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
   const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [resettingUserId, setResettingUserId] = useState(null);
+  const [deletingUserId, setDeletingUserId] = useState(null);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState(null);
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
@@ -639,6 +641,35 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
     if (!temporaryPassword) return;
     await navigator.clipboard.writeText(temporaryPassword);
     setMessage(t("auth.passwordCopied"));
+  };
+
+  const requestDeleteUser = (user) => {
+    setMessage("");
+    setError("");
+    setPendingDeleteUser(user);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!pendingDeleteUser) return;
+
+    setDeletingUserId(pendingDeleteUser.id);
+    setMessage("");
+    setError("");
+
+    try {
+      const result = await onDeleteUser(pendingDeleteUser.id);
+      setMessage(result?.softDeleted ? t("common.userDeactivatedSuccessfully") : t("common.userDeletedSuccessfully"));
+      setPendingDeleteUser(null);
+    } catch (deleteError) {
+      console.error("Deleting the admin-managed user failed:", deleteError);
+      setError(
+        deleteError?.code === "PROTECTED_DEMO_USER"
+          ? t("common.protectedDemoUsers")
+          : deleteError?.message || t("common.userDeleteFailed"),
+      );
+    } finally {
+      setDeletingUserId(null);
+    }
   };
 
   return (
@@ -846,6 +877,9 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
                             <button onClick={() => void onUpdateUserStatus(user.id, "active")}>{t("admin.activate")}</button>
                             <button onClick={() => void onUpdateUserStatus(user.id, "inactive")}>{t("admin.deactivate")}</button>
                             <button onClick={() => void onUpdateUserStatus(user.id, "suspended")}>{t("auth.suspendUser")}</button>
+                            <button className="danger-text" onClick={() => requestDeleteUser(user)}>
+                              {t("common.delete")}
+                            </button>
                           </>
                         )}
                       </div>
@@ -857,6 +891,31 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
           </table>
         </div>
       </section>
+
+      {pendingDeleteUser ? (
+        <div className="modal-backdrop" onMouseDown={() => setPendingDeleteUser(null)}>
+          <div className="certificate-modal confirm-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <button className="modal-close" type="button" onClick={() => setPendingDeleteUser(null)}>×</button>
+            <span className="eyebrow">{t("common.deleteUser")}</span>
+            <h2>{t("common.confirmDeleteUserTitle")}</h2>
+            <p>{t("common.confirmDeleteUserBody")}</p>
+            <p><strong>{pendingDeleteUser.name}</strong> · {pendingDeleteUser.email}</p>
+            <div className="form-actions compact confirm-modal-actions">
+              <button type="button" className="secondary-btn" onClick={() => setPendingDeleteUser(null)}>
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className="primary-btn"
+                disabled={deletingUserId === pendingDeleteUser.id}
+                onClick={() => void confirmDeleteUser()}
+              >
+                {deletingUserId === pendingDeleteUser.id ? t("common.saving") : t("common.deleteUser")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
