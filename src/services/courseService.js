@@ -58,15 +58,15 @@ function normalizeModules(modules = []) {
       uploadLabel: module.video?.uploadLabel ?? module.videoName ?? module.video_file_name ?? "No video selected",
     },
     assignment: module.assignment
-      ? {
+        ? {
           id: module.assignment.id ?? null,
           moduleId: module.assignment.moduleId ?? module.id ?? null,
           title: module.assignment.title ?? "",
           instructions: module.assignment.instructions ?? "",
           dueDate: module.assignment.dueDate ?? module.assignment.due_date ?? "",
           due_date: module.assignment.due_date ?? module.assignment.dueDate ?? "",
-          submissionType: module.assignment.submissionType ?? module.assignment.submission_type ?? "text",
-          submission_type: module.assignment.submission_type ?? module.assignment.submissionType ?? "text",
+          submissionType: "file",
+          submission_type: "file",
         }
       : null,
   }));

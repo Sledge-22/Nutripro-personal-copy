@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Icon, OverviewCard, Stat, Status, Welcome } from "../components/ui.jsx";
+import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
 import { getSubmissionsForAdmin, reviewSubmission } from "../services/assignmentService.js";
 import { uploadCourseImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
@@ -15,8 +16,8 @@ function createAssignmentDraft() {
     instructions: "",
     dueDate: "",
     due_date: "",
-    submissionType: "text",
-    submission_type: "text",
+    submissionType: "file",
+    submission_type: "file",
   };
 }
 
@@ -132,8 +133,8 @@ function createCourseDraft(course = null) {
             instructions: module.assignment.instructions || "",
             dueDate: module.assignment.dueDate || module.assignment.due_date || "",
             due_date: module.assignment.due_date || module.assignment.dueDate || "",
-            submissionType: module.assignment.submissionType || module.assignment.submission_type || "text",
-            submission_type: module.assignment.submission_type || module.assignment.submissionType || "text",
+            submissionType: "file",
+            submission_type: "file",
           }
         : null,
     })),
@@ -194,8 +195,8 @@ function buildCoursePayload(form, editingId, existingCourse) {
               instructions: module.assignment.instructions.trim(),
               dueDate: module.assignment.dueDate || module.assignment.due_date || "",
               due_date: module.assignment.due_date || module.assignment.dueDate || "",
-              submissionType: module.assignment.submissionType || module.assignment.submission_type || "text",
-              submission_type: module.assignment.submission_type || module.assignment.submissionType || "text",
+              submissionType: "file",
+              submission_type: "file",
             }
           : null,
       })),
@@ -1004,21 +1005,24 @@ function ModuleEditor({
           </h5>
         </div>
 
-        <label className="inline-toggle">
-          <input
-            type="checkbox"
-            checked={Boolean(module.requiresAssignment || module.requires_assignment)}
-            onChange={(event) =>
-              updateModule(module.id, (currentModule) => ({
-                ...currentModule,
-                requiresAssignment: event.target.checked,
-                requires_assignment: event.target.checked,
-                assignment: event.target.checked ? currentModule.assignment ?? createAssignmentDraft() : null,
-              }))
-            }
-          />{" "}
-          {t("common.requiresAssignment")}
-        </label>
+        <ToggleSwitch
+          checked={Boolean(module.requiresAssignment || module.requires_assignment)}
+          label={t("common.requiresAssignment")}
+          onChange={(checked) =>
+            updateModule(module.id, (currentModule) => ({
+              ...currentModule,
+              requiresAssignment: checked,
+              requires_assignment: checked,
+              assignment: checked
+                ? {
+                    ...(currentModule.assignment ?? createAssignmentDraft()),
+                    submissionType: "file",
+                    submission_type: "file",
+                  }
+                : null,
+            }))
+          }
+        />
 
         {module.requiresAssignment || module.requires_assignment ? (
           <>
@@ -1066,23 +1070,10 @@ function ModuleEditor({
               />
             </label>
 
-            <label>
-              {t("admin.submissionType")}
-              <select
-                value={module.assignment.submissionType || module.assignment.submission_type || "text"}
-                onChange={(event) =>
-                  updateAssignment(module.id, (assignment) => ({
-                    ...assignment,
-                    submissionType: event.target.value,
-                    submission_type: event.target.value,
-                  }))
-                }
-              >
-                <option value="text">{t("common.text")}</option>
-                <option value="file">{t("common.file")}</option>
-                <option value="text_and_file">{t("common.textAndFile")}</option>
-              </select>
-            </label>
+            <div className="assignment-mode-card">
+              <span className="subtle-badge">{t("admin.fileUploadOnly")}</span>
+              <p className="field-note">{t("admin.assignmentFileOnlyHelp")}</p>
+            </div>
 
             <div className="row-actions">
               <button
@@ -1382,10 +1373,11 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
           </div>
         ) : null}
 
-        <label>
-          <input type="checkbox" checked={isVisibleToStudents(form.status)} onChange={(event) => updateCourseField("status", event.target.checked ? "published" : "draft")} />{" "}
-          {isVisibleToStudents(form.status) ? t("common.visibleToStudents") : t("common.hiddenFromStudents")}
-        </label>
+        <ToggleSwitch
+          checked={isVisibleToStudents(form.status)}
+          label={isVisibleToStudents(form.status) ? t("common.visibleToStudents") : t("common.hiddenFromStudents")}
+          onChange={(checked) => updateCourseField("status", checked ? "published" : "draft")}
+        />
 
         {saveError && <small className="field-note danger-text">{saveError}</small>}
 
@@ -1521,10 +1513,12 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                   <span>{(course.modules ?? []).filter((module) => module.pdf_url || module.pdfUrl || module.pdfLabel !== "No PDF selected").length} PDFs</span>
                   <span>{(course.modules ?? []).filter((module) => module.video_url || module.videoUrl || module.video?.url || module.video?.link).length} videos</span>
                   <span>{(course.modules ?? []).filter((module) => module.assignment?.title?.trim()).length} {t("common.assignments") || "assignments"}</span>
-                  <label>
-                    <input type="checkbox" checked={isVisibleToStudents(course.status)} disabled={statusUpdatingId === course.id} onChange={(event) => void changeCourseVisibility(course, event.target.checked)} />{" "}
-                    {isVisibleToStudents(course.status) ? t("common.visibleToStudents") : t("common.hiddenFromStudents")}
-                  </label>
+                  <ToggleSwitch
+                    checked={isVisibleToStudents(course.status)}
+                    disabled={statusUpdatingId === course.id}
+                    label={isVisibleToStudents(course.status) ? t("common.visibleToStudents") : t("common.hiddenFromStudents")}
+                    onChange={(checked) => void changeCourseVisibility(course, checked)}
+                  />
                 </div>
                 <div className="row-actions">
                   <button onClick={() => editCourse(course)}>{t("common.edit")}</button>
@@ -1713,10 +1707,12 @@ function AssignmentReviewsPage() {
               <p>{selectedSubmission.assignmentInstructions || t("common.noInstructionsAdded")}</p>
             </div>
 
-            <div className="response-block">
-              <strong>{t("common.studentTextResponse")}</strong>
-              <p>{selectedSubmission.textResponse || t("common.noTextResponseSubmitted")}</p>
-            </div>
+            {selectedSubmission.textResponse ? (
+              <div className="response-block">
+                <strong>{t("common.oldTextResponse")}</strong>
+                <p>{selectedSubmission.textResponse}</p>
+              </div>
+            ) : null}
 
             {selectedSubmission.filePublicUrl || selectedSubmission.fileUrl ? (
               <a href={selectedSubmission.filePublicUrl || selectedSubmission.fileUrl} target="_blank" rel="noreferrer">{t("common.openAttachment")}</a>

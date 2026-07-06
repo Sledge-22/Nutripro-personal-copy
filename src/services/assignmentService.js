@@ -8,7 +8,6 @@ import {
   setMockCourses,
 } from "./mockStore.js";
 
-const VALID_SUBMISSION_TYPES = new Set(["text", "file", "text_and_file"]);
 const VALID_SUBMISSION_STATUSES = new Set(["submitted", "approved", "needs_revision", "rejected"]);
 
 function normalizeEntityId(value) {
@@ -20,8 +19,11 @@ function normalizeEntityId(value) {
 }
 
 function normalizeSubmissionType(value) {
-  const normalizedValue = `${value ?? "text"}`.trim().toLowerCase();
-  return VALID_SUBMISSION_TYPES.has(normalizedValue) ? normalizedValue : "text";
+  const normalizedValue = `${value ?? "file"}`.trim().toLowerCase();
+  if (normalizedValue === "text" || normalizedValue === "file" || normalizedValue === "text_and_file") {
+    return normalizedValue;
+  }
+  return "file";
 }
 
 function normalizeSubmissionStatus(value) {
@@ -116,7 +118,7 @@ function sanitizeAssignmentData(assignmentData = {}) {
     title: `${assignmentData.title ?? ""}`.trim(),
     instructions: `${assignmentData.instructions ?? ""}`.trim(),
     due_date: assignmentData.due_date ?? assignmentData.dueDate ?? null,
-    submission_type: normalizeSubmissionType(assignmentData.submission_type ?? assignmentData.submissionType),
+    submission_type: "file",
   };
 }
 

@@ -447,7 +447,6 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     loading: false,
     error: "",
     submission: null,
-    textResponse: "",
     selectedFile: null,
     selectedFileName: "",
     submitMessage: "",
@@ -477,7 +476,6 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
             loading: false,
             error: "",
             submission: null,
-            textResponse: "",
             selectedFile: null,
             selectedFileName: "",
             submitMessage: "",
@@ -493,7 +491,6 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
           loading: true,
           error: "",
           submission: null,
-          textResponse: "",
           selectedFile: null,
           selectedFileName: "",
           submitMessage: "",
@@ -510,7 +507,6 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
             loading: false,
             error: "",
             submission,
-            textResponse: submission?.textResponse || "",
             selectedFile: null,
             selectedFileName: submission?.fileName || "",
             submitMessage: "",
@@ -526,7 +522,6 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
             loading: false,
             error: error.message || "Loading the assignment submission failed.",
             submission: null,
-            textResponse: "",
             selectedFile: null,
             selectedFileName: "",
             submitMessage: "",
@@ -565,7 +560,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const pdfLabel = activeModule?.pdfLabel || activeModule?.pdfName || t("common.noPdfSelected");
   const videoLabel =
     activeModule?.videoName || activeModule?.video?.uploadLabel || activeModule?.video?.link || t("common.noVideoSelected");
-  const assignmentType = activeAssignment?.submissionType || activeAssignment?.submission_type || "text";
+  const assignmentType = "file";
   const assignmentStatus = assignmentState.submission?.status || "";
   const hasSubmission = Boolean(assignmentState.submission);
   const assignmentHasGrade =
@@ -609,21 +604,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
       return;
     }
 
-    const submissionType = activeAssignment.submissionType || activeAssignment.submission_type || "text";
-    const needsText = submissionType === "text" || submissionType === "text_and_file";
-    const needsFile = submissionType === "file" || submissionType === "text_and_file";
-    const textResponse = assignmentState.textResponse.trim();
-
-    if (needsText && !textResponse) {
-      setAssignmentState((current) => ({
-        ...current,
-        submitError: t("validation.assignmentTextRequired"),
-        submitMessage: "",
-      }));
-      return;
-    }
-
-    if (needsFile && !assignmentState.selectedFile) {
+    if (!assignmentState.selectedFile) {
       setAssignmentState((current) => ({
         ...current,
         submitError: t("validation.assignmentFileRequired"),
@@ -656,7 +637,6 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
       }
 
       const savedSubmission = await submitAssignment(activeAssignment.id, studentId, {
-        textResponse,
         filePublicUrl,
         fileName,
         fileStoragePath,
@@ -668,7 +648,6 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
         loading: false,
         error: "",
         submission: savedSubmission,
-        textResponse: savedSubmission?.textResponse || textResponse,
         selectedFile: null,
         selectedFileName: savedSubmission?.fileName || fileName,
         submitMessage: t("common.assignmentSubmittedSuccess"),
@@ -849,44 +828,22 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                 <small className="field-note danger-text">{assignmentState.submitError}</small>
               )}
 
-              {(assignmentType === "text" || assignmentType === "text_and_file") && (
-                <label>
-                  {t("common.textResponse")}
-                  <textarea
-                    rows="5"
-                    value={assignmentState.textResponse}
-                    disabled={isAssignmentLocked || assignmentState.loading || assignmentState.uploading}
-                    onChange={(event) =>
-                      setAssignmentState((current) => ({
-                        ...current,
-                        textResponse: event.target.value,
-                        submitError: "",
-                        submitMessage: "",
-                      }))
-                    }
-                    placeholder={t("student.writeResponseHere")}
-                  />
-                </label>
-              )}
-
-              {(assignmentType === "file" || assignmentType === "text_and_file") && (
-                <label>
-                  {t("common.uploadFile")}
-                  <input
-                    type="file"
-                    disabled={isAssignmentLocked || assignmentState.loading || assignmentState.uploading}
-                    onChange={(event) =>
-                      setAssignmentState((current) => ({
-                        ...current,
-                        selectedFile: event.target.files?.[0] ?? null,
-                        selectedFileName: event.target.files?.[0]?.name || current.selectedFileName,
-                        submitError: "",
-                        submitMessage: "",
-                      }))
-                    }
-                  />
-                </label>
-              )}
+              <label>
+                {t("common.uploadFile")}
+                <input
+                  type="file"
+                  disabled={isAssignmentLocked || assignmentState.loading || assignmentState.uploading}
+                  onChange={(event) =>
+                    setAssignmentState((current) => ({
+                      ...current,
+                      selectedFile: event.target.files?.[0] ?? null,
+                      selectedFileName: event.target.files?.[0]?.name || current.selectedFileName,
+                      submitError: "",
+                      submitMessage: "",
+                    }))
+                  }
+                />
+              </label>
 
               {assignmentState.selectedFileName ? (
                 <small className="field-note">{t("common.selectedFile", { name: assignmentState.selectedFileName })}</small>
@@ -917,9 +874,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                 </p>
               </div>
 
-              {assignmentState.submission ? (
-                <small className="field-note">{t("common.assignmentAlreadySubmitted")}</small>
-              ) : null}
+              {assignmentState.submission ? <small className="field-note">{t("common.assignmentLockedAfterSubmit")}</small> : null}
 
               <div className="form-actions compact">
                 <button
