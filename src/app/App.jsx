@@ -55,16 +55,12 @@ const DEMO_ACCOUNTS = {
     roleKey: "admin",
     name: "Alex Morgan",
     email: "admin@nutripro.demo",
-    identifiers: ["admin", "admin@nutripro.demo"],
-    password: "nutriprotestA",
   },
   student: {
     role: "Student",
     roleKey: "student",
     name: "Maya Laurent",
     email: "maya@nutripro.demo",
-    identifiers: ["maya", "maya@nutripro.demo"],
-    password: "nutriprotestS",
   },
 };
 
@@ -161,8 +157,15 @@ function clearDemoSession() {
   }
 }
 
+function getDemoRoleKeyFromPath(pathname) {
+  if (isAdminRoute(pathname)) return "admin";
+  if (isStudentRoute(pathname)) return "student";
+  return null;
+}
+
 export function App() {
   const { t } = useLanguage();
+  // Demo mode is the default live behavior. Production auth stays parked behind VITE_AUTH_MODE=production.
   const isDemoAuthMode = AUTH_MODE === "demo";
   const authConfigured = isProductionAuthMode && isAuthConfigured();
   const initialDemoStudent = initialUsers.find((user) => user.email?.toLowerCase() === DEMO_STUDENT_EMAIL) ?? initialUsers[0] ?? null;
@@ -250,13 +253,22 @@ export function App() {
   useEffect(() => {
     if (isProductionAuthMode) return;
 
-    if (!demoSession) {
+    const inferredRoleKey = demoSession?.roleKey ?? getDemoRoleKeyFromPath(pathname);
+
+    if (!inferredRoleKey) {
       if (pathname !== ROUTES.login) navigateTo(ROUTES.login, true);
       return;
     }
 
-    if (!pathMatchesRole(pathname, demoSession.roleKey)) {
-      navigateTo(dashboardPathForRole(demoSession.roleKey), true);
+    if (!demoSession || demoSession.roleKey !== inferredRoleKey) {
+      const nextDemoAccount = inferredRoleKey === "admin" ? DEMO_ACCOUNTS.admin : DEMO_ACCOUNTS.student;
+      persistDemoSession(nextDemoAccount);
+      setDemoSession(nextDemoAccount);
+      return;
+    }
+
+    if (pathname === ROUTES.login) {
+      return;
     }
   }, [demoSession, pathname]);
 
@@ -386,9 +398,10 @@ export function App() {
 
   const role = useMemo(() => {
     if (authConfigured) return toRoleLabel(currentUser?.roleKey ?? currentUser?.role);
-    if (demoSession?.role) return toRoleLabel(demoSession.roleKey ?? demoSession.role);
+    const demoRoleKey = demoSession?.roleKey ?? getDemoRoleKeyFromPath(pathname);
+    if (demoRoleKey) return toRoleLabel(demoRoleKey);
     return null;
-  }, [authConfigured, currentUser, demoSession]);
+  }, [authConfigured, currentUser, demoSession, pathname]);
 
   const adminNav = useMemo(() => ([
     { path: ROUTES.admin.dashboard, label: t("common.dashboard"), icon: "dashboard" },
@@ -434,23 +447,13 @@ export function App() {
     return map[pathname] || "Nutripro";
   }, [courses, pathname, studentCourses, t]);
 
-  async function handleDemoLogin({ identifier, password }) {
+  function handleDemoAccess(nextRole) {
+    const nextDemoAccount = nextRole === "Admin" ? DEMO_ACCOUNTS.admin : DEMO_ACCOUNTS.student;
     setLoginError("");
     setLoginInfo("");
-
-    const normalizedIdentifier = `${identifier ?? ""}`.trim().toLowerCase();
-    const matchedAccount = Object.values(DEMO_ACCOUNTS).find(
-      (account) => account.identifiers.includes(normalizedIdentifier) && account.password === password,
-    );
-
-    if (!matchedAccount) {
-      setLoginError(t("auth.invalidCredentials"));
-      return;
-    }
-
-    persistDemoSession(matchedAccount);
-    setDemoSession(matchedAccount);
-    navigateTo(dashboardPathForRole(matchedAccount.roleKey), true);
+    persistDemoSession(nextDemoAccount);
+    setDemoSession(nextDemoAccount);
+    navigateTo(dashboardPathForRole(nextDemoAccount.roleKey), true);
   }
 
   async function handleAuthLogin({ identifier, password }) {
@@ -705,7 +708,7 @@ export function App() {
       return <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />;
     }
   } else if (!role) {
-    return <LoginPage authMode={isDemoAuthMode ? "demo" : "production"} onLogin={handleDemoLogin} loading={false} error={loginError} info={loginInfo} />;
+    return <LoginPage authMode={isDemoAuthMode ? "demo" : "production"} onChoose={handleDemoAccess} onLogin={handleAuthLogin} loading={false} error={loginError} info={loginInfo} />;
   }
 
   const demoHeaderProfile =
