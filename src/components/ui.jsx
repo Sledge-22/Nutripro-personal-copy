@@ -1,7 +1,8 @@
 import React from "react";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 import { LanguageDropdown } from "./LanguageDropdown.jsx";
-import logoPlaceholder from "../assets/nutripro-logo-placeholder.svg";
+
+const BRAND_LOGO_SRC = "/assets/nutripro-logo.png";
 
 const icons = {
   dashboard: <path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z" />,
@@ -23,9 +24,7 @@ export function Icon({ name, size = 20 }) {
 
 export function Brand() {
   const { t } = useLanguage();
-  // Demo branding keeps the logo image isolated here so the uploaded transparent PNG
-  // can replace the placeholder without touching the rest of the app.
-  return <div className="brand"><img className="brand-logo" src={logoPlaceholder} alt="Nutripro logo" /><div><strong>Nutripro</strong><small>{t("brand.tagline")}</small></div></div>;
+  return <div className="brand"><img className="brand-logo" src={BRAND_LOGO_SRC} alt="Nutripro logo" /><div><strong>Nutripro</strong><small>{t("brand.tagline")}</small></div></div>;
 }
 
 export function Status({ status }) {
@@ -71,5 +70,5 @@ export function Sidebar({ role, navItems, currentPath, onNavigate, onLogout }) {
 
 export function CertificateModal({ certificate, onClose }) {
   const { t } = useLanguage();
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="certificate-modal" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><div className="cert-seal">N</div><span className="eyebrow">NUTRIPRO</span><h2>{t("student.certificateOfCompletion")}</h2><p>{t("certificateModal.certifiesThat")}</p><h3>{certificate.student}</h3><p>{t("certificateModal.successfullyCompleted")}</p><h4>{certificate.course}</h4><div className="certificate-meta"><span>{t("common.issued")} {certificate.issueDate}</span><span>{certificate.number}</span></div></div></div>;
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="certificate-modal" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><img className="certificate-logo" src={BRAND_LOGO_SRC} alt="Nutripro logo" /><span className="eyebrow">NUTRIPRO</span><h2>{t("student.certificateOfCompletion")}</h2><p>{t("certificateModal.certifiesThat")}</p><h3>{certificate.student}</h3><p>{t("certificateModal.successfullyCompleted")}</p><h4>{certificate.course}</h4><div className="certificate-meta"><span>{t("common.issued")} {certificate.issueDate}</span><span>{certificate.number}</span></div></div></div>;
 }
