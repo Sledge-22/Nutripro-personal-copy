@@ -579,7 +579,10 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
       const details = `${createError?.message ?? ""}`.toLowerCase();
       const isFunctionIssue =
         mode === "production" &&
-        (details.includes("function") ||
+        (createError?.code === "PRODUCTION_AUTH_FUNCTION_ERROR" ||
+          details.includes("function") ||
+          details.includes("non-2xx") ||
+          details.includes("edge function") ||
           details.includes("not authenticated") ||
           details.includes("authorization") ||
           details.includes("supabase function"));
@@ -619,7 +622,10 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
       const details = `${resetError?.message ?? ""}`.toLowerCase();
       const isFunctionIssue =
         mode === "production" &&
-        (details.includes("function") ||
+        (resetError?.code === "PRODUCTION_AUTH_FUNCTION_ERROR" ||
+          details.includes("function") ||
+          details.includes("non-2xx") ||
+          details.includes("edge function") ||
           details.includes("not authenticated") ||
           details.includes("authorization") ||
           details.includes("supabase function"));

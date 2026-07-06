@@ -22,9 +22,19 @@ export function Icon({ name, size = 20 }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill={name === "dashboard" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icons[name]}</svg>;
 }
 
+function goHome() {
+  window.history.pushState({}, "", "/");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 export function Brand() {
   const { t } = useLanguage();
-  return <div className="brand"><img className="brand-logo" src={BRAND_LOGO_SRC} alt="Nutripro logo" /><div><strong>Nutripro</strong><small>{t("brand.tagline")}</small></div></div>;
+  return (
+    <button type="button" className="brand brand-link" aria-label="Go to homepage" onClick={goHome}>
+      <img className="brand-logo" src={BRAND_LOGO_SRC} alt="Nutripro logo" />
+      <div><strong>Nutripro</strong><small>{t("brand.tagline")}</small></div>
+    </button>
+  );
 }
 
 export function Status({ status }) {

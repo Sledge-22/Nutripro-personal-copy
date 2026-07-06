@@ -74,6 +74,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .login-page { min-height: 100vh; display: grid; grid-template-columns: minmax(520px, 44%) minmax(0, 56%); background: #fdfcf9; }
 .login-panel { padding: 44px clamp(48px, 7vw, 110px); display: flex; flex-direction: column; }
 .brand { display: flex; align-items: center; gap: 12px; }
+.brand-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
 .brand-logo { width: 56px; height: 56px; object-fit: contain; object-position: center; display: block; flex-shrink: 0; border-radius: 0; filter: drop-shadow(0 10px 22px rgba(79, 202, 214, .22)); }
 .brand-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px 13px 13px 4px; color: #fff; background: var(--green-700); box-shadow: 0 8px 20px rgba(35, 91, 71, .18); font-family: var(--font-heading); font-weight: 800; }
 .brand strong { display: block; font-size: 20px; line-height: 1.1; letter-spacing: -.5px; }

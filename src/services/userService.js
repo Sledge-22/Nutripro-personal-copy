@@ -191,11 +191,18 @@ async function invokeAdminUserFunction(body) {
 
   if (error) {
     console.error("Admin user function invocation failed:", error);
-    throw error;
+    const nextError = new Error("Production auth function call failed.");
+    nextError.code = "PRODUCTION_AUTH_FUNCTION_ERROR";
+    nextError.cause = error;
+    throw nextError;
   }
 
   if (data?.error) {
-    throw new Error(data.error);
+    console.error("Admin user function returned an application error:", data.error);
+    const nextError = new Error("Production auth function call failed.");
+    nextError.code = "PRODUCTION_AUTH_FUNCTION_ERROR";
+    nextError.cause = data.error;
+    throw nextError;
   }
 
   return data ?? {};
