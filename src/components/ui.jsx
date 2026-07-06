@@ -23,6 +23,8 @@ export function Icon({ name, size = 20 }) {
 
 export function Brand() {
   const { t } = useLanguage();
+  // Demo branding keeps the logo image isolated here so the uploaded transparent PNG
+  // can replace the placeholder without touching the rest of the app.
   return <div className="brand"><img className="brand-logo" src={logoPlaceholder} alt="Nutripro logo" /><div><strong>Nutripro</strong><small>{t("brand.tagline")}</small></div></div>;
 }
 
