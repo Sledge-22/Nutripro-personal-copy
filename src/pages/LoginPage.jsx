@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { Brand, Icon } from "../components/ui.jsx";
 import { LanguageDropdown } from "../components/LanguageDropdown.jsx";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
-import heroPlaceholder from "../assets/home-hero-placeholder.svg";
+
+const HERO_IMAGE_SRC = "/assets/homepage-hero.png";
 
 export function LoginPage({
   onChoose,
@@ -25,8 +26,6 @@ export function LoginPage({
     });
   };
 
-  // Demo homepage layout stays asset-ready here. Replace heroPlaceholder and the Brand logo import
-  // with the uploaded soccer photo and transparent Nutripro logo once the exact files are available.
   return <main className="login-page">
     <section className="login-panel">
       <div className="login-topbar">
@@ -82,6 +81,6 @@ export function LoginPage({
 
       <footer className="login-footer">{t("login.footer")}</footer>
     </section>
-    <aside className="login-visual hero-visual"><div className="visual-orbit one" /><div className="visual-orbit two" /><img className="hero-placeholder-image hero-image" src={heroPlaceholder} alt="Nutripro homepage hero" /><div className="visual-card hero-overlay-card"><div className="leaf">N</div><p>{t("login.learnAtYourPace")}</p><strong>{t("login.practicalNutrition").split("\n").map((line, index) => <React.Fragment key={line}>{index ? <br /> : null}{line}</React.Fragment>)}</strong><div className="mini-progress"><span /></div></div></aside>
+    <aside className="login-visual hero-visual"><div className="visual-orbit one" /><div className="visual-orbit two" /><img className="hero-placeholder-image hero-image" src={HERO_IMAGE_SRC} alt="Woman standing on a soccer field with a soccer ball" /><div className="visual-card hero-overlay-card"><div className="leaf">N</div><p>{t("login.learnAtYourPace")}</p><strong>{t("login.practicalNutrition").split("\n").map((line, index) => <React.Fragment key={line}>{index ? <br /> : null}{line}</React.Fragment>)}</strong><div className="mini-progress"><span /></div></div></aside>
   </main>;
 }
