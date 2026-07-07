@@ -10,6 +10,21 @@ function createId() {
   return Date.now() + Math.floor(Math.random() * 100000);
 }
 
+const COURSE_DRAFT_STORAGE_KEY = "nutripro-course-builder-draft-v2";
+const MAX_VIDEO_SIZE_MB = 250;
+const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
+const PDF_ACCEPT = ".pdf,application/pdf";
+const VIDEO_ACCEPT = ".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm";
+const NO_PDF_SELECTED = "No PDF selected";
+const NO_VIDEO_SELECTED = "No video selected";
+
+function formatFileSize(bytes) {
+  const normalizedBytes = Number(bytes);
+  if (!Number.isFinite(normalizedBytes) || normalizedBytes <= 0) return "";
+  if (normalizedBytes >= 1024 * 1024) return `${(normalizedBytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(normalizedBytes / 1024))} KB`;
+}
+
 function createAssignmentDraft() {
   return {
     id: null,
@@ -37,6 +52,9 @@ function createModuleDraft(sortOrder = 1) {
     pdf_file_name: "",
     pdfStoragePath: "",
     pdf_storage_path: "",
+    pdfFile: null,
+    pdfPendingName: "",
+    pdfPendingSize: null,
     pdfUploading: false,
     pdfError: "",
     videoUrl: "",
@@ -45,6 +63,9 @@ function createModuleDraft(sortOrder = 1) {
     video_file_name: "",
     videoStoragePath: "",
     video_storage_path: "",
+    videoFile: null,
+    videoPendingName: "",
+    videoPendingSize: null,
     video: {
       id: createId(),
       title: "",
@@ -57,6 +78,106 @@ function createModuleDraft(sortOrder = 1) {
       error: "",
     },
     assignment: null,
+  };
+}
+
+function restoreModuleDraft(module = {}, index = 0) {
+  const baseModule = createModuleDraft(index + 1);
+  const restoredPdfUrl = module.pdf_url || module.pdfUrl || "";
+  const restoredVideoUrl = module.video_url || module.videoUrl || module.video?.url || "";
+  const legacyPdfName = module.pdfPendingName || module.pdfName || module.pdf_file_name || module.pdfLabel || "";
+  const legacyVideoName =
+    module.videoPendingName ||
+    module.videoName ||
+    module.video_file_name ||
+    module.video?.uploadLabel ||
+    "";
+  const pdfPendingName = restoredPdfUrl ? module.pdfPendingName || "" : legacyPdfName && legacyPdfName !== NO_PDF_SELECTED ? legacyPdfName : "";
+  const videoPendingName =
+    restoredVideoUrl || module.video?.link
+      ? module.videoPendingName || ""
+      : legacyVideoName && legacyVideoName !== NO_VIDEO_SELECTED
+        ? legacyVideoName
+        : "";
+
+  return {
+    ...baseModule,
+    ...module,
+    id: module.id || baseModule.id,
+    sortOrder: module.sortOrder ?? module.sort_order ?? index + 1,
+    pdfUrl: restoredPdfUrl,
+    pdf_url: restoredPdfUrl,
+    pdfLabel: restoredPdfUrl ? module.pdfLabel || module.pdfName || module.pdf_file_name || legacyPdfName || NO_PDF_SELECTED : NO_PDF_SELECTED,
+    pdfName: restoredPdfUrl ? module.pdfName || module.pdf_file_name || module.pdfLabel || legacyPdfName || "" : "",
+    pdf_file_name: restoredPdfUrl ? module.pdf_file_name || module.pdfName || module.pdfLabel || legacyPdfName || "" : "",
+    pdfStoragePath: module.pdfStoragePath || module.pdf_storage_path || "",
+    pdf_storage_path: module.pdf_storage_path || module.pdfStoragePath || "",
+    pdfFile: null,
+    pdfPendingName,
+    pdfPendingSize: module.pdfPendingSize ?? null,
+    pdfUploading: false,
+    pdfError: "",
+    videoUrl: restoredVideoUrl || module.video?.link || "",
+    video_url: restoredVideoUrl || module.video?.link || "",
+    videoName: restoredVideoUrl ? module.videoName || module.video_file_name || module.video?.uploadLabel || legacyVideoName || "" : "",
+    video_file_name: restoredVideoUrl ? module.video_file_name || module.videoName || module.video?.uploadLabel || legacyVideoName || "" : "",
+    videoStoragePath: module.videoStoragePath || module.video_storage_path || "",
+    video_storage_path: module.video_storage_path || module.videoStoragePath || "",
+    videoFile: null,
+    videoPendingName,
+    videoPendingSize: module.videoPendingSize ?? null,
+    video: {
+      ...baseModule.video,
+      ...(module.video || {}),
+      uploadLabel:
+        restoredVideoUrl || module.video?.link
+          ? module.video?.uploadLabel || module.videoName || module.video_file_name || legacyVideoName || NO_VIDEO_SELECTED
+          : NO_VIDEO_SELECTED,
+      uploading: false,
+      error: "",
+    },
+    assignment: module.assignment
+      ? {
+          ...createAssignmentDraft(),
+          ...module.assignment,
+          submissionType: "file",
+          submission_type: "file",
+        }
+      : null,
+  };
+}
+
+function restoreCourseDraft(draft = {}) {
+  const modules = Array.isArray(draft.modules) && draft.modules.length
+    ? draft.modules.map((module, index) => restoreModuleDraft(module, index))
+    : [createModuleDraft()];
+
+  return {
+    ...createCourseDraft(),
+    ...draft,
+    imageUploading: false,
+    imageError: "",
+    modules,
+  };
+}
+
+function createSerializableCourseDraft(form) {
+  return {
+    ...form,
+    imageUploading: false,
+    imageError: "",
+    modules: (form.modules || []).map((module) => ({
+      ...module,
+      pdfFile: null,
+      pdfUploading: false,
+      pdfError: "",
+      videoFile: null,
+      video: {
+        ...module.video,
+        uploading: false,
+        error: "",
+      },
+    })),
   };
 }
 
@@ -103,11 +224,14 @@ function createCourseDraft(course = null) {
         Boolean(module.assignment?.title),
       pdfUrl: module.pdf_url || module.pdfUrl || "",
       pdf_url: module.pdf_url || module.pdfUrl || "",
-      pdfLabel: module.pdfLabel || module.pdf_file_name || module.pdfName || "No PDF selected",
+      pdfLabel: module.pdfLabel || module.pdf_file_name || module.pdfName || NO_PDF_SELECTED,
       pdfName: module.pdfName || module.pdf_file_name || module.pdfLabel || "",
       pdf_file_name: module.pdf_file_name || module.pdfName || module.pdfLabel || "",
       pdfStoragePath: module.pdf_storage_path || module.pdfStoragePath || "",
       pdf_storage_path: module.pdf_storage_path || module.pdfStoragePath || "",
+      pdfFile: null,
+      pdfPendingName: "",
+      pdfPendingSize: null,
       pdfUploading: false,
       pdfError: "",
       videoUrl: module.video_url || module.videoUrl || module.video?.url || module.video?.link || "",
@@ -116,6 +240,9 @@ function createCourseDraft(course = null) {
       video_file_name: module.video_file_name || module.videoName || module.video?.uploadLabel || "",
       videoStoragePath: module.video_storage_path || module.videoStoragePath || "",
       video_storage_path: module.video_storage_path || module.videoStoragePath || "",
+      videoFile: null,
+      videoPendingName: "",
+      videoPendingSize: null,
       video: {
         id: module.video?.id || createId(),
         title: module.video?.title || "",
@@ -123,7 +250,7 @@ function createCourseDraft(course = null) {
         duration: module.video?.duration || "10 min",
         link: module.video?.link || "",
         url: module.video?.url || module.video_url || module.videoUrl || module.video?.link || "",
-        uploadLabel: module.video?.uploadLabel || module.video_file_name || module.videoName || "No video selected",
+        uploadLabel: module.video?.uploadLabel || module.video_file_name || module.videoName || NO_VIDEO_SELECTED,
         uploading: false,
         error: "",
       },
@@ -1006,37 +1133,41 @@ function ModuleEditor({
       <section className="nested-builder single-video-builder">
         <div className="nested-header">
           <span className="eyebrow">PDF</span>
-          <h5>{module.pdfLabel}</h5>
+          <h5>{module.pdf_url || module.pdfUrl ? module.pdfLabel : module.pdfPendingName || module.pdfLabel}</h5>
         </div>
 
         <label className="upload-field">
           {t("common.uploadPdf")}
-          <input type="file" accept="application/pdf" onChange={(event) => void uploadPdf(module.id, event.target.files?.[0])} />
+          <input id={`module-pdf-${module.id}`} type="file" accept={PDF_ACCEPT} onChange={(event) => void uploadPdf(module.id, event.target.files?.[0])} />
         </label>
 
         {module.pdfUploading && <small className="field-note">{t("common.uploadingPdf")}</small>}
         {module.pdfError && <small className="field-note danger-text">{module.pdfError}</small>}
+        {module.pdfPendingName && !module.pdf_url && !module.pdfUrl ? (
+          <small className="field-note">
+            {t("common.selectedFile", {
+              name: `${module.pdfPendingName}${module.pdfPendingSize ? ` (${formatFileSize(module.pdfPendingSize)})` : ""}`,
+            })}
+          </small>
+        ) : null}
 
         {module.pdf_url || module.pdfUrl ? (
           <a href={module.pdf_url || module.pdfUrl} target="_blank" rel="noreferrer">{t("common.openPdf")}</a>
-        ) : module.pdfLabel !== "No PDF selected" ? (
-          <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
+        ) : module.pdfPendingName ? (
+          <small className="field-note">{t("common.noPdfUploadedYet")}</small>
         ) : (
           <small className="field-note">{t("common.noPdfUploadedYet")}</small>
         )}
 
         <div className="row-actions">
-          <button
-            type="button"
-            onClick={() =>
-              updateModule(module.id, (currentModule) => ({
-                ...currentModule,
-                pdfLabel: `${(currentModule.title || "module").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`,
-              }))
-            }
-          >
+          <button type="button" onClick={() => document.getElementById(`module-pdf-${module.id}`)?.click()}>
             {t("common.replacePdf")}
           </button>
+          {module.pdfFile && module.pdfError ? (
+            <button type="button" onClick={() => void uploadPdf(module.id)}>
+              {t("common.retryUpload")}
+            </button>
+          ) : null}
           <button
             type="button"
             className="danger-text"
@@ -1045,11 +1176,14 @@ function ModuleEditor({
                 ...currentModule,
                 pdfUrl: "",
                 pdf_url: "",
-                pdfLabel: "No PDF selected",
+                pdfLabel: NO_PDF_SELECTED,
                 pdfName: "",
                 pdf_file_name: "",
                 pdfStoragePath: "",
                 pdf_storage_path: "",
+                pdfFile: null,
+                pdfPendingName: "",
+                pdfPendingSize: null,
                 pdfError: "",
               }))
             }
@@ -1062,16 +1196,23 @@ function ModuleEditor({
       <section className="nested-builder single-video-builder">
         <div className="nested-header">
           <span className="eyebrow">VIDEO</span>
-          <h5>{module.video.uploadLabel !== "No video selected" ? module.video.uploadLabel : module.video.link || t("common.noVideoSelected")}</h5>
+          <h5>{module.video_url || module.videoUrl ? module.video.uploadLabel : module.videoPendingName || module.video.link || t("common.noVideoSelected")}</h5>
         </div>
 
         <label className="upload-field">
           {t("common.uploadVideo")}
-          <input type="file" accept="video/*" onChange={(event) => void uploadVideo(module.id, event.target.files?.[0])} />
+          <input id={`module-video-${module.id}`} type="file" accept={VIDEO_ACCEPT} onChange={(event) => void uploadVideo(module.id, event.target.files?.[0])} />
         </label>
 
         {module.video.uploading && <small className="field-note">{t("common.uploadingVideo")}</small>}
         {module.video.error && <small className="field-note danger-text">{module.video.error}</small>}
+        {module.videoPendingName && !module.video_url && !module.videoUrl ? (
+          <small className="field-note">
+            {t("common.selectedFile", {
+              name: `${module.videoPendingName}${module.videoPendingSize ? ` (${formatFileSize(module.videoPendingSize)})` : ""}`,
+            })}
+          </small>
+        ) : null}
 
         {module.video_url || module.videoUrl ? (
           <>
@@ -1080,8 +1221,10 @@ function ModuleEditor({
               <video controls width="100%" src={module.video_url || module.videoUrl} />
             </div>
           </>
-        ) : module.video.uploadLabel !== "No video selected" || module.videoName ? (
-          <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
+        ) : module.video.link ? (
+          <a href={module.video.link} target="_blank" rel="noreferrer">{t("common.openVideo")}</a>
+        ) : module.videoPendingName ? (
+          <small className="field-note">{t("common.noVideoUploadedYet")}</small>
         ) : (
           <small className="field-note">{t("common.noVideoUploadedYet")}</small>
         )}
@@ -1095,32 +1238,31 @@ function ModuleEditor({
                 ...currentModule,
                 videoUrl: event.target.value,
                 video_url: event.target.value,
+                videoFile: event.target.value ? null : currentModule.videoFile,
+                videoPendingName: event.target.value ? "" : currentModule.videoPendingName,
+                videoPendingSize: event.target.value ? null : currentModule.videoPendingSize,
                 video: {
                   ...currentModule.video,
                   link: event.target.value,
                   url: event.target.value,
+                  error: event.target.value ? "" : currentModule.video.error,
                 },
               }))
             }
             placeholder="https://example.com/video"
           />
         </label>
+        <small className="field-note">{t("admin.externalVideoRecommendation")}</small>
 
         <div className="row-actions">
-          <button
-            type="button"
-            onClick={() =>
-              updateModule(module.id, (currentModule) => ({
-                ...currentModule,
-                video: {
-                  ...currentModule.video,
-                  uploadLabel: `${(currentModule.title || "module").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-updated.mp4`,
-                },
-              }))
-            }
-          >
+          <button type="button" onClick={() => document.getElementById(`module-video-${module.id}`)?.click()}>
             {t("common.replaceVideo")}
           </button>
+          {module.videoFile && module.video.error ? (
+            <button type="button" onClick={() => void uploadVideo(module.id)}>
+              {t("common.retryUpload")}
+            </button>
+          ) : null}
           <button
             type="button"
             className="danger-text"
@@ -1133,11 +1275,14 @@ function ModuleEditor({
                 video_file_name: "",
                 videoStoragePath: "",
                 video_storage_path: "",
+                videoFile: null,
+                videoPendingName: "",
+                videoPendingSize: null,
                 video: {
                   ...currentModule.video,
                   link: "",
                   url: "",
-                  uploadLabel: "No video selected",
+                  uploadLabel: NO_VIDEO_SELECTED,
                   error: "",
                 },
               }))
@@ -1264,9 +1409,20 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   const [form, setForm] = useState(createCourseDraft());
   const [editingId, setEditingId] = useState(null);
   const [saveError, setSaveError] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [draftMessage, setDraftMessage] = useState("");
+  const [draftWarning, setDraftWarning] = useState("");
+  const [publishProgress, setPublishProgress] = useState("");
   const [visibilityMessage, setVisibilityMessage] = useState("");
   const [visibilityError, setVisibilityError] = useState("");
   const [statusUpdatingId, setStatusUpdatingId] = useState(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+
+  const isUploadingNow =
+    Boolean(form.imageUploading) ||
+    (form.modules || []).some((module) => module.pdfUploading || module.video?.uploading);
+  const isBusy = isUploadingNow || isPublishing;
 
   const updateCourseField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -1311,6 +1467,10 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   const editCourse = (course) => {
     setEditingId(course.id);
     setForm(createCourseDraft(course));
+    setDraftMessage("");
+    setDraftWarning("");
+    setSaveMessage("");
+    setSaveError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -1318,6 +1478,102 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
     setForm(createCourseDraft());
     setEditingId(null);
     setSaveError("");
+    setPublishProgress("");
+  };
+
+  useEffect(() => {
+    try {
+      const rawDraft = window.localStorage.getItem(COURSE_DRAFT_STORAGE_KEY);
+      if (!rawDraft) {
+        setDraftReady(true);
+        return;
+      }
+
+      const parsedDraft = JSON.parse(rawDraft);
+      if (!parsedDraft?.form) {
+        setDraftReady(true);
+        return;
+      }
+
+      const restoredForm = restoreCourseDraft(parsedDraft.form);
+      const hasPendingReselection = restoredForm.modules.some(
+        (module) => module.pdfPendingName || module.videoPendingName,
+      );
+
+      setForm(restoredForm);
+      setEditingId(parsedDraft.editingId ?? null);
+      setDraftMessage(t("admin.restoredDraft"));
+      if (hasPendingReselection) {
+        setDraftWarning(t("admin.reselectFilesAfterRestore"));
+      }
+    } catch (error) {
+      console.error("Restoring the unpublished course draft failed:", error);
+    } finally {
+      setDraftReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady) return;
+
+    const hasContent =
+      Boolean(form.title.trim()) ||
+      Boolean(form.description.trim()) ||
+      Boolean(form.image_url || form.imageUrl || form.imageLabel) ||
+      (form.modules || []).some((module) =>
+        Boolean(
+          module.title?.trim() ||
+          module.description?.trim() ||
+          module.pdf_url ||
+          module.pdfPendingName ||
+          module.video_url ||
+          module.video?.link?.trim() ||
+          module.videoPendingName ||
+          module.requiresAssignment ||
+          module.requires_assignment ||
+          module.assignment?.title?.trim() ||
+          module.assignment?.instructions?.trim(),
+        ),
+      );
+
+    if (!hasContent) return;
+
+    try {
+      window.localStorage.setItem(
+        COURSE_DRAFT_STORAGE_KEY,
+        JSON.stringify({
+          editingId,
+          form: createSerializableCourseDraft(form),
+          updatedAt: new Date().toISOString(),
+        }),
+      );
+    } catch (error) {
+      console.error("Saving the unpublished course draft failed:", error);
+    }
+  }, [draftReady, editingId, form]);
+
+  useEffect(() => {
+    if (!isBusy) return undefined;
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isBusy]);
+
+  const discardDraft = () => {
+    try {
+      window.localStorage.removeItem(COURSE_DRAFT_STORAGE_KEY);
+    } catch (error) {
+      console.error("Discarding the unpublished course draft failed:", error);
+    }
+
+    setDraftMessage("");
+    setDraftWarning("");
+    reset();
   };
 
   const previewCourse = buildCoursePayload(form, editingId, courses.find((course) => course.id === editingId));
@@ -1325,24 +1581,66 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   const submit = (event) => {
     event.preventDefault();
     setSaveError("");
+    setSaveMessage("");
     setVisibilityMessage("");
     setVisibilityError("");
+    setDraftMessage("");
+    setDraftWarning("");
+
+    if (isBusy) return;
+
+    const invalidModule = form.modules.find((module) => {
+      const hasPdf = Boolean(module.pdf_url || module.pdfUrl);
+      const hasVideo = Boolean(module.video_url || module.videoUrl || module.video?.link?.trim());
+      return !hasPdf || !hasVideo || module.pdfPendingName || module.videoPendingName || module.pdfUploading || module.video?.uploading;
+    });
+
+    if (invalidModule) {
+      setSaveError(
+        invalidModule.pdfPendingName || invalidModule.videoPendingName
+          ? t("admin.reselectFilesAfterRestore")
+          : t("admin.completeModuleFilesBeforePublishing", {
+              moduleTitle: invalidModule.title || t("common.module"),
+            }),
+      );
+      return;
+    }
+
     const existingCourse = courses.find((course) => course.id === editingId);
     const payload = buildCoursePayload(form, editingId, existingCourse);
     console.log("Module payload right before saving:", payload.modules);
 
-    void Promise.resolve(onSaveCourse(payload, editingId))
+    setIsPublishing(true);
+
+    void Promise.resolve(
+      onSaveCourse(payload, editingId, {
+        onProgress: ({ current, total }) => {
+          setPublishProgress(t("admin.uploadingModuleProgress", { current, total }));
+        },
+      }),
+    )
       .then((result) => {
         if (result?.ok === false) {
           setSaveError(result.error || t("admin.savingCourseFailed"));
           return;
         }
 
+        try {
+          window.localStorage.removeItem(COURSE_DRAFT_STORAGE_KEY);
+        } catch (error) {
+          console.error("Clearing the unpublished course draft after publish failed:", error);
+        }
+
+        setSaveMessage(editingId ? t("admin.courseUpdatedSuccessfully") : t("admin.coursePublishedSuccessfully"));
         reset();
       })
       .catch((error) => {
         console.error("Course save failed:", error);
-        setSaveError(t("admin.savingCourseFailed"));
+        setSaveError(error?.message || t("admin.savingCourseFailed"));
+      })
+      .finally(() => {
+        setIsPublishing(false);
+        setPublishProgress("");
       });
   };
 
@@ -1400,18 +1698,23 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   };
 
   const uploadPdf = async (moduleId, file) => {
-    if (!file) return;
+    const selectedFile = file ?? form.modules.find((module) => module.id === moduleId)?.pdfFile;
+    if (!selectedFile) return;
+
+    const moduleIndex = form.modules.findIndex((module) => module.id === moduleId);
+    const moduleTitle = form.modules[moduleIndex]?.title || t("common.module");
 
     updateModule(moduleId, (module) => ({
       ...module,
       pdfUploading: true,
       pdfError: "",
-      pdfLabel: file.name,
-      pdfName: file.name,
+      pdfFile: selectedFile,
+      pdfPendingName: selectedFile.name,
+      pdfPendingSize: selectedFile.size ?? null,
     }));
 
     try {
-      const uploaded = await uploadModulePdf(file, moduleId);
+      const uploaded = await uploadModulePdf(selectedFile, moduleId);
       console.log("PDF upload result publicUrl:", uploaded.publicUrl);
 
       if (!uploaded.publicUrl) {
@@ -1431,33 +1734,76 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
         pdf_storage_path: uploaded.storagePath,
         pdfUrl: uploaded.publicUrl,
         pdf_url: uploaded.publicUrl,
+        pdfFile: null,
+        pdfPendingName: "",
+        pdfPendingSize: null,
       }));
     } catch (error) {
       console.error("PDF upload failed:", error);
       updateModule(moduleId, (module) => ({
         ...module,
         pdfUploading: false,
-        pdfError: error.message || t("admin.pdfUploadFailed"),
+        pdfLabel: NO_PDF_SELECTED,
+        pdfName: "",
+        pdf_file_name: "",
+        pdfStoragePath: "",
+        pdf_storage_path: "",
+        pdfUrl: "",
+        pdf_url: "",
+        pdfError:
+          error.message ||
+          t("admin.pdfUploadFailedInModule", {
+            number: moduleIndex + 1,
+            moduleTitle,
+          }),
       }));
     }
   };
 
   const uploadVideo = async (moduleId, file) => {
-    if (!file) return;
+    const selectedFile = file ?? form.modules.find((module) => module.id === moduleId)?.videoFile;
+    if (!selectedFile) return;
+
+    const moduleIndex = form.modules.findIndex((module) => module.id === moduleId);
+    const moduleTitle = form.modules[moduleIndex]?.title || t("common.module");
+
+    if ((selectedFile.size ?? 0) > MAX_VIDEO_SIZE_BYTES) {
+      updateModule(moduleId, (module) => ({
+        ...module,
+        videoUrl: "",
+        video_url: "",
+        videoName: "",
+        video_file_name: "",
+        videoStoragePath: "",
+        video_storage_path: "",
+        videoFile: null,
+        videoPendingName: selectedFile.name,
+        videoPendingSize: selectedFile.size ?? null,
+        video: {
+          ...module.video,
+          uploading: false,
+          error: t("admin.videoTooLargeDirectUpload"),
+          uploadLabel: NO_VIDEO_SELECTED,
+        },
+      }));
+      return;
+    }
 
     updateModule(moduleId, (module) => ({
       ...module,
-      videoName: file.name,
+      videoFile: selectedFile,
+      videoPendingName: selectedFile.name,
+      videoPendingSize: selectedFile.size ?? null,
       video: {
         ...module.video,
         uploading: true,
         error: "",
-        uploadLabel: file.name,
+        uploadLabel: selectedFile.name,
       },
     }));
 
     try {
-      const uploaded = await uploadModuleVideo(file, moduleId);
+      const uploaded = await uploadModuleVideo(selectedFile, moduleId);
       console.log("Video upload result publicUrl:", uploaded.publicUrl);
 
       if (!uploaded.publicUrl) {
@@ -1474,6 +1820,9 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
         video_file_name: uploaded.fileName,
         videoStoragePath: uploaded.storagePath,
         video_storage_path: uploaded.storagePath,
+        videoFile: null,
+        videoPendingName: "",
+        videoPendingSize: null,
         video: {
           ...module.video,
           uploading: false,
@@ -1487,10 +1836,22 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
       console.error("Video upload failed:", error);
       updateModule(moduleId, (module) => ({
         ...module,
+        videoUrl: "",
+        video_url: "",
+        videoName: "",
+        video_file_name: "",
+        videoStoragePath: "",
+        video_storage_path: "",
         video: {
           ...module.video,
           uploading: false,
-          error: error.message || t("admin.videoUploadFailed"),
+          error:
+            error.message ||
+            t("admin.videoUploadFailedInModule", {
+              number: moduleIndex + 1,
+              moduleTitle,
+            }),
+          uploadLabel: NO_VIDEO_SELECTED,
         },
       }));
     }
@@ -1537,6 +1898,11 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
         />
 
         {saveError && <small className="field-note danger-text">{saveError}</small>}
+        {saveMessage && <small className="field-note">{saveMessage}</small>}
+        {draftMessage && <small className="field-note">{draftMessage}</small>}
+        {draftWarning && <small className="field-note danger-text">{draftWarning}</small>}
+        {publishProgress && <small className="field-note">{publishProgress}</small>}
+        {isBusy ? <small className="field-note warning-badge">{t("admin.doNotCloseWhileUploading")}</small> : null}
 
         <div className="builder-stack">
           <div className="builder-header">
@@ -1568,15 +1934,18 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
         </div>
 
         <div className="form-actions">
-          <button className="primary-btn" type="submit">
+          <button className="primary-btn" type="submit" disabled={isBusy}>
             <Icon name={editingId ? "check" : "plus"} />
-            {editingId ? t("admin.saveChanges") : t("admin.postCourse")}
+            {isPublishing ? t("common.saving") : editingId ? t("admin.saveChanges") : t("admin.postCourse")}
           </button>
           {editingId ? (
-            <button type="button" className="secondary-btn" onClick={reset}>
+            <button type="button" className="secondary-btn" onClick={reset} disabled={isBusy}>
               {t("admin.cancelEdit")}
             </button>
           ) : null}
+          <button type="button" className="secondary-btn" onClick={discardDraft} disabled={isBusy}>
+            {t("admin.discardDraft")}
+          </button>
         </div>
       </form>
 

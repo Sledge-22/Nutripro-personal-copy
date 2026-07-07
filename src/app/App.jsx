@@ -554,9 +554,11 @@ export function App() {
     return result;
   }
 
-  async function handleSaveCourse(course, editingId) {
+  async function handleSaveCourse(course, editingId, options = {}) {
     try {
-      const savedCourse = editingId ? await updateCourse(editingId, course) : await createCourse(course);
+      const savedCourse = editingId
+        ? await updateCourse(editingId, course, options)
+        : await createCourse(course, options);
       setCourses((currentCourses) => upsertCourseList(currentCourses, savedCourse));
 
       setStudentCourses((currentCourses) => {

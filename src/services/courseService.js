@@ -289,7 +289,7 @@ export async function getCourses() {
   return attachRelations(data ?? []);
 }
 
-export async function createCourse(course) {
+export async function createCourse(course, options = {}) {
   const status = normalizeCourseStatus(course.status);
   const demoStudentId = (await ensureDemoStudent())?.id ?? 1;
   const payload = {
@@ -316,10 +316,9 @@ export async function createCourse(course) {
 
   let savedModules = [];
   try {
-    savedModules = await replaceModulesForCourse(data.id, modules);
+    savedModules = await replaceModulesForCourse(data.id, modules, { onProgress: options.onProgress });
   } catch (moduleError) {
     console.error("Module insert error:", moduleError);
-    await supabase.from("courses").delete().eq("id", data.id);
     throw moduleError;
   }
 
@@ -332,7 +331,7 @@ export async function createCourse(course) {
   return normalizeCourse(data, owners, savedModules);
 }
 
-export async function updateCourse(courseId, updates) {
+export async function updateCourse(courseId, updates, options = {}) {
   const status = normalizeCourseStatus(updates.status);
   const demoStudentId = (await ensureDemoStudent())?.id ?? 1;
   const payload = {
@@ -358,7 +357,7 @@ export async function updateCourse(courseId, updates) {
   );
   console.log("Updated course response:", data);
 
-  const savedModules = await replaceModulesForCourse(courseId, modules);
+  const savedModules = await replaceModulesForCourse(courseId, modules, { onProgress: options.onProgress });
 
   try {
     await syncEnrollments(courseId, owners);

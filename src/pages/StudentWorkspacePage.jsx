@@ -39,6 +39,20 @@ function formatDisplayDate(value, language = "es") {
   }
 }
 
+function isDirectVideoSource(url) {
+  const normalizedUrl = `${url ?? ""}`.trim().toLowerCase();
+  if (!normalizedUrl) return false;
+  return (
+    normalizedUrl.includes("/storage/v1/object/public/") ||
+    normalizedUrl.endsWith(".mp4") ||
+    normalizedUrl.endsWith(".mov") ||
+    normalizedUrl.endsWith(".webm") ||
+    normalizedUrl.includes(".mp4?") ||
+    normalizedUrl.includes(".mov?") ||
+    normalizedUrl.includes(".webm?")
+  );
+}
+
 function initialsFromName(name) {
   return (name || "")
     .split(" ")
@@ -557,6 +571,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
   const pdfSource = activeModule?.pdf_url || activeModule?.pdfUrl || "";
   const videoSource = activeModule?.video_url || activeModule?.videoUrl || "";
+  const hasDirectVideoSource = isDirectVideoSource(videoSource);
   const pdfLabel = activeModule?.pdfLabel || activeModule?.pdfName || t("common.noPdfSelected");
   const videoLabel =
     activeModule?.videoName || activeModule?.video?.uploadLabel || activeModule?.video?.link || t("common.noVideoSelected");
@@ -781,7 +796,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
               <span>{videoLabel}</span>
             </div>
 
-            {videoSource ? (
+            {videoSource && hasDirectVideoSource ? (
               <div className="video-player-shell">
                 <video
                   controls
@@ -793,6 +808,12 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                     setViewError(t("errors.videoPlaybackFailed"));
                   }}
                 />
+              </div>
+            ) : videoSource ? (
+              <div className="row-actions">
+                <a href={videoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                  {t("common.openVideo")}
+                </a>
               </div>
             ) : activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== t("common.noVideoSelected") ? (
               <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>

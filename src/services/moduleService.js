@@ -145,7 +145,7 @@ export async function getModulesByCourse(courseId) {
   }
 }
 
-export async function replaceModulesForCourse(courseId, modules) {
+export async function replaceModulesForCourse(courseId, modules, options = {}) {
   if (!isSupabaseConfigured) {
     return updateMockModules(courseId, modules);
   }
@@ -173,21 +173,45 @@ export async function replaceModulesForCourse(courseId, modules) {
 
   if (!modules.length) return [];
 
-  const rows = modules.map((module, index) => toModuleRow(courseId, module, index + 1));
-  console.log("Final module object sent to Supabase:", rows);
+  const nextModules = [];
+  for (let index = 0; index < modules.length; index += 1) {
+    const sourceModule = modules[index];
+    options.onProgress?.({
+      current: index + 1,
+      total: modules.length,
+      module: sourceModule,
+    });
 
-  const data = await insertModuleRows(rows);
-  const mapped = (data ?? []).map(mapModuleRow);
-  const modulesWithAssignments = await syncAssignmentsForModules(mapped, modules);
-  console.log("Created module response:", mapped);
+    try {
+      const row = toModuleRow(courseId, sourceModule, index + 1);
+      console.log("Final module object sent to Supabase:", row);
+      const data = await insertModuleRows([row]);
+      const mappedModule = mapModuleRow((data ?? [])[0] ?? {});
+      const [moduleWithAssignment] = await syncAssignmentsForModules([mappedModule], [sourceModule]);
+      console.log("Created module response:", moduleWithAssignment ?? mappedModule);
 
-  modulesWithAssignments.forEach((module, index) => {
-    const source = modules[index];
-    const sourcePdfUrl = source?.pdf_url || source?.pdfUrl;
-    const sourceVideoUrl = source?.video_url || source?.videoUrl || source?.video?.url || source?.video?.link;
-    if (sourcePdfUrl && !module.pdf_url) console.error("Module save succeeded but pdf_url is missing:", module);
-    if (sourceVideoUrl && !module.video_url) console.error("Module save succeeded but video_url is missing:", module);
-  });
+      const sourcePdfUrl = sourceModule?.pdf_url || sourceModule?.pdfUrl;
+      const sourceVideoUrl =
+        sourceModule?.video_url ||
+        sourceModule?.videoUrl ||
+        sourceModule?.video?.url ||
+        sourceModule?.video?.link;
+      if (sourcePdfUrl && !(moduleWithAssignment?.pdf_url || mappedModule.pdf_url)) {
+        console.error("Module save succeeded but pdf_url is missing:", moduleWithAssignment ?? mappedModule);
+      }
+      if (sourceVideoUrl && !(moduleWithAssignment?.video_url || mappedModule.video_url)) {
+        console.error("Module save succeeded but video_url is missing:", moduleWithAssignment ?? mappedModule);
+      }
 
-  return modulesWithAssignments;
+      nextModules.push(moduleWithAssignment ?? mappedModule);
+    } catch (error) {
+      console.error("Failed to save module during sequential course sync:", error);
+      const nextError = new Error(error?.message || `Saving module ${index + 1} failed.`);
+      nextError.moduleIndex = index + 1;
+      nextError.moduleTitle = sourceModule?.title || `Module ${index + 1}`;
+      throw nextError;
+    }
+  }
+
+  return nextModules;
 }
