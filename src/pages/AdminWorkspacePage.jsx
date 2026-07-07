@@ -2093,7 +2093,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                   }}
                 />
               </label>
-              <button type="button" className="secondary-btn" disabled={isBusy} onClick={generateModules}>
+              <button type="button" className="primary-btn" disabled={isBusy} onClick={generateModules}>
                 {t("admin.generateModulesButton")}
               </button>
             </div>

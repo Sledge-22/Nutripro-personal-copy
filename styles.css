@@ -208,10 +208,34 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
 .builder-header, .nested-header, .module-editor-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .builder-actions { justify-content: flex-end; }
 .builder-header h3, .module-editor-head h4, .nested-header h5, .preview-shell h3 { margin: 6px 0 0; font-size: 18px; }
-.module-generator-card { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
-.module-generator-card h4 { margin: 6px 0 4px; font-size: 18px; }
-.module-generator-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.module-generator-card {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(79, 202, 214, .06), rgba(79, 202, 214, 0) 45%),
+    var(--color-surface-2);
+  box-shadow: var(--shadow-sm);
+}
+.module-generator-card h4 {
+  margin: 6px 0 4px;
+  color: var(--color-text);
+  font: 700 18px/1.25 var(--font-heading);
+}
+.module-generator-card p {
+  margin: 0;
+  color: var(--color-muted);
+  font: 400 13px/1.55 var(--font-body);
+}
+.module-generator-card label {
+  color: var(--color-text-soft);
+}
 .module-generator-form { display: grid; grid-template-columns: minmax(0, 220px) auto; gap: 12px; align-items: end; }
+.module-generator-form .primary-btn {
+  min-width: 220px;
+}
 .module-editor-card { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--green-50); }
 .module-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .compact-toggle { padding: 0; font-size: 12px; }
@@ -754,6 +778,9 @@ dt,
   color: var(--color-text-soft);
 }
 
+/* Nutripro design consistency rule:
+   Any future UI surface should reuse these shared tokens and component styles
+   before introducing one-off colors, spacing, borders, inputs, or buttons. */
 .section-card,
 .stat-card,
 .owned-card,
@@ -772,6 +799,7 @@ dt,
 .preview-item,
 .response-block,
 .review-meta-grid > div,
+.module-generator-card,
 .module-editor-card,
 .preview-module,
 .mini-course-grid article {
