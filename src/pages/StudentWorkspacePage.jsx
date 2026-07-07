@@ -53,6 +53,44 @@ function isDirectVideoSource(url) {
   );
 }
 
+function getGoogleDriveFileId(url) {
+  const value = `${url ?? ""}`.trim();
+  const match =
+    value.match(/\/file\/d\/([^/]+)/i) ||
+    value.match(/[?&]id=([^&]+)/i) ||
+    value.match(/\/d\/([^/]+)/i);
+  return match?.[1] || "";
+}
+
+function getGoogleDrivePreviewUrl(url) {
+  const fileId = getGoogleDriveFileId(url);
+  return fileId ? `https://drive.google.com/file/d/${fileId}/preview` : "";
+}
+
+function getExternalVideoEmbedUrl(url) {
+  const value = `${url ?? ""}`.trim();
+  if (!value) return "";
+
+  const youtubeMatch =
+    value.match(/[?&]v=([^&]+)/i) ||
+    value.match(/youtu\.be\/([^?&/]+)/i) ||
+    value.match(/youtube\.com\/embed\/([^?&/]+)/i);
+  if (youtubeMatch?.[1]) {
+    return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
+  }
+
+  const vimeoMatch = value.match(/vimeo\.com\/(\d+)/i);
+  if (vimeoMatch?.[1]) {
+    return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+  }
+
+  if (value.includes("drive.google.com")) {
+    return getGoogleDrivePreviewUrl(value);
+  }
+
+  return "";
+}
+
 function initialsFromName(name) {
   return (name || "")
     .split(" ")
@@ -569,12 +607,17 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     );
   }
 
-  const pdfSource = activeModule?.pdf_url || activeModule?.pdfUrl || "";
-  const videoSource = activeModule?.video_url || activeModule?.videoUrl || "";
+  const uploadedPdfSource = activeModule?.pdf_url || activeModule?.pdfUrl || "";
+  const externalPdfSource = activeModule?.pdf_external_url || activeModule?.pdfExternalUrl || "";
+  const pdfSource = uploadedPdfSource || externalPdfSource || "";
+  const uploadedVideoSource = activeModule?.video_url || activeModule?.videoUrl || "";
+  const externalVideoSource = activeModule?.video_external_url || activeModule?.videoExternalUrl || activeModule?.video?.link || "";
+  const videoSource = uploadedVideoSource || externalVideoSource || "";
   const hasDirectVideoSource = isDirectVideoSource(videoSource);
+  const embeddedVideoSource = !uploadedVideoSource ? getExternalVideoEmbedUrl(externalVideoSource) : "";
   const pdfLabel = activeModule?.pdfLabel || activeModule?.pdfName || t("common.noPdfSelected");
   const videoLabel =
-    activeModule?.videoName || activeModule?.video?.uploadLabel || activeModule?.video?.link || t("common.noVideoSelected");
+    activeModule?.videoName || activeModule?.video?.uploadLabel || externalVideoSource || t("common.noVideoSelected");
   const assignmentType = "file";
   const assignmentStatus = assignmentState.submission?.status || "";
   const hasSubmission = Boolean(assignmentState.submission);
@@ -807,6 +850,18 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                     console.error("Video playback failed for module:", activeModule?.id, videoSource);
                     setViewError(t("errors.videoPlaybackFailed"));
                   }}
+                />
+              </div>
+            ) : embeddedVideoSource ? (
+              <div className="video-player-shell">
+                <iframe
+                  title={videoLabel || t("common.openVideo")}
+                  src={embeddedVideoSource}
+                  width="100%"
+                  height="420"
+                  allow="autoplay; fullscreen; picture-in-picture"
+                  allowFullScreen
+                  onLoad={() => markSeen(`video-${activeModule.id}`)}
                 />
               </div>
             ) : videoSource ? (

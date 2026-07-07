@@ -2,7 +2,13 @@ import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { getMockCourses, setMockCourses } from "./mockStore.js";
 import { deleteAssignmentsForModuleIds, getAssignmentsByModuleIds, syncAssignmentsForModules } from "./assignmentService.js";
 
-const OPTIONAL_MODULE_COLUMNS = ["requires_assignment"];
+const OPTIONAL_MODULE_COLUMNS = [
+  "requires_assignment",
+  "pdf_external_url",
+  "video_external_url",
+  "pdf_source",
+  "video_source",
+];
 
 function fileNameFromUrl(url, fallback) {
   if (!url) return fallback;
@@ -14,8 +20,19 @@ function fileNameFromUrl(url, fallback) {
 }
 
 function mapModuleRow(module) {
-  const videoUrl = module.video_url ?? module.videoUrl ?? module.video_link ?? module.video?.url ?? module.video?.link ?? "";
-  const pdfUrl = module.pdf_url ?? module.pdfUrl ?? "";
+  const pdfExternalUrl = module.pdf_external_url ?? module.pdfExternalUrl ?? "";
+  const videoExternalUrl = module.video_external_url ?? module.videoExternalUrl ?? "";
+  const pdfSource = module.pdf_source ?? module.pdfSource ?? (pdfExternalUrl ? "external" : "upload");
+  const videoSource = module.video_source ?? module.videoSource ?? (videoExternalUrl ? "external" : "upload");
+  const videoUrl =
+    module.video_url ??
+    module.videoUrl ??
+    module.video_link ??
+    module.video?.url ??
+    module.video?.link ??
+    videoExternalUrl ??
+    "";
+  const pdfUrl = module.pdf_url ?? module.pdfUrl ?? pdfExternalUrl ?? "";
   const pdfName = module.pdf_file_name ?? module.pdfName ?? module.pdf_label ?? fileNameFromUrl(pdfUrl, "No PDF selected");
   const videoName = module.video_file_name ?? module.videoName ?? module.video_upload_label ?? fileNameFromUrl(videoUrl, "No video selected");
   const requiresAssignment =
@@ -37,11 +54,19 @@ function mapModuleRow(module) {
     pdfName,
     pdf_file_name: pdfName,
     pdf_storage_path: module.pdf_storage_path ?? "",
+    pdfExternalUrl: pdfExternalUrl,
+    pdf_external_url: pdfExternalUrl,
+    pdfSource,
+    pdf_source: pdfSource,
     videoUrl,
     video_url: videoUrl,
     videoName,
     video_file_name: videoName,
     video_storage_path: module.video_storage_path ?? "",
+    videoExternalUrl: videoExternalUrl,
+    video_external_url: videoExternalUrl,
+    videoSource,
+    video_source: videoSource,
     video: {
       id: module.video_id ?? module.id,
       title: module.video_title ?? module.video?.title ?? `${module.title ?? "Module"} video`,
@@ -56,8 +81,12 @@ function mapModuleRow(module) {
 }
 
 function toModuleRow(courseId, module, index, allowOptionalColumns = true) {
-  const pdfUrl = module.pdf_url ?? module.pdfUrl ?? null;
-  const videoUrl = module.video_url ?? module.videoUrl ?? module.video?.url ?? module.video?.link ?? null;
+  const pdfExternalUrl = module.pdf_external_url ?? module.pdfExternalUrl ?? null;
+  const videoExternalUrl = module.video_external_url ?? module.videoExternalUrl ?? null;
+  const pdfSource = module.pdf_source ?? module.pdfSource ?? (pdfExternalUrl ? "external" : "upload");
+  const videoSource = module.video_source ?? module.videoSource ?? (videoExternalUrl ? "external" : "upload");
+  const pdfUrl = module.pdf_url ?? module.pdfUrl ?? pdfExternalUrl ?? null;
+  const videoUrl = module.video_url ?? module.videoUrl ?? module.video?.url ?? module.video?.link ?? videoExternalUrl ?? null;
 
   const row = {
     course_id: courseId,
@@ -70,6 +99,10 @@ function toModuleRow(courseId, module, index, allowOptionalColumns = true) {
     video_file_name: module.video_file_name ?? module.videoName ?? module.video?.uploadLabel ?? null,
     pdf_storage_path: module.pdf_storage_path ?? module.pdfStoragePath ?? null,
     video_storage_path: module.video_storage_path ?? module.videoStoragePath ?? null,
+    pdf_external_url: pdfExternalUrl,
+    video_external_url: videoExternalUrl,
+    pdf_source: pdfSource,
+    video_source: videoSource,
   };
 
   if (allowOptionalColumns) {
@@ -101,8 +134,17 @@ async function insertModuleRows(rows, allowOptionalColumns = true) {
     );
 
   if (shouldRetryWithoutOptionalColumns) {
-    console.warn("Retrying module insert without requires_assignment. Run the matching SQL later to enable it.");
-    const fallbackRows = rows.map(({ requires_assignment, ...rest }) => rest);
+    console.warn("Retrying module insert without optional module columns. Run the matching SQL later to enable them.");
+    const fallbackRows = rows.map(
+      ({
+        requires_assignment,
+        pdf_external_url,
+        video_external_url,
+        pdf_source,
+        video_source,
+        ...rest
+      }) => rest,
+    );
     return insertModuleRows(fallbackRows, false);
   }
 
