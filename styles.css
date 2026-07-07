@@ -236,6 +236,30 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
 .module-generator-form .primary-btn {
   min-width: 220px;
 }
+.bulk-upload-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.bulk-upload-card { align-content: start; }
+.bulk-upload-list { display: grid; gap: 10px; }
+.bulk-upload-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: rgba(255,255,255,.02);
+}
+.bulk-upload-item strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--color-text);
+  font-size: 13px;
+}
+.bulk-upload-item span {
+  color: var(--color-text-soft);
+  font-size: 12px;
+}
+.bulk-upload-meta { display: grid; justify-items: end; gap: 6px; }
 .module-editor-card { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--green-50); }
 .module-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .compact-toggle { padding: 0; font-size: 12px; }
@@ -1028,6 +1052,7 @@ select:focus {
   .split-layout, .cert-layout, .community-layout { grid-template-columns: 1fr; }
   .course-form, .post-form { position: static; }
   .preview-card { position: static; }
+  .bulk-upload-grid { grid-template-columns: 1fr; }
   .module-generator-form { grid-template-columns: 1fr; }
   .nested-builder-grid, .module-items { grid-template-columns: 1fr; }
   .course-detail-layout { grid-template-columns: 330px minmax(0,1fr); }

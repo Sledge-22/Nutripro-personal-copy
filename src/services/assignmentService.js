@@ -56,8 +56,6 @@ function normalizeAssignment(row) {
     moduleId: row.module_id ?? row.moduleId,
     title: row.title ?? "",
     instructions: row.instructions ?? "",
-    dueDate: row.due_date ?? row.dueDate ?? "",
-    due_date: row.due_date ?? row.dueDate ?? "",
     submissionType: normalizeSubmissionType(row.submission_type ?? row.submissionType),
     submission_type: normalizeSubmissionType(row.submission_type ?? row.submissionType),
   };
@@ -117,7 +115,6 @@ function sanitizeAssignmentData(assignmentData = {}) {
   return {
     title: `${assignmentData.title ?? ""}`.trim(),
     instructions: `${assignmentData.instructions ?? ""}`.trim(),
-    due_date: assignmentData.due_date ?? assignmentData.dueDate ?? null,
     submission_type: "file",
   };
 }
@@ -292,7 +289,6 @@ export async function createAssignment(moduleId, assignmentData) {
         id: nextMockAssignmentId(),
         moduleId: normalizedModuleId,
         ...payload,
-        dueDate: payload.due_date ?? "",
         submissionType: payload.submission_type,
       })),
     );
@@ -330,7 +326,6 @@ export async function updateAssignment(assignmentId, assignmentData) {
         id: normalizedAssignmentId,
         moduleId: assignmentEntry.module.id,
         ...payload,
-        dueDate: payload.due_date ?? "",
         submissionType: payload.submission_type,
       })),
     );

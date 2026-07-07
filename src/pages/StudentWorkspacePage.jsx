@@ -836,9 +836,6 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
               <div className="assignment-chip-row">
                 <span className="subtle-badge">{t("student.assignmentType", { type: translateSubmissionType(assignmentType) })}</span>
-                {activeAssignment.dueDate || activeAssignment.due_date ? (
-                  <span className="subtle-badge">{t("student.dueDate", { date: formatDisplayDate(activeAssignment.dueDate || activeAssignment.due_date, language) })}</span>
-                ) : null}
                 {assignmentState.submission?.status ? <Status status={assignmentState.submission.status} /> : null}
               </div>
 

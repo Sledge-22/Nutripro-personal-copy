@@ -63,8 +63,6 @@ function normalizeModules(modules = []) {
           moduleId: module.assignment.moduleId ?? module.id ?? null,
           title: module.assignment.title ?? "",
           instructions: module.assignment.instructions ?? "",
-          dueDate: module.assignment.dueDate ?? module.assignment.due_date ?? "",
-          due_date: module.assignment.due_date ?? module.assignment.dueDate ?? "",
           submissionType: "file",
           submission_type: "file",
         }

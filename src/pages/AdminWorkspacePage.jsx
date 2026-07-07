@@ -32,6 +32,40 @@ function clampModuleCount(value) {
   return parsed;
 }
 
+function getDefaultModuleTitle(index, language = "es") {
+  return language === "es" ? `Módulo ${index + 1}` : `Module ${index + 1}`;
+}
+
+function getModuleDisplayTitle(module, index, language = "es") {
+  return module?.title?.trim() || getDefaultModuleTitle(index, language);
+}
+
+function createBulkSelectionEntry({
+  file,
+  position,
+  module,
+  moduleIndex,
+  language,
+  tooLarge = false,
+  kind = "pdf",
+}) {
+  return {
+    id: `${kind}-${Date.now()}-${position}-${file?.name || "file"}`,
+    fileName: file?.name || "",
+    fileSize: file?.size ?? 0,
+    fileType: file?.type || "",
+    originalOrder: position + 1,
+    assignedModuleId: module?.id || null,
+    assignedModuleIndex: Number.isInteger(moduleIndex) ? moduleIndex : null,
+    assignedModuleTitle:
+      Number.isInteger(moduleIndex)
+        ? getModuleDisplayTitle(module, moduleIndex, language)
+        : "",
+    uploadStatus: tooLarge ? "too_large" : module ? "assigned" : "unassigned",
+    tooLarge,
+  };
+}
+
 function createGeneratedModules(count, language = "es") {
   return Array.from({ length: count }, (_, index) => ({
     ...createModuleDraft(index + 1),
@@ -49,8 +83,6 @@ function createAssignmentDraft() {
     id: null,
     title: "",
     instructions: "",
-    dueDate: "",
-    due_date: "",
     submissionType: "file",
     submission_type: "file",
   };
@@ -74,6 +106,7 @@ function createModuleDraft(sortOrder = 1) {
     pdfFile: null,
     pdfPendingName: "",
     pdfPendingSize: null,
+    pdfPendingType: "",
     pdfUploading: false,
     pdfError: "",
     videoUrl: "",
@@ -85,6 +118,7 @@ function createModuleDraft(sortOrder = 1) {
     videoFile: null,
     videoPendingName: "",
     videoPendingSize: null,
+    videoPendingType: "",
     video: {
       id: createId(),
       title: "",
@@ -134,6 +168,7 @@ function restoreModuleDraft(module = {}, index = 0) {
     pdfFile: null,
     pdfPendingName,
     pdfPendingSize: module.pdfPendingSize ?? null,
+    pdfPendingType: module.pdfPendingType || "",
     pdfUploading: false,
     pdfError: "",
     videoUrl: restoredVideoUrl || module.video?.link || "",
@@ -145,6 +180,7 @@ function restoreModuleDraft(module = {}, index = 0) {
     videoFile: null,
     videoPendingName,
     videoPendingSize: module.videoPendingSize ?? null,
+    videoPendingType: module.videoPendingType || "",
     video: {
       ...baseModule.video,
       ...(module.video || {}),
@@ -176,6 +212,8 @@ function restoreCourseDraft(draft = {}) {
     ...draft,
     imageUploading: false,
     imageError: "",
+    bulkPdfSelections: Array.isArray(draft.bulkPdfSelections) ? draft.bulkPdfSelections : [],
+    bulkVideoSelections: Array.isArray(draft.bulkVideoSelections) ? draft.bulkVideoSelections : [],
     modules,
   };
 }
@@ -190,7 +228,9 @@ function createSerializableCourseDraft(form) {
       pdfFile: null,
       pdfUploading: false,
       pdfError: "",
+      pdfPendingType: module.pdfPendingType || "",
       videoFile: null,
+      videoPendingType: module.videoPendingType || "",
       video: {
         ...module.video,
         uploading: false,
@@ -213,6 +253,8 @@ function createCourseDraft(course = null) {
       imageLabel: "",
       imageUploading: false,
       imageError: "",
+      bulkPdfSelections: [],
+      bulkVideoSelections: [],
       modules: [createModuleDraft()],
     };
   }
@@ -228,6 +270,8 @@ function createCourseDraft(course = null) {
     imageLabel: course.imageLabel || course.image_file_name || course.imageName || "",
     imageUploading: false,
     imageError: "",
+    bulkPdfSelections: [],
+    bulkVideoSelections: [],
     modules: (course.modules || []).map((module, index) => ({
       id: module.id || createId(),
       sortOrder: module.sortOrder ?? index + 1,
@@ -251,6 +295,7 @@ function createCourseDraft(course = null) {
       pdfFile: null,
       pdfPendingName: "",
       pdfPendingSize: null,
+      pdfPendingType: "",
       pdfUploading: false,
       pdfError: "",
       videoUrl: module.video_url || module.videoUrl || module.video?.url || module.video?.link || "",
@@ -262,6 +307,7 @@ function createCourseDraft(course = null) {
       videoFile: null,
       videoPendingName: "",
       videoPendingSize: null,
+      videoPendingType: "",
       video: {
         id: module.video?.id || createId(),
         title: module.video?.title || "",
@@ -278,8 +324,6 @@ function createCourseDraft(course = null) {
             id: module.assignment.id || null,
             title: module.assignment.title || "",
             instructions: module.assignment.instructions || "",
-            dueDate: module.assignment.dueDate || module.assignment.due_date || "",
-            due_date: module.assignment.due_date || module.assignment.dueDate || "",
             submissionType: "file",
             submission_type: "file",
           }
@@ -340,8 +384,6 @@ function buildCoursePayload(form, editingId, existingCourse) {
               id: module.assignment.id || null,
               title: module.assignment.title.trim(),
               instructions: module.assignment.instructions.trim(),
-              dueDate: module.assignment.dueDate || module.assignment.due_date || "",
-              due_date: module.assignment.due_date || module.assignment.dueDate || "",
               submissionType: "file",
               submission_type: "file",
             }
@@ -1225,6 +1267,7 @@ function ModuleEditor({
                 pdfFile: null,
                 pdfPendingName: "",
                 pdfPendingSize: null,
+                pdfPendingType: "",
                 pdfError: "",
               }))
             }
@@ -1282,6 +1325,7 @@ function ModuleEditor({
                 videoFile: event.target.value ? null : currentModule.videoFile,
                 videoPendingName: event.target.value ? "" : currentModule.videoPendingName,
                 videoPendingSize: event.target.value ? null : currentModule.videoPendingSize,
+                videoPendingType: event.target.value ? "" : currentModule.videoPendingType,
                 video: {
                   ...currentModule.video,
                   link: event.target.value,
@@ -1319,6 +1363,7 @@ function ModuleEditor({
                 videoFile: null,
                 videoPendingName: "",
                 videoPendingSize: null,
+                videoPendingType: "",
                 video: {
                   ...currentModule.video,
                   link: "",
@@ -1398,21 +1443,6 @@ function ModuleEditor({
               />
             </label>
 
-            <label>
-              {t("common.dueDate")}
-              <input
-                type="date"
-                value={module.assignment.dueDate || module.assignment.due_date || ""}
-                onChange={(event) =>
-                  updateAssignment(module.id, (assignment) => ({
-                    ...assignment,
-                    dueDate: event.target.value,
-                    due_date: event.target.value,
-                  }))
-                }
-              />
-            </label>
-
             <div className="assignment-mode-card">
               <span className="subtle-badge">{t("admin.fileUploadOnly")}</span>
               <p className="field-note">{t("admin.assignmentFileOnlyHelp")}</p>
@@ -1465,6 +1495,8 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   const [isPublishing, setIsPublishing] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
   const [collapsedModuleIds, setCollapsedModuleIds] = useState([]);
+  const [bulkPdfFiles, setBulkPdfFiles] = useState([]);
+  const [bulkVideoFiles, setBulkVideoFiles] = useState([]);
 
   const isUploadingNow =
     Boolean(form.imageUploading) ||
@@ -1502,6 +1534,16 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
     updateModule(moduleId, (module) => ({
       ...module,
       assignment: updater(module.assignment ?? createAssignmentDraft()),
+    }));
+  };
+
+  const updateBulkSelectionStatus = (kind, moduleId, status) => {
+    const field = kind === "pdf" ? "bulkPdfSelections" : "bulkVideoSelections";
+    setForm((current) => ({
+      ...current,
+      [field]: (current[field] || []).map((entry) =>
+        entry.assignedModuleId === moduleId ? { ...entry, uploadStatus: status } : entry,
+      ),
     }));
   };
 
@@ -1544,6 +1586,8 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   const editCourse = (course) => {
     setEditingId(course.id);
     setForm(createCourseDraft(course));
+    setBulkPdfFiles([]);
+    setBulkVideoFiles([]);
     setDraftMessage("");
     setDraftWarning("");
     setSaveMessage("");
@@ -1556,6 +1600,8 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   const reset = () => {
     setForm(createCourseDraft());
     setEditingId(null);
+    setBulkPdfFiles([]);
+    setBulkVideoFiles([]);
     setBulkModuleCount("1");
     setBulkGeneratorError("");
     setGeneratorDialog(null);
@@ -1581,7 +1627,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
       const restoredForm = restoreCourseDraft(parsedDraft.form);
       const hasPendingReselection = restoredForm.modules.some(
         (module) => module.pdfPendingName || module.videoPendingName,
-      );
+      ) || Boolean((restoredForm.bulkPdfSelections || []).length || (restoredForm.bulkVideoSelections || []).length);
 
       setForm(restoredForm);
       setEditingId(parsedDraft.editingId ?? null);
@@ -1605,6 +1651,8 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
       Boolean(form.title.trim()) ||
       Boolean(form.description.trim()) ||
       Boolean(form.image_url || form.imageUrl || form.imageLabel) ||
+      Boolean((form.bulkPdfSelections || []).length) ||
+      Boolean((form.bulkVideoSelections || []).length) ||
       (form.modules || []).some((module) =>
         Boolean(
           module.title?.trim() ||
@@ -1661,6 +1709,140 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
     reset();
   };
 
+  const handleBulkPdfSelection = (files) => {
+    const nextFiles = Array.from(files || []);
+    setBulkPdfFiles(nextFiles);
+    setForm((current) => ({
+      ...current,
+      bulkPdfSelections: nextFiles.map((file, index) =>
+        createBulkSelectionEntry({
+          file,
+          position: index,
+          module: current.modules[index] || null,
+          moduleIndex: current.modules[index] ? index : null,
+          language,
+          kind: "pdf",
+        }),
+      ),
+    }));
+  };
+
+  const handleBulkVideoSelection = (files) => {
+    const nextFiles = Array.from(files || []);
+    setBulkVideoFiles(nextFiles);
+    setForm((current) => ({
+      ...current,
+      bulkVideoSelections: nextFiles.map((file, index) =>
+        createBulkSelectionEntry({
+          file,
+          position: index,
+          module: current.modules[index] || null,
+          moduleIndex: current.modules[index] ? index : null,
+          language,
+          kind: "video",
+          tooLarge: (file?.size ?? 0) > MAX_VIDEO_SIZE_BYTES,
+        }),
+      ),
+    }));
+  };
+
+  const assignBulkPdfFiles = () => {
+    setForm((current) => {
+      const nextModules = current.modules.map((module, index) => {
+        const file = bulkPdfFiles[index];
+        if (!file) return module;
+
+        return {
+          ...module,
+          pdfFile: file,
+          pdfPendingName: file.name,
+          pdfPendingSize: file.size ?? null,
+          pdfPendingType: file.type || "",
+          pdfLabel: file.name,
+          pdfName: file.name,
+          pdf_file_name: file.name,
+          pdfUrl: "",
+          pdf_url: "",
+          pdfStoragePath: "",
+          pdf_storage_path: "",
+          pdfUploading: false,
+          pdfError: "",
+        };
+      });
+
+      return {
+        ...current,
+        modules: nextModules,
+        bulkPdfSelections: bulkPdfFiles.map((file, index) =>
+          createBulkSelectionEntry({
+            file,
+            position: index,
+            module: nextModules[index] || null,
+            moduleIndex: nextModules[index] ? index : null,
+            language,
+            kind: "pdf",
+          }),
+        ),
+      };
+    });
+  };
+
+  const assignBulkVideoFiles = () => {
+    setForm((current) => {
+      const nextModules = current.modules.map((module, index) => {
+        const file = bulkVideoFiles[index];
+        if (!file) return module;
+        if ((file.size ?? 0) > MAX_VIDEO_SIZE_BYTES) {
+          return {
+            ...module,
+            video: {
+              ...module.video,
+              error: t("common.fileTooLarge"),
+            },
+          };
+        }
+
+        return {
+          ...module,
+          videoFile: file,
+          videoPendingName: file.name,
+          videoPendingSize: file.size ?? null,
+          videoPendingType: file.type || "",
+          videoUrl: "",
+          video_url: "",
+          videoName: file.name,
+          video_file_name: file.name,
+          videoStoragePath: "",
+          video_storage_path: "",
+          video: {
+            ...module.video,
+            uploadLabel: file.name,
+            url: "",
+            link: "",
+            uploading: false,
+            error: "",
+          },
+        };
+      });
+
+      return {
+        ...current,
+        modules: nextModules,
+        bulkVideoSelections: bulkVideoFiles.map((file, index) =>
+          createBulkSelectionEntry({
+            file,
+            position: index,
+            module: nextModules[index] || null,
+            moduleIndex: nextModules[index] ? index : null,
+            language,
+            kind: "video",
+            tooLarge: (file?.size ?? 0) > MAX_VIDEO_SIZE_BYTES,
+          }),
+        ),
+      };
+    });
+  };
+
   const previewCourse = buildCoursePayload(form, editingId, courses.find((course) => course.id === editingId));
 
   const applyGeneratedModules = (count) => {
@@ -1668,8 +1850,12 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
     const shouldCollapse = count > 12;
 
     window.requestAnimationFrame(() => {
+      setBulkPdfFiles([]);
+      setBulkVideoFiles([]);
       setForm((current) => ({
         ...current,
+        bulkPdfSelections: [],
+        bulkVideoSelections: [],
         modules: nextModules,
       }));
       setBulkModuleCount(String(count));
@@ -1722,7 +1908,134 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
     continueBulkGeneration(generatorDialog.count);
   };
 
-  const submit = (event) => {
+  const uploadPendingModuleFiles = async () => {
+    const nextForm = {
+      ...form,
+      modules: (form.modules || []).map((module) => ({
+        ...module,
+        video: {
+          ...module.video,
+        },
+      })),
+    };
+
+    for (let index = 0; index < nextForm.modules.length; index += 1) {
+      const module = nextForm.modules[index];
+      const moduleTitle = getModuleDisplayTitle(module, index, language);
+
+      if (module.pdfFile && !(module.pdf_url || module.pdfUrl)) {
+        setPublishProgress(t("admin.uploadingModuleProgress", { current: index + 1, total: nextForm.modules.length }));
+        updateModule(module.id, (currentModule) => ({
+          ...currentModule,
+          pdfUploading: true,
+          pdfError: "",
+        }));
+
+        try {
+          const uploadedPdf = await uploadModulePdf(module.pdfFile, module.id);
+          if (!uploadedPdf.publicUrl) {
+            throw new Error(t("admin.uploadedMissingPublicUrlPdf"));
+          }
+
+          Object.assign(module, {
+            pdfUrl: uploadedPdf.publicUrl,
+            pdf_url: uploadedPdf.publicUrl,
+            pdfLabel: uploadedPdf.fileName,
+            pdfName: uploadedPdf.fileName,
+            pdf_file_name: uploadedPdf.fileName,
+            pdfStoragePath: uploadedPdf.storagePath,
+            pdf_storage_path: uploadedPdf.storagePath,
+            pdfFile: null,
+            pdfPendingName: "",
+            pdfPendingSize: null,
+            pdfPendingType: "",
+            pdfUploading: false,
+            pdfError: "",
+          });
+
+          updateBulkSelectionStatus("pdf", module.id, "uploaded");
+          updateModule(module.id, () => ({ ...module }));
+        } catch (error) {
+          console.error("Sequential PDF upload failed:", error);
+          updateBulkSelectionStatus("pdf", module.id, "failed");
+          updateModule(module.id, (currentModule) => ({
+            ...currentModule,
+            pdfUploading: false,
+            pdfError:
+              error?.message ||
+              t("admin.pdfUploadFailedInModule", {
+                number: index + 1,
+                moduleTitle,
+              }),
+          }));
+          throw error;
+        }
+      }
+
+      if (module.videoFile && !(module.video_url || module.videoUrl || module.video?.link?.trim())) {
+        setPublishProgress(t("admin.uploadingModuleProgress", { current: index + 1, total: nextForm.modules.length }));
+        updateModule(module.id, (currentModule) => ({
+          ...currentModule,
+          video: {
+            ...currentModule.video,
+            uploading: true,
+            error: "",
+          },
+        }));
+
+        try {
+          const uploadedVideo = await uploadModuleVideo(module.videoFile, module.id);
+          if (!uploadedVideo.publicUrl) {
+            throw new Error(t("admin.uploadedMissingPublicUrlVideo"));
+          }
+
+          Object.assign(module, {
+            videoUrl: uploadedVideo.publicUrl,
+            video_url: uploadedVideo.publicUrl,
+            videoName: uploadedVideo.fileName,
+            video_file_name: uploadedVideo.fileName,
+            videoStoragePath: uploadedVideo.storagePath,
+            video_storage_path: uploadedVideo.storagePath,
+            videoFile: null,
+            videoPendingName: "",
+            videoPendingSize: null,
+            videoPendingType: "",
+            video: {
+              ...module.video,
+              uploadLabel: uploadedVideo.fileName,
+              url: uploadedVideo.publicUrl,
+              uploading: false,
+              error: "",
+            },
+          });
+
+          updateBulkSelectionStatus("video", module.id, "uploaded");
+          updateModule(module.id, () => ({ ...module }));
+        } catch (error) {
+          console.error("Sequential video upload failed:", error);
+          updateBulkSelectionStatus("video", module.id, "failed");
+          updateModule(module.id, (currentModule) => ({
+            ...currentModule,
+            video: {
+              ...currentModule.video,
+              uploading: false,
+              error:
+                error?.message ||
+                t("admin.videoUploadFailedInModule", {
+                  number: index + 1,
+                  moduleTitle,
+                }),
+            },
+          }));
+          throw error;
+        }
+      }
+    }
+
+    return nextForm;
+  };
+
+  const submit = async (event) => {
     event.preventDefault();
     setSaveError("");
     setSaveMessage("");
@@ -1734,14 +2047,28 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
     if (isBusy) return;
 
     const invalidModule = form.modules.find((module) => {
-      const hasPdf = Boolean(module.pdf_url || module.pdfUrl);
-      const hasVideo = Boolean(module.video_url || module.videoUrl || module.video?.link?.trim());
-      return !hasPdf || !hasVideo || module.pdfPendingName || module.videoPendingName || module.pdfUploading || module.video?.uploading;
+      const hasPdf = Boolean(module.pdf_url || module.pdfUrl || module.pdfFile);
+      const hasVideo = Boolean(module.video_url || module.videoUrl || module.video?.link?.trim() || module.videoFile);
+      const needsPdfReselect = Boolean(module.pdfPendingName && !module.pdfFile && !(module.pdf_url || module.pdfUrl));
+      const needsVideoReselect = Boolean(
+        module.videoPendingName &&
+        !module.videoFile &&
+        !(module.video_url || module.videoUrl || module.video?.link?.trim()),
+      );
+      return !hasPdf || !hasVideo || needsPdfReselect || needsVideoReselect || module.pdfUploading || module.video?.uploading;
     });
 
     if (invalidModule) {
+      const needsReselect = Boolean(
+        (invalidModule.pdfPendingName && !invalidModule.pdfFile && !(invalidModule.pdf_url || invalidModule.pdfUrl)) ||
+        (
+          invalidModule.videoPendingName &&
+          !invalidModule.videoFile &&
+          !(invalidModule.video_url || invalidModule.videoUrl || invalidModule.video?.link?.trim())
+        ),
+      );
       setSaveError(
-        invalidModule.pdfPendingName || invalidModule.videoPendingName
+        needsReselect
           ? t("admin.reselectFilesAfterRestore")
           : t("admin.completeModuleFilesBeforePublishing", {
               moduleTitle: invalidModule.title || t("common.module"),
@@ -1750,42 +2077,40 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
       return;
     }
 
-    const existingCourse = courses.find((course) => course.id === editingId);
-    const payload = buildCoursePayload(form, editingId, existingCourse);
-    console.log("Module payload right before saving:", payload.modules);
-
     setIsPublishing(true);
 
-    void Promise.resolve(
-      onSaveCourse(payload, editingId, {
+    try {
+      const preparedForm = await uploadPendingModuleFiles();
+      const existingCourse = courses.find((course) => course.id === editingId);
+      const payload = buildCoursePayload(preparedForm, editingId, existingCourse);
+      console.log("Module payload right before saving:", payload.modules);
+
+      const result = await onSaveCourse(payload, editingId, {
         onProgress: ({ current, total }) => {
           setPublishProgress(t("admin.uploadingModuleProgress", { current, total }));
         },
-      }),
-    )
-      .then((result) => {
-        if (result?.ok === false) {
-          setSaveError(result.error || t("admin.savingCourseFailed"));
-          return;
-        }
-
-        try {
-          window.localStorage.removeItem(COURSE_DRAFT_STORAGE_KEY);
-        } catch (error) {
-          console.error("Clearing the unpublished course draft after publish failed:", error);
-        }
-
-        setSaveMessage(editingId ? t("admin.courseUpdatedSuccessfully") : t("admin.coursePublishedSuccessfully"));
-        reset();
-      })
-      .catch((error) => {
-        console.error("Course save failed:", error);
-        setSaveError(error?.message || t("admin.savingCourseFailed"));
-      })
-      .finally(() => {
-        setIsPublishing(false);
-        setPublishProgress("");
       });
+
+      if (result?.ok === false) {
+        setSaveError(result.error || t("admin.savingCourseFailed"));
+        return;
+      }
+
+      try {
+        window.localStorage.removeItem(COURSE_DRAFT_STORAGE_KEY);
+      } catch (error) {
+        console.error("Clearing the unpublished course draft after publish failed:", error);
+      }
+
+      setSaveMessage(editingId ? t("admin.courseUpdatedSuccessfully") : t("admin.coursePublishedSuccessfully"));
+      reset();
+    } catch (error) {
+      console.error("Course save failed:", error);
+      setSaveError(error?.message || t("admin.savingCourseFailed"));
+    } finally {
+      setIsPublishing(false);
+      setPublishProgress("");
+    }
   };
 
   const changeCourseVisibility = async (course, visibleToStudents) => {
@@ -1855,6 +2180,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
       pdfFile: selectedFile,
       pdfPendingName: selectedFile.name,
       pdfPendingSize: selectedFile.size ?? null,
+      pdfPendingType: selectedFile.type || "",
     }));
 
     try {
@@ -1881,9 +2207,12 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
         pdfFile: null,
         pdfPendingName: "",
         pdfPendingSize: null,
+        pdfPendingType: "",
       }));
+      updateBulkSelectionStatus("pdf", moduleId, "uploaded");
     } catch (error) {
       console.error("PDF upload failed:", error);
+      updateBulkSelectionStatus("pdf", moduleId, "failed");
       updateModule(moduleId, (module) => ({
         ...module,
         pdfUploading: false,
@@ -1923,6 +2252,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
         videoFile: null,
         videoPendingName: selectedFile.name,
         videoPendingSize: selectedFile.size ?? null,
+        videoPendingType: selectedFile.type || "",
         video: {
           ...module.video,
           uploading: false,
@@ -1938,6 +2268,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
       videoFile: selectedFile,
       videoPendingName: selectedFile.name,
       videoPendingSize: selectedFile.size ?? null,
+      videoPendingType: selectedFile.type || "",
       video: {
         ...module.video,
         uploading: true,
@@ -1967,6 +2298,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
         videoFile: null,
         videoPendingName: "",
         videoPendingSize: null,
+        videoPendingType: "",
         video: {
           ...module.video,
           uploading: false,
@@ -1976,8 +2308,10 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
           link: module.video.link,
         },
       }));
+      updateBulkSelectionStatus("video", moduleId, "uploaded");
     } catch (error) {
       console.error("Video upload failed:", error);
+      updateBulkSelectionStatus("video", moduleId, "failed");
       updateModule(moduleId, (module) => ({
         ...module,
         videoUrl: "",
@@ -2100,6 +2434,106 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
             {bulkGeneratorError ? <small className="field-note danger-text">{bulkGeneratorError}</small> : null}
           </div>
 
+          <div className="bulk-upload-grid">
+            <section className="module-generator-card bulk-upload-card">
+              <div>
+                <span className="eyebrow">{t("admin.bulkPdfUpload")}</span>
+                <h4>{t("admin.bulkPdfUpload")}</h4>
+                <p>{t("admin.bulkPdfUploadDescription")}</p>
+                <small className="field-note">{t("admin.filesAssignedInOrder")}</small>
+                <small className="field-note">{t("admin.bulkPdfUploadExample")}</small>
+              </div>
+
+              <label>
+                {t("admin.bulkPdfUpload")}
+                <input type="file" multiple accept={PDF_ACCEPT} onChange={(event) => handleBulkPdfSelection(event.target.files)} />
+              </label>
+
+              {form.bulkPdfSelections?.length ? (
+                <div className="bulk-upload-list">
+                  {form.bulkPdfSelections.map((entry) => (
+                    <article key={entry.id} className="bulk-upload-item">
+                      <div>
+                        <strong>{entry.fileName}</strong>
+                        <span>{`${entry.originalOrder} → ${entry.assignedModuleTitle || "—"}`}</span>
+                      </div>
+                      <div className="bulk-upload-meta">
+                        <span className={`subtle-badge ${entry.uploadStatus === "uploaded" ? "" : entry.tooLarge ? "warning-badge" : ""}`}>
+                          {entry.tooLarge
+                            ? t("common.fileTooLarge")
+                            : t("common.fileAssigned")}
+                        </span>
+                        {entry.tooLarge ? <small className="field-note danger-text">{t("common.replaceFileManually")}</small> : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+
+              {form.bulkPdfSelections?.length > form.modules.length ? (
+                <small className="field-note danger-text">{t("admin.morePdfsThanModules")}</small>
+              ) : null}
+              {form.bulkPdfSelections?.length > 0 && form.bulkPdfSelections?.length < form.modules.length ? (
+                <small className="field-note warning-badge">{t("admin.someModulesMissingPdf")}</small>
+              ) : null}
+
+              <div className="row-actions">
+                <button type="button" className="primary-btn" disabled={!form.bulkPdfSelections?.length || isBusy} onClick={assignBulkPdfFiles}>
+                  {t("admin.assignPdfsToModules")}
+                </button>
+              </div>
+            </section>
+
+            <section className="module-generator-card bulk-upload-card">
+              <div>
+                <span className="eyebrow">{t("admin.bulkVideoUpload")}</span>
+                <h4>{t("admin.bulkVideoUpload")}</h4>
+                <p>{t("admin.bulkVideoUploadDescription")}</p>
+                <small className="field-note">{t("admin.filesAssignedInOrder")}</small>
+                <small className="field-note">{t("admin.bulkVideoUploadExample")}</small>
+              </div>
+
+              <label>
+                {t("admin.bulkVideoUpload")}
+                <input type="file" multiple accept={VIDEO_ACCEPT} onChange={(event) => handleBulkVideoSelection(event.target.files)} />
+              </label>
+
+              {form.bulkVideoSelections?.length ? (
+                <div className="bulk-upload-list">
+                  {form.bulkVideoSelections.map((entry) => (
+                    <article key={entry.id} className="bulk-upload-item">
+                      <div>
+                        <strong>{entry.fileName}</strong>
+                        <span>{`${entry.originalOrder} → ${entry.assignedModuleTitle || "—"}`}</span>
+                      </div>
+                      <div className="bulk-upload-meta">
+                        <span className={`subtle-badge ${entry.uploadStatus === "uploaded" ? "" : entry.tooLarge ? "warning-badge" : ""}`}>
+                          {entry.tooLarge
+                            ? t("common.fileTooLarge")
+                            : t("common.fileAssigned")}
+                        </span>
+                        {entry.tooLarge ? <small className="field-note danger-text">{t("common.replaceFileManually")}</small> : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+
+              {form.bulkVideoSelections?.length > form.modules.length ? (
+                <small className="field-note danger-text">{t("admin.moreVideosThanModules")}</small>
+              ) : null}
+              {form.bulkVideoSelections?.length > 0 && form.bulkVideoSelections?.length < form.modules.length ? (
+                <small className="field-note warning-badge">{t("admin.someModulesMissingVideo")}</small>
+              ) : null}
+
+              <div className="row-actions">
+                <button type="button" className="primary-btn" disabled={!form.bulkVideoSelections?.length || isBusy} onClick={assignBulkVideoFiles}>
+                  {t("admin.assignVideosToModules")}
+                </button>
+              </div>
+            </section>
+          </div>
+
           {form.modules.map((module, index) => (
             <ModuleEditor
               key={module.id}
@@ -2180,9 +2614,6 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                             ? module.assignment?.title || t("admin.noAssignmentAdded")
                             : t("common.noAssignmentRequired")}
                         </strong>
-                        {(module.requiresAssignment || module.requires_assignment) && (module.assignment?.dueDate || module.assignment?.due_date) ? (
-                          <small>{t("common.due")} {formatDisplayDate(module.assignment?.dueDate || module.assignment?.due_date, language)}</small>
-                        ) : null}
                       </div>
                     </div>
                   </article>
@@ -2434,7 +2865,7 @@ function AssignmentReviewsPage() {
               <div>
                 <small>{t("common.assignment")}</small>
                 <strong>{selectedSubmission.assignmentTitle || "—"}</strong>
-                <p>{t("common.due")} {formatDisplayDate(selectedSubmission.assignment?.dueDate || selectedSubmission.assignment?.due_date, language)}</p>
+                <p>{selectedSubmission.status ? t(`status.${selectedSubmission.status}`) : "—"}</p>
               </div>
               <div>
                 <small>{t("common.submittedDate")}</small>
