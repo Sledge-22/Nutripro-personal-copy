@@ -206,8 +206,16 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
 .secondary-btn { border: 1px solid var(--line); background: #fff; }
 .builder-stack { display: grid; gap: 16px; margin-top: 24px; }
 .builder-header, .nested-header, .module-editor-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.builder-actions { justify-content: flex-end; }
 .builder-header h3, .module-editor-head h4, .nested-header h5, .preview-shell h3 { margin: 6px 0 0; font-size: 18px; }
+.module-generator-card { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+.module-generator-card h4 { margin: 6px 0 4px; font-size: 18px; }
+.module-generator-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.module-generator-form { display: grid; grid-template-columns: minmax(0, 220px) auto; gap: 12px; align-items: end; }
 .module-editor-card { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--green-50); }
+.module-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.compact-toggle { padding: 0; font-size: 12px; }
+.module-editor-summary { display: grid; gap: 10px; margin-top: 16px; color: var(--muted); font-size: 13px; line-height: 1.55; }
 .module-editor-grid, .nested-builder-grid, .module-items { display: grid; gap: 16px; }
 .nested-builder-grid, .module-items { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .nested-builder { padding: 18px; border: 1px solid #dfe8e3; border-radius: 14px; background: #fff; }
@@ -992,6 +1000,7 @@ select:focus {
   .split-layout, .cert-layout, .community-layout { grid-template-columns: 1fr; }
   .course-form, .post-form { position: static; }
   .preview-card { position: static; }
+  .module-generator-form { grid-template-columns: 1fr; }
   .nested-builder-grid, .module-items { grid-template-columns: 1fr; }
   .course-detail-layout { grid-template-columns: 330px minmax(0,1fr); }
   .login-panel { padding-inline: 45px; }

@@ -25,6 +25,25 @@ function formatFileSize(bytes) {
   return `${Math.max(1, Math.round(normalizedBytes / 1024))} KB`;
 }
 
+function clampModuleCount(value) {
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed < 1 || parsed > 100) return null;
+  return parsed;
+}
+
+function createGeneratedModules(count, language = "es") {
+  return Array.from({ length: count }, (_, index) => ({
+    ...createModuleDraft(index + 1),
+    title: language === "es" ? `Módulo ${index + 1}` : `Module ${index + 1}`,
+  }));
+}
+
+function createCollapsedModuleIds(modules = [], shouldCollapse = false) {
+  if (!shouldCollapse) return [];
+  return modules.slice(1).map((module) => module.id);
+}
+
 function createAssignmentDraft() {
   return {
     id: null,
@@ -1078,6 +1097,8 @@ function ModuleEditor({
   module,
   index,
   t,
+  collapsed,
+  toggleCollapsed,
   updateModule,
   updateAssignment,
   deleteModule,
@@ -1093,11 +1114,31 @@ function ModuleEditor({
           <span className="count-badge">{t("admin.moduleNumber", { number: index + 1 })}</span>
           <h4>{module.title.trim() || t("admin.newModule")}</h4>
         </div>
-        <button type="button" className="danger-text mini-action" onClick={() => deleteModule(module.id)}>
-          {t("admin.deleteModule")}
-        </button>
+        <div className="module-editor-actions">
+          <button type="button" className="text-button compact-toggle" onClick={() => toggleCollapsed(module.id)}>
+            {collapsed ? t("common.expand") : t("common.collapse")}
+          </button>
+          <button type="button" className="danger-text mini-action" onClick={() => deleteModule(module.id)}>
+            {t("admin.deleteModule")}
+          </button>
+        </div>
       </div>
 
+      {collapsed ? (
+        <div className="module-editor-summary">
+          <span>{module.description?.trim() || t("admin.whatCoveredInModule")}</span>
+          <div className="row-actions">
+            <span className="subtle-badge">{module.pdf_url || module.pdfUrl ? "PDF" : t("common.noPdfSelected")}</span>
+            <span className="subtle-badge">
+              {module.video_url || module.videoUrl || module.video?.link?.trim() ? "Video" : t("common.noVideoSelected")}
+            </span>
+            <span className="subtle-badge">
+              {module.requiresAssignment || module.requires_assignment ? t("common.requiresAssignment") : t("common.noAssignmentRequired")}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <>
       <div className="module-editor-grid">
         <label>
           {t("admin.moduleTitle")}
@@ -1400,6 +1441,8 @@ function ModuleEditor({
           </>
         )}
       </section>
+        </>
+      )}
     </article>
   );
 }
@@ -1408,6 +1451,9 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   const { t, language, translateSubmissionType } = useLanguage();
   const [form, setForm] = useState(createCourseDraft());
   const [editingId, setEditingId] = useState(null);
+  const [bulkModuleCount, setBulkModuleCount] = useState("1");
+  const [bulkGeneratorError, setBulkGeneratorError] = useState("");
+  const [generatorDialog, setGeneratorDialog] = useState(null);
   const [saveError, setSaveError] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
@@ -1418,11 +1464,28 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   const [statusUpdatingId, setStatusUpdatingId] = useState(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [collapsedModuleIds, setCollapsedModuleIds] = useState([]);
 
   const isUploadingNow =
     Boolean(form.imageUploading) ||
     (form.modules || []).some((module) => module.pdfUploading || module.video?.uploading);
   const isBusy = isUploadingNow || isPublishing;
+
+  const hasExistingModuleContent = (form.modules || []).some((module) =>
+    Boolean(
+      module.title?.trim() ||
+      module.description?.trim() ||
+      module.pdf_url ||
+      module.pdfPendingName ||
+      module.video_url ||
+      module.video?.link?.trim() ||
+      module.videoPendingName ||
+      module.requiresAssignment ||
+      module.requires_assignment ||
+      module.assignment?.title?.trim() ||
+      module.assignment?.instructions?.trim(),
+    ),
+  );
 
   const updateCourseField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -1447,6 +1510,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
       ...current,
       modules: [...current.modules, createModuleDraft(current.modules.length + 1)],
     }));
+    setCollapsedModuleIds((current) => current.filter(Boolean));
   };
 
   const deleteModule = (moduleId) => {
@@ -1454,6 +1518,19 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
       ...current,
       modules: current.modules.filter((module) => module.id !== moduleId).map((module, index) => ({ ...module, sortOrder: index + 1 })),
     }));
+    setCollapsedModuleIds((current) => current.filter((id) => id !== moduleId));
+  };
+
+  const toggleCollapsed = (moduleId) => {
+    setCollapsedModuleIds((current) => (current.includes(moduleId) ? current.filter((id) => id !== moduleId) : [...current, moduleId]));
+  };
+
+  const collapseAllModules = () => {
+    setCollapsedModuleIds((form.modules || []).map((module) => module.id));
+  };
+
+  const expandAllModules = () => {
+    setCollapsedModuleIds([]);
   };
 
   const enableAssignment = (moduleId) => {
@@ -1471,12 +1548,18 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
     setDraftWarning("");
     setSaveMessage("");
     setSaveError("");
+    setBulkGeneratorError("");
+    setCollapsedModuleIds(createCollapsedModuleIds(course.modules || [], (course.modules || []).length > 12));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const reset = () => {
     setForm(createCourseDraft());
     setEditingId(null);
+    setBulkModuleCount("1");
+    setBulkGeneratorError("");
+    setGeneratorDialog(null);
+    setCollapsedModuleIds([]);
     setSaveError("");
     setPublishProgress("");
   };
@@ -1502,6 +1585,8 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
 
       setForm(restoredForm);
       setEditingId(parsedDraft.editingId ?? null);
+      setBulkModuleCount(String((restoredForm.modules || []).length || 1));
+      setCollapsedModuleIds(createCollapsedModuleIds(restoredForm.modules || [], (restoredForm.modules || []).length > 12));
       setDraftMessage(t("admin.restoredDraft"));
       if (hasPendingReselection) {
         setDraftWarning(t("admin.reselectFilesAfterRestore"));
@@ -1577,6 +1662,65 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   };
 
   const previewCourse = buildCoursePayload(form, editingId, courses.find((course) => course.id === editingId));
+
+  const applyGeneratedModules = (count) => {
+    const nextModules = createGeneratedModules(count, language);
+    const shouldCollapse = count > 12;
+
+    window.requestAnimationFrame(() => {
+      setForm((current) => ({
+        ...current,
+        modules: nextModules,
+      }));
+      setBulkModuleCount(String(count));
+      setBulkGeneratorError("");
+      setCollapsedModuleIds(createCollapsedModuleIds(nextModules, shouldCollapse));
+    });
+  };
+
+  const continueBulkGeneration = (count) => {
+    setGeneratorDialog(null);
+    applyGeneratedModules(count);
+  };
+
+  const generateModules = () => {
+    const normalizedCount = clampModuleCount(bulkModuleCount);
+
+    if (!normalizedCount) {
+      setBulkGeneratorError(t("admin.bulkModuleCountValidation"));
+      return;
+    }
+
+    setBulkGeneratorError("");
+
+    if (normalizedCount > 30) {
+      setGeneratorDialog({ type: "large-course", count: normalizedCount });
+      return;
+    }
+
+    if (hasExistingModuleContent) {
+      setGeneratorDialog({ type: "replace-modules", count: normalizedCount });
+      return;
+    }
+
+    continueBulkGeneration(normalizedCount);
+  };
+
+  const handleGeneratorContinue = () => {
+    if (!generatorDialog) return;
+
+    if (generatorDialog.type === "large-course") {
+      if (hasExistingModuleContent) {
+        setGeneratorDialog({ type: "replace-modules", count: generatorDialog.count });
+        return;
+      }
+
+      continueBulkGeneration(generatorDialog.count);
+      return;
+    }
+
+    continueBulkGeneration(generatorDialog.count);
+  };
 
   const submit = (event) => {
     event.preventDefault();
@@ -1910,10 +2054,50 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
               <span className="eyebrow">{t("admin.modules")}</span>
               <h3>{t("admin.moduleFiles")}</h3>
             </div>
-            <button type="button" className="secondary-btn" onClick={addModule}>
-              <Icon name="plus" />
-              {t("admin.addModule")}
-            </button>
+            <div className="row-actions builder-actions">
+              {(form.modules || []).length > 1 ? (
+                <>
+                  <button type="button" onClick={expandAllModules}>
+                    {t("common.expandAll")}
+                  </button>
+                  <button type="button" onClick={collapseAllModules}>
+                    {t("common.collapseAll")}
+                  </button>
+                </>
+              ) : null}
+              <button type="button" className="secondary-btn" onClick={addModule}>
+                <Icon name="plus" />
+                {t("admin.addModule")}
+              </button>
+            </div>
+          </div>
+
+          <div className="module-generator-card">
+            <div>
+              <span className="eyebrow">{t("admin.bulkModuleGenerator")}</span>
+              <h4>{t("admin.generateModulesTitle")}</h4>
+              <p>{t("admin.generateModulesHelp")}</p>
+            </div>
+            <div className="module-generator-form">
+              <label>
+                {t("admin.numberOfModules")}
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  inputMode="numeric"
+                  value={bulkModuleCount}
+                  onChange={(event) => {
+                    setBulkModuleCount(event.target.value);
+                    if (bulkGeneratorError) setBulkGeneratorError("");
+                  }}
+                />
+              </label>
+              <button type="button" className="secondary-btn" disabled={isBusy} onClick={generateModules}>
+                {t("admin.generateModulesButton")}
+              </button>
+            </div>
+            {bulkGeneratorError ? <small className="field-note danger-text">{bulkGeneratorError}</small> : null}
           </div>
 
           {form.modules.map((module, index) => (
@@ -1922,6 +2106,8 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
               module={module}
               index={index}
               t={t}
+              collapsed={collapsedModuleIds.includes(module.id)}
+              toggleCollapsed={toggleCollapsed}
               updateModule={updateModule}
               updateAssignment={updateAssignment}
               deleteModule={deleteModule}
@@ -2055,6 +2241,35 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
           </div>
         </section>
       </div>
+
+      {generatorDialog ? (
+        <div className="modal-backdrop" onMouseDown={() => setGeneratorDialog(null)}>
+          <div className="certificate-modal confirm-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <button className="modal-close" type="button" onClick={() => setGeneratorDialog(null)}>×</button>
+            <span className="eyebrow">
+              {generatorDialog.type === "large-course" ? t("admin.largeCourseWarningTitle") : t("admin.replaceModulesTitle")}
+            </span>
+            <h2>
+              {generatorDialog.type === "large-course"
+                ? t("admin.largeCourseWarningTitle")
+                : t("admin.replaceModulesTitle")}
+            </h2>
+            <p>
+              {generatorDialog.type === "large-course"
+                ? t("admin.largeCourseWarningBody")
+                : t("admin.replaceModulesBody")}
+            </p>
+            <div className="form-actions compact confirm-modal-actions">
+              <button type="button" className="secondary-btn" onClick={() => setGeneratorDialog(null)}>
+                {t("common.cancel")}
+              </button>
+              <button type="button" className="primary-btn" onClick={handleGeneratorContinue}>
+                {generatorDialog.type === "large-course" ? t("common.continue") : t("admin.replaceModulesButton")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
