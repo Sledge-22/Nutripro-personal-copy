@@ -5,6 +5,13 @@ import { getStudentSubmission, submitAssignment } from "../services/assignmentSe
 import { getStudentCourseAccess } from "../services/courseService.js";
 import { uploadAssignmentFile, uploadProfilePicture } from "../services/storageService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+import {
+  isDirectPdfUrl,
+  isDirectVideoUrl,
+  isGoogleDriveUrl,
+  toEmbeddablePdfUrl,
+  toEmbeddableVideoUrl,
+} from "../utils/googleDriveLinks.js";
 
 function goTo(pathname) {
   window.history.pushState({}, "", pathname);
@@ -37,58 +44,6 @@ function formatDisplayDate(value, language = "es") {
   } catch {
     return value;
   }
-}
-
-function isDirectVideoSource(url) {
-  const normalizedUrl = `${url ?? ""}`.trim().toLowerCase();
-  if (!normalizedUrl) return false;
-  return (
-    normalizedUrl.includes("/storage/v1/object/public/") ||
-    normalizedUrl.endsWith(".mp4") ||
-    normalizedUrl.endsWith(".mov") ||
-    normalizedUrl.endsWith(".webm") ||
-    normalizedUrl.includes(".mp4?") ||
-    normalizedUrl.includes(".mov?") ||
-    normalizedUrl.includes(".webm?")
-  );
-}
-
-function getGoogleDriveFileId(url) {
-  const value = `${url ?? ""}`.trim();
-  const match =
-    value.match(/\/file\/d\/([^/]+)/i) ||
-    value.match(/[?&]id=([^&]+)/i) ||
-    value.match(/\/d\/([^/]+)/i);
-  return match?.[1] || "";
-}
-
-function getGoogleDrivePreviewUrl(url) {
-  const fileId = getGoogleDriveFileId(url);
-  return fileId ? `https://drive.google.com/file/d/${fileId}/preview` : "";
-}
-
-function getExternalVideoEmbedUrl(url) {
-  const value = `${url ?? ""}`.trim();
-  if (!value) return "";
-
-  const youtubeMatch =
-    value.match(/[?&]v=([^&]+)/i) ||
-    value.match(/youtu\.be\/([^?&/]+)/i) ||
-    value.match(/youtube\.com\/embed\/([^?&/]+)/i);
-  if (youtubeMatch?.[1]) {
-    return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
-  }
-
-  const vimeoMatch = value.match(/vimeo\.com\/(\d+)/i);
-  if (vimeoMatch?.[1]) {
-    return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
-  }
-
-  if (value.includes("drive.google.com")) {
-    return getGoogleDrivePreviewUrl(value);
-  }
-
-  return "";
 }
 
 function initialsFromName(name) {
@@ -607,14 +562,35 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     );
   }
 
-  const uploadedPdfSource = activeModule?.pdf_url || activeModule?.pdfUrl || "";
-  const externalPdfSource = activeModule?.pdf_external_url || activeModule?.pdfExternalUrl || "";
+  const uploadedPdfSource =
+    activeModule?.pdf_storage_path || activeModule?.pdfStoragePath
+      ? activeModule?.pdf_url || activeModule?.pdfUrl || ""
+      : "";
+  const externalPdfSource =
+    activeModule?.pdf_external_url ||
+    activeModule?.pdfExternalUrl ||
+    ((activeModule?.pdf_source === "external" || activeModule?.pdfSource === "external")
+      ? activeModule?.pdf_url || activeModule?.pdfUrl || ""
+      : "");
   const pdfSource = uploadedPdfSource || externalPdfSource || "";
-  const uploadedVideoSource = activeModule?.video_url || activeModule?.videoUrl || "";
-  const externalVideoSource = activeModule?.video_external_url || activeModule?.videoExternalUrl || activeModule?.video?.link || "";
+  const uploadedVideoSource =
+    activeModule?.video_storage_path || activeModule?.videoStoragePath
+      ? activeModule?.video_url || activeModule?.videoUrl || ""
+      : "";
+  const externalVideoSource =
+    activeModule?.video_external_url ||
+    activeModule?.videoExternalUrl ||
+    ((activeModule?.video_source === "external" || activeModule?.videoSource === "external")
+      ? activeModule?.video_url || activeModule?.videoUrl || activeModule?.video?.link || ""
+      : activeModule?.video?.link || "");
   const videoSource = uploadedVideoSource || externalVideoSource || "";
-  const hasDirectVideoSource = isDirectVideoSource(videoSource);
-  const embeddedVideoSource = !uploadedVideoSource ? getExternalVideoEmbedUrl(externalVideoSource) : "";
+  const embeddedPdfSource = !uploadedPdfSource ? toEmbeddablePdfUrl(externalPdfSource) : "";
+  const hasDirectExternalPdf = !uploadedPdfSource && isDirectPdfUrl(externalPdfSource);
+  const hasDirectUploadedVideo = Boolean(uploadedVideoSource && isDirectVideoUrl(uploadedVideoSource));
+  const hasDirectExternalVideo = !uploadedVideoSource && isDirectVideoUrl(externalVideoSource);
+  const embeddedVideoSource = !uploadedVideoSource ? toEmbeddableVideoUrl(externalVideoSource) : "";
+  const isGoogleDrivePdf = isGoogleDriveUrl(externalPdfSource);
+  const isGoogleDriveVideo = isGoogleDriveUrl(externalVideoSource);
   const pdfLabel = activeModule?.pdfLabel || activeModule?.pdfName || t("common.noPdfSelected");
   const videoLabel =
     activeModule?.videoName || activeModule?.video?.uploadLabel || externalVideoSource || t("common.noVideoSelected");
@@ -820,11 +796,49 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
               <span>{pdfLabel}</span>
             </div>
 
-            {pdfSource ? (
-              <div className="row-actions">
-                <a href={pdfSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`pdf-${activeModule.id}`)}>
-                  {t("common.openPdf")}
-                </a>
+            {uploadedPdfSource ? (
+              <div className="resource-viewer-stack">
+                <div className="row-actions resource-viewer-actions">
+                  <a href={uploadedPdfSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`pdf-${activeModule.id}`)}>
+                    {t("common.openPdf")}
+                  </a>
+                </div>
+              </div>
+            ) : embeddedPdfSource ? (
+              <div className="resource-viewer-stack">
+                <div className="lesson-meta">
+                  <span className="subtle-badge">{t("common.viewPdfOnPage")}</span>
+                  <span>{isGoogleDrivePdf ? "Google Drive" : "PDF"}</span>
+                </div>
+                <div className="resource-viewer-shell">
+                  <iframe
+                    className="resource-viewer-frame pdf-viewer-frame"
+                    title={t("common.pdfPreviewTitle")}
+                    src={embeddedPdfSource}
+                    width="100%"
+                    height="650"
+                    loading="lazy"
+                    allow="autoplay"
+                    onLoad={() => markSeen(`pdf-${activeModule.id}`)}
+                  />
+                </div>
+                <small className="field-note">{t("common.previewFallbackOpensNewTab")}</small>
+                <div className="row-actions resource-viewer-actions">
+                  <a href={externalPdfSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`pdf-${activeModule.id}`)}>
+                    {t("common.openPdfInNewTab")}
+                  </a>
+                </div>
+              </div>
+            ) : externalPdfSource ? (
+              <div className="resource-viewer-stack">
+                {hasDirectExternalPdf ? (
+                  <small className="field-note">{t("common.previewAvailable")}</small>
+                ) : null}
+                <div className="row-actions resource-viewer-actions">
+                  <a href={externalPdfSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`pdf-${activeModule.id}`)}>
+                    {t("common.openPdfInNewTab")}
+                  </a>
+                </div>
               </div>
             ) : activeModule?.pdfLabel && activeModule.pdfLabel !== t("common.noPdfSelected") ? (
               <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
@@ -839,36 +853,78 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
               <span>{videoLabel}</span>
             </div>
 
-            {videoSource && hasDirectVideoSource ? (
-              <div className="video-player-shell">
-                <video
-                  controls
-                  width="100%"
-                  src={videoSource}
-                  onPlay={() => markSeen(`video-${activeModule.id}`)}
-                  onError={() => {
-                    console.error("Video playback failed for module:", activeModule?.id, videoSource);
-                    setViewError(t("errors.videoPlaybackFailed"));
-                  }}
-                />
+            {uploadedVideoSource && hasDirectUploadedVideo ? (
+              <div className="resource-viewer-stack">
+                <div className="video-player-shell">
+                  <video
+                    controls
+                    width="100%"
+                    src={uploadedVideoSource}
+                    onPlay={() => markSeen(`video-${activeModule.id}`)}
+                    onError={() => {
+                      console.error("Video playback failed for module:", activeModule?.id, uploadedVideoSource);
+                      setViewError(t("errors.videoPlaybackFailed"));
+                    }}
+                  />
+                </div>
               </div>
             ) : embeddedVideoSource ? (
-              <div className="video-player-shell">
-                <iframe
-                  title={videoLabel || t("common.openVideo")}
-                  src={embeddedVideoSource}
-                  width="100%"
-                  height="420"
-                  allow="autoplay; fullscreen; picture-in-picture"
-                  allowFullScreen
-                  onLoad={() => markSeen(`video-${activeModule.id}`)}
-                />
+              <div className="resource-viewer-stack">
+                <div className="lesson-meta">
+                  <span className="subtle-badge">{t("common.viewVideoOnPage")}</span>
+                  <span>{isGoogleDriveVideo ? "Google Drive" : "Embed"}</span>
+                </div>
+                <div className="resource-viewer-shell">
+                  <iframe
+                    className="resource-viewer-frame video-viewer-frame"
+                    title={t("common.videoPreviewTitle")}
+                    src={embeddedVideoSource}
+                    width="100%"
+                    height="480"
+                    loading="lazy"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                    onLoad={() => markSeen(`video-${activeModule.id}`)}
+                  />
+                </div>
+                <small className="field-note">{t("common.previewFallbackOpensNewTab")}</small>
+                <div className="row-actions resource-viewer-actions">
+                  <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                    {t("common.openVideoInNewTab")}
+                  </a>
+                </div>
               </div>
-            ) : videoSource ? (
-              <div className="row-actions">
-                <a href={videoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
-                  {t("common.openVideo")}
-                </a>
+            ) : externalVideoSource && hasDirectExternalVideo ? (
+              <div className="resource-viewer-stack">
+                <div className="lesson-meta">
+                  <span className="subtle-badge">{t("common.viewVideoOnPage")}</span>
+                  <span>{t("common.openVideo")}</span>
+                </div>
+                <div className="video-player-shell">
+                  <video
+                    controls
+                    width="100%"
+                    src={externalVideoSource}
+                    onPlay={() => markSeen(`video-${activeModule.id}`)}
+                    onError={() => {
+                      console.error("External direct video playback failed for module:", activeModule?.id, externalVideoSource);
+                      setViewError(t("errors.videoPlaybackFailed"));
+                    }}
+                  />
+                </div>
+                <div className="row-actions resource-viewer-actions">
+                  <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                    {t("common.openVideoInNewTab")}
+                  </a>
+                </div>
+              </div>
+            ) : externalVideoSource ? (
+              <div className="resource-viewer-stack">
+                <div className="row-actions resource-viewer-actions">
+                  <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                    {t("common.openVideoInNewTab")}
+                  </a>
+                </div>
               </div>
             ) : activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== t("common.noVideoSelected") ? (
               <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>

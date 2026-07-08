@@ -1019,6 +1019,52 @@ select:focus {
   background: #000;
 }
 
+.resource-viewer-stack {
+  display: grid;
+  gap: 12px;
+  margin-block: 10px 14px;
+}
+
+.resource-viewer-shell,
+.resource-preview-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015)),
+    rgba(9, 12, 13, .78);
+  overflow: hidden;
+}
+
+.resource-viewer-shell.compact,
+.resource-preview-card {
+  padding: 12px;
+}
+
+.resource-viewer-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  background: #0a0a0a;
+}
+
+.resource-preview-frame {
+  min-height: 220px;
+}
+
+.pdf-viewer-frame {
+  min-height: 650px;
+}
+
+.video-viewer-frame {
+  min-height: 480px;
+}
+
+.resource-viewer-actions {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .certificate-modal {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);

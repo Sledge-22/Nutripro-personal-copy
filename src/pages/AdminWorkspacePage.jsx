@@ -6,6 +6,11 @@ import { deleteCourseDraft, getCourseDrafts, markCourseDraftPublished, saveCours
 import { uploadCourseImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 import { ROUTES } from "../routes/appRoutes.js";
+import {
+  isGoogleDriveUrl,
+  toEmbeddablePdfUrl,
+  toEmbeddableVideoUrl,
+} from "../utils/googleDriveLinks.js";
 
 function createId() {
   return Date.now() + Math.floor(Math.random() * 100000);
@@ -24,6 +29,72 @@ function formatFileSize(bytes) {
   if (!Number.isFinite(normalizedBytes) || normalizedBytes <= 0) return "";
   if (normalizedBytes >= 1024 * 1024) return `${(normalizedBytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(normalizedBytes / 1024))} KB`;
+}
+
+function getModulePdfViewerSource(module) {
+  const uploadedPdfSource =
+    module?.pdf_storage_path || module?.pdfStoragePath
+      ? module?.pdf_url || module?.pdfUrl || ""
+      : "";
+  const externalPdfSource =
+    module?.pdf_external_url ||
+    module?.pdfExternalUrl ||
+    ((module?.pdf_source === "external" || module?.pdfSource === "external")
+      ? module?.pdf_url || module?.pdfUrl || ""
+      : "");
+  if (uploadedPdfSource) {
+    return {
+      uploadedUrl: uploadedPdfSource,
+      viewerUrl: "",
+      externalUrl: uploadedPdfSource,
+      isEmbeddable: false,
+      isGoogleDrive: false,
+      usesExternal: false,
+    };
+  }
+
+  const viewerUrl = toEmbeddablePdfUrl(externalPdfSource);
+  return {
+    uploadedUrl: "",
+    viewerUrl,
+    externalUrl: externalPdfSource,
+    isEmbeddable: Boolean(viewerUrl),
+    isGoogleDrive: isGoogleDriveUrl(externalPdfSource),
+    usesExternal: Boolean(externalPdfSource),
+  };
+}
+
+function getModuleVideoViewerSource(module) {
+  const uploadedVideoSource =
+    module?.video_storage_path || module?.videoStoragePath
+      ? module?.video_url || module?.videoUrl || ""
+      : "";
+  const externalVideoSource =
+    module?.video_external_url ||
+    module?.videoExternalUrl ||
+    ((module?.video_source === "external" || module?.videoSource === "external")
+      ? module?.video_url || module?.videoUrl || module?.video?.link || ""
+      : module?.video?.link || "");
+  if (uploadedVideoSource) {
+    return {
+      uploadedUrl: uploadedVideoSource,
+      viewerUrl: "",
+      externalUrl: uploadedVideoSource,
+      isEmbeddable: false,
+      isGoogleDrive: false,
+      usesExternal: false,
+    };
+  }
+
+  const viewerUrl = toEmbeddableVideoUrl(externalVideoSource);
+  return {
+    uploadedUrl: "",
+    viewerUrl,
+    externalUrl: externalVideoSource,
+    isEmbeddable: Boolean(viewerUrl),
+    isGoogleDrive: isGoogleDriveUrl(externalVideoSource),
+    usesExternal: Boolean(externalVideoSource),
+  };
 }
 
 function clampModuleCount(value) {
@@ -1184,6 +1255,9 @@ function ModuleEditor({
   uploadPdf,
   uploadVideo,
 }) {
+  const pdfPreview = getModulePdfViewerSource(module);
+  const videoPreview = getModuleVideoViewerSource(module);
+
   return (
     <article className="module-editor-card" key={module.id}>
       <div className="module-editor-head">
@@ -1296,13 +1370,38 @@ function ModuleEditor({
           </small>
         ) : null}
 
-        {module.pdf_url || module.pdfUrl ? (
-          <a href={module.pdf_url || module.pdfUrl} target="_blank" rel="noreferrer">{t("common.openPdf")}</a>
+        {pdfPreview.uploadedUrl ? (
+          <a href={pdfPreview.uploadedUrl} target="_blank" rel="noreferrer">{t("common.openPdf")}</a>
         ) : module.pdfPendingName ? (
           <small className="field-note">{t("common.noPdfUploadedYet")}</small>
         ) : (
           <small className="field-note">{t("common.noPdfUploadedYet")}</small>
         )}
+
+        {pdfPreview.usesExternal ? (
+          <div className="resource-preview-card">
+            {pdfPreview.isEmbeddable ? (
+              <>
+                <small className="field-note">{t("common.previewAvailable")}</small>
+                <div className="resource-viewer-shell compact">
+                  <iframe
+                    className="resource-viewer-frame resource-preview-frame"
+                    title={t("common.pdfPreviewTitle")}
+                    src={pdfPreview.viewerUrl}
+                    width="100%"
+                    height="220"
+                    loading="lazy"
+                    allow="autoplay"
+                  />
+                </div>
+              </>
+            ) : null}
+            <small className="field-note">{t("common.previewFallbackOpensNewTab")}</small>
+            <div className="row-actions resource-viewer-actions">
+              <a href={pdfPreview.externalUrl} target="_blank" rel="noreferrer">{t("common.openPdfInNewTab")}</a>
+            </div>
+          </div>
+        ) : null}
 
         <div className="row-actions">
           <button type="button" onClick={() => document.getElementById(`module-pdf-${module.id}`)?.click()}>
@@ -1394,11 +1493,11 @@ function ModuleEditor({
           </small>
         ) : null}
 
-        {module.video_url || module.videoUrl ? (
+        {videoPreview.uploadedUrl ? (
           <>
-            <a href={module.video_url || module.videoUrl} target="_blank" rel="noreferrer">{t("common.openVideo")}</a>
+            <a href={videoPreview.uploadedUrl} target="_blank" rel="noreferrer">{t("common.openVideo")}</a>
             <div className="video-player-shell">
-              <video controls width="100%" src={module.video_url || module.videoUrl} />
+              <video controls width="100%" src={videoPreview.uploadedUrl} />
             </div>
           </>
         ) : module.video.link ? (
@@ -1449,6 +1548,32 @@ function ModuleEditor({
         </label>
         <small className="field-note">{t("admin.externalVideoHelper")}</small>
         <small className="field-note">{t("admin.googleDrivePermissionHelper")}</small>
+
+        {videoPreview.usesExternal ? (
+          <div className="resource-preview-card">
+            {videoPreview.isEmbeddable ? (
+              <>
+                <small className="field-note">{t("common.previewAvailable")}</small>
+                <div className="resource-viewer-shell compact">
+                  <iframe
+                    className="resource-viewer-frame resource-preview-frame"
+                    title={t("common.videoPreviewTitle")}
+                    src={videoPreview.viewerUrl}
+                    width="100%"
+                    height="220"
+                    loading="lazy"
+                    allow="autoplay; fullscreen"
+                    allowFullScreen
+                  />
+                </div>
+              </>
+            ) : null}
+            <small className="field-note">{t("common.previewFallbackOpensNewTab")}</small>
+            <div className="row-actions resource-viewer-actions">
+              <a href={videoPreview.externalUrl} target="_blank" rel="noreferrer">{t("common.openVideoInNewTab")}</a>
+            </div>
+          </div>
+        ) : null}
 
         <div className="row-actions">
           <button type="button" onClick={() => document.getElementById(`module-video-${module.id}`)?.click()}>
