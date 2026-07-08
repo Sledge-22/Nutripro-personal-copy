@@ -40,8 +40,6 @@ import {
   updateCourse,
   deleteCourse,
   getStudentCourses,
-  publishCourse,
-  unpublishCourse,
 } from "../services/courseService.js";
 import { ensureDemoStudentEnrollments, setStudentCourseAssignments } from "../services/enrollmentService.js";
 import { getCertificates, generateCertificate, getStudentCertificates } from "../services/certificateService.js";
@@ -584,26 +582,6 @@ export function App() {
     await refreshCourses();
   }
 
-  async function handleUpdateCourseVisibility(courseId, visibleToStudents) {
-    try {
-      const updatedCourse = visibleToStudents ? await publishCourse(courseId) : await unpublishCourse(courseId);
-
-      setCourses((currentCourses) => upsertCourseList(currentCourses, updatedCourse));
-
-      void refreshCourses().catch((refreshError) => {
-        console.error("Refreshing courses after visibility update failed:", refreshError);
-      });
-
-      return {
-        ok: true,
-        message: visibleToStudents ? t("admin.courseVisibleNow") : t("admin.courseHiddenNow"),
-      };
-    } catch (error) {
-      console.error("Updating course visibility failed:", error);
-      return { ok: false, error: formatSupabaseError(error, t("admin.updatingCourseVisibilityFailed")) };
-    }
-  }
-
   async function handleSetStudentCourseAssignments(studentId, courseIds) {
     try {
       await setStudentCourseAssignments(studentId, courseIds);
@@ -750,5 +728,5 @@ export function App() {
         DEMO_ACCOUNTS.admin
       : studentProfile ?? demoSession ?? DEMO_ACCOUNTS.student;
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={authConfigured ? currentUser : demoHeaderProfile} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={authConfigured ? currentUser : demoHeaderProfile} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }

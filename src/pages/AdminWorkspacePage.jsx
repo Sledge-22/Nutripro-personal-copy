@@ -395,6 +395,7 @@ function createCourseDraft(course = null) {
       title: "",
       description: "",
       status: "published",
+      selectedStudentIds: [],
       imageUrl: "",
       image_url: "",
       imageStoragePath: "",
@@ -412,6 +413,7 @@ function createCourseDraft(course = null) {
     title: course.title,
     description: course.description,
     status: course.status || "published",
+    selectedStudentIds: Array.isArray(course.owners) ? course.owners.map((studentId) => `${studentId}`) : [],
     imageUrl: course.image_url || course.imageUrl || "",
     image_url: course.image_url || course.imageUrl || "",
     imageStoragePath: course.image_storage_path || course.imageStoragePath || "",
@@ -499,7 +501,7 @@ function buildCoursePayload(form, editingId, existingCourse) {
     image_url: form.image_url || form.imageUrl || "",
     imageStoragePath: form.image_storage_path || form.imageStoragePath || "",
     image_storage_path: form.image_storage_path || form.imageStoragePath || "",
-    owners: Array.isArray(existingCourse?.owners) ? existingCourse.owners : [],
+    owners: Array.from(new Set((Array.isArray(form.selectedStudentIds) ? form.selectedStudentIds : []).map((studentId) => `${studentId}`))),
     modules: form.modules
       .filter((module) => module.title.trim())
       .map((module, index) => {
@@ -614,10 +616,6 @@ function formatDisplayDate(value, language = "es") {
   }
 }
 
-function isVisibleToStudents(status) {
-  return (status || "published") === "published";
-}
-
 function createReviewDraft(submission = null) {
   return {
     status: submission?.status || "submitted",
@@ -668,7 +666,6 @@ export function AdminWorkspacePage({
   onSetStudentCourseAssignments,
   onSaveCourse,
   onDeleteCourse,
-  onUpdateCourseVisibility,
   onGenerateCertificate,
 }) {
   if (pathname === "/admin/users") {
@@ -690,10 +687,10 @@ export function AdminWorkspacePage({
   if (pathname === "/admin/post-courses") {
     return (
       <PostCoursesPage
+        users={users}
         courses={courses}
         onSaveCourse={onSaveCourse}
         onDeleteCourse={onDeleteCourse}
-        onUpdateCourseVisibility={onUpdateCourseVisibility}
       />
     );
   }
@@ -1574,6 +1571,102 @@ function UsersAdminPanel({
   );
 }
 
+function CourseStudentAssignmentSelector({
+  students,
+  selectedStudentIds,
+  searchTerm,
+  onSearchChange,
+  onToggleStudent,
+  onSelectAll,
+  onClearAll,
+  isOpen,
+  onToggleOpen,
+  t,
+}) {
+  const selectedSet = new Set((selectedStudentIds || []).map((studentId) => String(studentId)));
+  const filteredStudents = (students || []).filter((student) => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return true;
+
+    return [student.name, student.email, student.username]
+      .filter(Boolean)
+      .some((value) => `${value}`.toLowerCase().includes(query));
+  });
+
+  const selectedCountLabel = t("admin.studentsSelectedCount", { count: selectedSet.size });
+
+  return (
+    <section className="module-generator-card assignment-dropdown-card">
+      <div className="assignment-dropdown-header">
+        <div>
+          <span className="eyebrow">{t("admin.assignStudents")}</span>
+          <h4>{t("admin.assignStudents")}</h4>
+          <p>{t("admin.assignStudentsHelp")}</p>
+        </div>
+        <span className="count-badge">{selectedCountLabel}</span>
+      </div>
+
+      <button type="button" className="assignment-dropdown-trigger" onClick={onToggleOpen}>
+        <span>{selectedCountLabel}</span>
+        <span>{isOpen ? t("common.collapse") : t("common.expand")}</span>
+      </button>
+
+      {isOpen ? (
+        <div className="assignment-dropdown-panel">
+          <label>
+            {t("admin.searchStudents")}
+            <input
+              value={searchTerm}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder={t("admin.searchStudents")}
+            />
+          </label>
+
+          <div className="row-actions">
+            <button type="button" className="secondary-btn" onClick={onSelectAll}>
+              {t("admin.selectAllStudents")}
+            </button>
+            <button type="button" className="secondary-btn" onClick={onClearAll}>
+              {t("admin.clearStudentSelection")}
+            </button>
+          </div>
+
+          <div className="assignment-student-picker-list">
+            {filteredStudents.length ? (
+              filteredStudents.map((student) => {
+                const isChecked = selectedSet.has(String(student.id));
+                return (
+                  <button
+                    key={student.id}
+                    type="button"
+                    className={`assignment-student-option ${isChecked ? "is-selected" : ""}`.trim()}
+                    onClick={() => onToggleStudent(student.id)}
+                  >
+                    <span className="assignment-student-option-check" aria-hidden="true">
+                      {isChecked ? "✓" : ""}
+                    </span>
+                    <span className="assignment-student-option-copy">
+                      <strong>{student.name}</strong>
+                      <small>{student.email}</small>
+                      {student.username ? <small>@{student.username}</small> : null}
+                    </span>
+                  </button>
+                );
+              })
+            ) : (
+              <p className="empty-copy">{t("admin.noStudentsAvailable")}</p>
+            )}
+          </div>
+
+          {!selectedSet.size ? (
+            <small className="field-note">{t("admin.courseHasNoAssignedStudents")}</small>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function ModuleEditor({
   module,
   index,
@@ -2063,7 +2156,7 @@ function ModuleEditor({
   );
 }
 
-function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourseVisibility }) {
+function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   const { t, language, translateSubmissionType } = useLanguage();
   const [form, setForm] = useState(createCourseDraft());
   const [editingId, setEditingId] = useState(null);
@@ -2075,9 +2168,6 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   const [draftMessage, setDraftMessage] = useState("");
   const [draftWarning, setDraftWarning] = useState("");
   const [publishProgress, setPublishProgress] = useState("");
-  const [visibilityMessage, setVisibilityMessage] = useState("");
-  const [visibilityError, setVisibilityError] = useState("");
-  const [statusUpdatingId, setStatusUpdatingId] = useState(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
   const [collapsedModuleIds, setCollapsedModuleIds] = useState([]);
@@ -2092,6 +2182,12 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   const [activeSavedDraftId, setActiveSavedDraftId] = useState("");
   const [pendingLocalRestore, setPendingLocalRestore] = useState(null);
   const [pendingDeleteDraftId, setPendingDeleteDraftId] = useState("");
+  const [studentAssignmentOpen, setStudentAssignmentOpen] = useState(true);
+  const [studentSearch, setStudentSearch] = useState("");
+
+  const studentOptions = (Array.isArray(users) ? users : []).filter(
+    (user) => normalizeRoleKey(user.roleKey ?? user.role) === "student",
+  );
 
   const isUploadingNow =
     Boolean(form.imageUploading) ||
@@ -2116,6 +2212,34 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
 
   const updateCourseField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const toggleAssignedStudent = (studentId) => {
+    const normalizedStudentId = `${studentId}`;
+    setForm((current) => {
+      const currentIds = new Set((current.selectedStudentIds || []).map((value) => `${value}`));
+      if (currentIds.has(normalizedStudentId)) currentIds.delete(normalizedStudentId);
+      else currentIds.add(normalizedStudentId);
+
+      return {
+        ...current,
+        selectedStudentIds: Array.from(currentIds),
+      };
+    });
+  };
+
+  const selectAllStudents = () => {
+    setForm((current) => ({
+      ...current,
+      selectedStudentIds: studentOptions.map((student) => `${student.id}`),
+    }));
+  };
+
+  const clearAssignedStudents = () => {
+    setForm((current) => ({
+      ...current,
+      selectedStudentIds: [],
+    }));
   };
 
   const updateModule = (moduleId, updater) => {
@@ -2191,6 +2315,8 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
     setSaveMessage("");
     setSaveError("");
     setBulkGeneratorError("");
+    setStudentAssignmentOpen(true);
+    setStudentSearch("");
     setCollapsedModuleIds(createCollapsedModuleIds(course.modules || [], (course.modules || []).length > 12));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -2209,6 +2335,8 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
     setCollapsedModuleIds([]);
     setSaveError("");
     setPublishProgress("");
+    setStudentAssignmentOpen(true);
+    setStudentSearch("");
   };
 
   const loadSavedDrafts = async () => {
@@ -2604,6 +2732,9 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
   };
 
   const previewCourse = buildCoursePayload(form, editingId, courses.find((course) => course.id === editingId));
+  const previewAssignedStudents = studentOptions.filter((student) =>
+    (previewCourse.owners || []).some((studentId) => String(student.id) === String(studentId)),
+  );
 
   const applyGeneratedModules = (count) => {
     const nextModules = createGeneratedModules(count, language);
@@ -2803,8 +2934,6 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
     event.preventDefault();
     setSaveError("");
     setSaveMessage("");
-    setVisibilityMessage("");
-    setVisibilityError("");
     setDraftMessage("");
     setDraftWarning("");
 
@@ -2880,27 +3009,6 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
     } finally {
       setIsPublishing(false);
       setPublishProgress("");
-    }
-  };
-
-  const changeCourseVisibility = async (course, visibleToStudents) => {
-    setVisibilityMessage("");
-    setVisibilityError("");
-    setStatusUpdatingId(course.id);
-
-    try {
-      const result = await onUpdateCourseVisibility(course.id, visibleToStudents);
-      if (result?.ok === false) {
-        setVisibilityError(result.error || t("admin.updatingCourseVisibilityFailed"));
-        return;
-      }
-
-      setVisibilityMessage(result?.message || t("admin.courseVisibilityUpdated"));
-    } catch (error) {
-      console.error("Course visibility update failed:", error);
-      setVisibilityError(t("admin.updatingCourseVisibilityFailed"));
-    } finally {
-      setStatusUpdatingId(null);
     }
   };
 
@@ -3146,10 +3254,17 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
           </div>
         ) : null}
 
-        <ToggleSwitch
-          checked={isVisibleToStudents(form.status)}
-          label={isVisibleToStudents(form.status) ? t("common.visibleToStudents") : t("common.hiddenFromStudents")}
-          onChange={(checked) => updateCourseField("status", checked ? "published" : "draft")}
+        <CourseStudentAssignmentSelector
+          students={studentOptions}
+          selectedStudentIds={form.selectedStudentIds || []}
+          searchTerm={studentSearch}
+          onSearchChange={setStudentSearch}
+          onToggleStudent={toggleAssignedStudent}
+          onSelectAll={selectAllStudents}
+          onClearAll={clearAssignedStudents}
+          isOpen={studentAssignmentOpen}
+          onToggleOpen={() => setStudentAssignmentOpen((current) => !current)}
+          t={t}
         />
 
         {saveError && <small className="field-note danger-text">{saveError}</small>}
@@ -3402,10 +3517,19 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
             <p>{previewCourse.description || t("admin.courseDescription")}</p>
             <div className="row-actions">
               <Status status={previewCourse.status || "published"} />
-              <span className="subtle-badge">
-                {isVisibleToStudents(previewCourse.status) ? t("common.visibleToStudents") : t("common.hiddenFromStudents")}
-              </span>
+              <span className="subtle-badge">{t("admin.studentsSelectedCount", { count: previewAssignedStudents.length })}</span>
             </div>
+            {previewAssignedStudents.length ? (
+              <div className="assigned-students-preview">
+                {previewAssignedStudents.map((student) => (
+                  <span key={student.id} className="subtle-badge">
+                    {student.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="empty-copy">{t("admin.courseHasNoAssignedStudents")}</p>
+            )}
             <div className="preview-tree">
               {previewCourse.modules.length ? (
                 previewCourse.modules.map((module) => (
@@ -3448,9 +3572,6 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
             <span className="count-badge">{courses.length} {t("common.courses").toLowerCase()}</span>
           </div>
 
-          {visibilityMessage && <small className="field-note">{visibilityMessage}</small>}
-          {visibilityError && <small className="field-note danger-text">{visibilityError}</small>}
-
           <div className="course-admin-list">
             {courses.map((course) => (
               <article key={course.id}>
@@ -3470,12 +3591,23 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
                   <span>{(course.modules ?? []).filter((module) => module.pdf_url || module.pdfUrl || module.pdfLabel !== "No PDF selected").length} PDFs</span>
                   <span>{(course.modules ?? []).filter((module) => module.video_url || module.videoUrl || module.video?.url || module.video?.link).length} videos</span>
                   <span>{(course.modules ?? []).filter((module) => module.assignment?.title?.trim()).length} {t("common.assignments") || "assignments"}</span>
-                  <ToggleSwitch
-                    checked={isVisibleToStudents(course.status)}
-                    disabled={statusUpdatingId === course.id}
-                    label={isVisibleToStudents(course.status) ? t("common.visibleToStudents") : t("common.hiddenFromStudents")}
-                    onChange={(checked) => void changeCourseVisibility(course, checked)}
-                  />
+                  <span className="subtle-badge">
+                    {t("admin.studentsSelectedCount", { count: Array.isArray(course.owners) ? course.owners.length : 0 })}
+                  </span>
+                  {Array.isArray(course.owners) && course.owners.length ? (
+                    <div className="assigned-students-preview">
+                      {studentOptions
+                        .filter((student) => course.owners.some((studentId) => String(student.id) === String(studentId)))
+                        .slice(0, 6)
+                        .map((student) => (
+                          <span key={student.id} className="subtle-badge">
+                            {student.name}
+                          </span>
+                        ))}
+                    </div>
+                  ) : (
+                    <small className="field-note">{t("admin.courseHasNoAssignedStudents")}</small>
+                  )}
                 </div>
                 <div className="row-actions">
                   <button onClick={() => editCourse(course)}>{t("common.edit")}</button>

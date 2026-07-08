@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { getMockCourses, setMockCourses } from "./mockStore.js";
+import { getUsers } from "./userService.js";
 
 function normalizeEntityId(value) {
   const trimmedValue = `${value ?? ""}`.trim();
@@ -174,12 +175,28 @@ export async function getEnrollmentsByStudent(studentId) {
   return rows.filter((row) => String(row.studentId) === String(normalizedStudentId));
 }
 
+export async function getStudentEnrollments(studentId) {
+  return getEnrollmentsByStudent(studentId);
+}
+
 export async function getEnrollmentsByCourse(courseId) {
   const normalizedCourseId = normalizeEntityId(courseId);
   if (!normalizedCourseId) return [];
 
   const rows = await getEnrollments();
   return rows.filter((row) => String(row.courseId) === String(normalizedCourseId));
+}
+
+export async function getCourseEnrollments(courseId) {
+  return getEnrollmentsByCourse(courseId);
+}
+
+export async function getStudents() {
+  const users = await getUsers();
+  return users.filter((user) => {
+    const normalizedRole = `${user?.roleKey ?? user?.role ?? ""}`.trim().toLowerCase();
+    return normalizedRole === "student" || normalizedRole === "estudiante";
+  });
 }
 
 export async function assignCourseToStudent(studentId, courseId) {
@@ -269,6 +286,10 @@ export async function removeCourseFromStudent(studentId, courseId) {
   return { ok: true, status: "inactive" };
 }
 
+export async function removeStudentFromCourse(courseId, studentId) {
+  return removeCourseFromStudent(studentId, courseId);
+}
+
 export async function setStudentCourseAssignments(studentId, courseIds = []) {
   const normalizedStudentId = normalizeEntityId(studentId);
   if (!normalizedStudentId) {
@@ -299,6 +320,42 @@ export async function setStudentCourseAssignments(studentId, courseIds = []) {
   }
 
   return getEnrollmentsByStudent(normalizedStudentId);
+}
+
+export async function assignStudentsToCourse(courseId, studentIds = []) {
+  const normalizedCourseId = normalizeEntityId(courseId);
+  if (!normalizedCourseId) {
+    throw new Error("A valid course is required.");
+  }
+
+  const desiredStudentIds = Array.from(
+    new Set((Array.isArray(studentIds) ? studentIds : []).map(normalizeEntityId).filter(Boolean)),
+  );
+
+  const currentRows = await getEnrollmentsByCourse(normalizedCourseId);
+  const currentActiveStudentIds = currentRows
+    .filter(isActiveEnrollment)
+    .map((row) => normalizeEntityId(row.studentId));
+
+  const desiredSet = new Set(desiredStudentIds.map(String));
+  const currentSet = new Set(currentActiveStudentIds.map(String));
+
+  const studentIdsToAssign = desiredStudentIds.filter((studentId) => !currentSet.has(String(studentId)));
+  const studentIdsToRemove = currentActiveStudentIds.filter((studentId) => !desiredSet.has(String(studentId)));
+
+  for (const studentId of studentIdsToAssign) {
+    await assignCourseToStudent(studentId, normalizedCourseId);
+  }
+
+  for (const studentId of studentIdsToRemove) {
+    await removeCourseFromStudent(studentId, normalizedCourseId);
+  }
+
+  return getEnrollmentsByCourse(normalizedCourseId);
+}
+
+export async function setCourseStudentAssignments(courseId, selectedStudentIds = []) {
+  return assignStudentsToCourse(courseId, selectedStudentIds);
 }
 
 export async function isStudentEnrolled(studentId, courseId) {

@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
+import { setCourseStudentAssignments } from "./enrollmentService.js";
 import { cloneMockValue, createMockId, getMockCourses, setMockCourses } from "./mockStore.js";
 import { getModulesByCourse, replaceModulesForCourse } from "./moduleService.js";
 
@@ -214,48 +215,6 @@ async function attachRelations(courses = []) {
   return enriched;
 }
 
-async function syncEnrollments(courseId, owners = []) {
-  if (!isSupabaseConfigured) return;
-
-  const { error: deleteError } = await supabase.from("enrollments").delete().eq("course_id", courseId);
-  if (deleteError) {
-    console.error("Failed to clear enrollments in Supabase:", deleteError);
-    throw deleteError;
-  }
-  if (!owners.length) return;
-
-  const rows = owners.map((studentId) => ({
-    course_id: courseId,
-    student_id: studentId,
-    status: "active",
-  }));
-
-  const { data, error } = await supabase.from("enrollments").insert(rows).select("*");
-  if (!error) {
-    console.log("Created enrollment response:", data);
-    return;
-  }
-
-  const details = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
-  if (details.includes("status") && (details.includes("column") || details.includes("schema cache"))) {
-    console.warn("Enrollment status column is missing. Retrying course enrollment sync without status.");
-    const fallbackRows = owners.map((studentId) => ({
-      course_id: courseId,
-      student_id: studentId,
-    }));
-    const fallbackResponse = await supabase.from("enrollments").insert(fallbackRows).select("*");
-    if (fallbackResponse.error) {
-      console.error("Failed to insert fallback enrollments in Supabase:", fallbackResponse.error);
-      throw fallbackResponse.error;
-    }
-    console.log("Created fallback enrollment response:", fallbackResponse.data);
-    return;
-  }
-
-  console.error("Failed to insert enrollments in Supabase:", error);
-  throw error;
-}
-
 function persistMockCourse(updater) {
   const nextCourses = updater(getMockCourses());
   setMockCourses(nextCourses);
@@ -338,6 +297,14 @@ export async function createCourse(course, options = {}) {
     throw moduleError;
   }
 
+  try {
+    const enrollmentRows = await setCourseStudentAssignments(data.id, owners);
+    console.log("Created course enrollment response:", enrollmentRows);
+  } catch (enrollmentError) {
+    console.error("Course enrollment sync failed after create:", enrollmentError);
+    throw enrollmentError;
+  }
+
   return normalizeCourse(data, owners, savedModules);
 }
 
@@ -366,7 +333,21 @@ export async function updateCourse(courseId, updates, options = {}) {
   );
   console.log("Updated course response:", data);
 
-  const savedModules = await replaceModulesForCourse(courseId, modules, { onProgress: options.onProgress });
+  let savedModules = [];
+  try {
+    savedModules = await replaceModulesForCourse(courseId, modules, { onProgress: options.onProgress });
+  } catch (moduleError) {
+    console.error("Module insert error:", moduleError);
+    throw moduleError;
+  }
+
+  try {
+    const enrollmentRows = await setCourseStudentAssignments(courseId, owners);
+    console.log("Updated course enrollment response:", enrollmentRows);
+  } catch (enrollmentError) {
+    console.error("Course enrollment sync failed after update:", enrollmentError);
+    throw enrollmentError;
+  }
 
   return normalizeCourse(data, owners, savedModules);
 }

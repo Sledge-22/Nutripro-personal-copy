@@ -236,6 +236,79 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
 .module-generator-form .primary-btn {
   min-width: 220px;
 }
+.assignment-dropdown-card {
+  gap: 16px;
+}
+.assignment-dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+.assignment-dropdown-trigger {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: rgba(255,255,255,.03);
+  color: var(--color-text);
+  cursor: pointer;
+}
+.assignment-dropdown-panel {
+  display: grid;
+  gap: 14px;
+}
+.assignment-student-picker-list,
+.assigned-students-preview {
+  display: grid;
+  gap: 10px;
+}
+.assignment-student-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: rgba(255,255,255,.02);
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+.assignment-student-option:hover,
+.assignment-student-option.is-selected {
+  border-color: rgba(79, 202, 214, .38);
+  background: rgba(79, 202, 214, .08);
+}
+.assignment-student-option-check {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 202, 214, .4);
+  color: var(--color-primary);
+  background: rgba(79, 202, 214, .12);
+  font-weight: 800;
+}
+.assignment-student-option-copy {
+  display: grid;
+  gap: 4px;
+}
+.assignment-student-option-copy strong {
+  color: var(--color-text);
+}
+.assignment-student-option-copy small {
+  color: var(--color-text-soft);
+}
+.assigned-students-preview {
+  grid-template-columns: repeat(auto-fit, minmax(150px, max-content));
+}
 .bulk-upload-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .bulk-upload-card { align-content: start; }
 .bulk-upload-list { display: grid; gap: 10px; }
@@ -1199,6 +1272,8 @@ select:focus {
   .detail-hero { align-items: flex-start; flex-direction: column; }
   .hero-progress { width: 100%; text-align: left; }
   .item-row { grid-template-columns: 1fr; }
+  .assignment-dropdown-header,
+  .assignment-dropdown-trigger { flex-direction: column; align-items: flex-start; }
   .course-admin-list article { grid-template-columns: auto 1fr; }
   .course-admin-list .row-actions { grid-column: 2; }
 }
