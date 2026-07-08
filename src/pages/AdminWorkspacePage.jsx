@@ -364,6 +364,31 @@ function createSerializableCourseDraft(form) {
   };
 }
 
+function getModuleHasVideo(module) {
+  const uploadedVideo = firstFilledValue(
+    module.video_url,
+    module.videoUrl,
+    module.video_public_url,
+    module.videoPublicUrl,
+    module.video_file_url,
+    module.videoFileUrl,
+    module.video?.url,
+  );
+  const externalVideo = firstFilledValue(
+    module.video_external_url,
+    module.videoExternalUrl,
+    module.external_video_url,
+    module.externalVideoUrl,
+    module.video_embed_url,
+    module.videoEmbedUrl,
+    module.videoLink,
+    module.video_link,
+    module.video?.link,
+  );
+
+  return Boolean(uploadedVideo || externalVideo || module.videoFile);
+}
+
 function createCourseDraft(course = null) {
   if (!course) {
     return {
@@ -474,61 +499,104 @@ function buildCoursePayload(form, editingId, existingCourse) {
     image_url: form.image_url || form.imageUrl || "",
     imageStoragePath: form.image_storage_path || form.imageStoragePath || "",
     image_storage_path: form.image_storage_path || form.imageStoragePath || "",
-    owners: existingCourse?.owners?.length ? existingCourse.owners : [1],
+    owners: Array.isArray(existingCourse?.owners) ? existingCourse.owners : [],
     modules: form.modules
       .filter((module) => module.title.trim())
-      .map((module, index) => ({
-        id: module.id,
-        sortOrder: index + 1,
-        title: module.title.trim(),
-        description: module.description.trim(),
-        requiresAssignment:
-          module.requiresAssignment ??
-          module.requires_assignment ??
-          Boolean(module.assignment?.title),
-        requires_assignment:
-          module.requires_assignment ??
-          module.requiresAssignment ??
-          Boolean(module.assignment?.title),
-        pdfExternalUrl: module.pdf_external_url || module.pdfExternalUrl || "",
-        pdf_external_url: module.pdf_external_url || module.pdfExternalUrl || "",
-        pdfSource: module.pdf_source || module.pdfSource || ((module.pdf_external_url || module.pdfExternalUrl) ? "external" : "upload"),
-        pdf_source: module.pdf_source || module.pdfSource || ((module.pdf_external_url || module.pdfExternalUrl) ? "external" : "upload"),
-        pdfUrl: module.pdf_url || module.pdfUrl || module.pdf_external_url || module.pdfExternalUrl || "",
-        pdf_url: module.pdf_url || module.pdfUrl || module.pdf_external_url || module.pdfExternalUrl || "",
-        pdfLabel: module.pdfLabel || module.pdf_file_name || module.pdfName || "No PDF selected",
-        pdfName: module.pdfName || module.pdf_file_name || module.pdfLabel || "",
-        pdf_file_name: module.pdf_file_name || module.pdfName || module.pdfLabel || "",
-        pdf_storage_path: module.pdfStoragePath || module.pdf_storage_path || "",
-        videoExternalUrl: module.video_external_url || module.videoExternalUrl || "",
-        video_external_url: module.video_external_url || module.videoExternalUrl || "",
-        videoSource: module.video_source || module.videoSource || ((module.video_external_url || module.videoExternalUrl) ? "external" : "upload"),
-        video_source: module.video_source || module.videoSource || ((module.video_external_url || module.videoExternalUrl) ? "external" : "upload"),
-        videoUrl: module.video_url || module.videoUrl || module.video.url || module.video.link.trim() || module.video_external_url || module.videoExternalUrl,
-        video_url: module.video_url || module.videoUrl || module.video.url || module.video.link.trim() || module.video_external_url || module.videoExternalUrl,
-        videoName: module.videoName || module.video_file_name || module.video.uploadLabel || "",
-        video_file_name: module.video_file_name || module.videoName || module.video.uploadLabel || "",
-        video_storage_path: module.videoStoragePath || module.video_storage_path || "",
-        video: {
-          id: module.video.id || createId(),
-          title: module.video.title.trim() || `${module.title.trim() || "Module"} video`,
-          description: module.video.description.trim() || `${module.title.trim() || "Module"} video overview`,
-          duration: module.video.duration || "10 min",
-          link: module.video.link.trim(),
-          url: module.video.url || module.video_url || module.videoUrl || module.video.link.trim(),
-          uploadLabel: module.video.uploadLabel || "No video selected",
-        },
-        assignment:
-          (module.requiresAssignment ?? module.requires_assignment) && module.assignment?.title?.trim()
-          ? {
-              id: module.assignment.id || null,
-              title: module.assignment.title.trim(),
-              instructions: module.assignment.instructions.trim(),
-              submissionType: "file",
-              submission_type: "file",
-            }
-          : null,
-      })),
+      .map((module, index) => {
+        const pdfExternalUrl = firstFilledValue(
+          module.pdf_external_url,
+          module.pdfExternalUrl,
+          module.external_pdf_url,
+          module.externalPdfUrl,
+          module.pdfLink,
+          module.pdf_link,
+        );
+        const videoExternalUrl = firstFilledValue(
+          module.video_external_url,
+          module.videoExternalUrl,
+          module.external_video_url,
+          module.externalVideoUrl,
+          module.video_embed_url,
+          module.videoEmbedUrl,
+          module.videoLink,
+          module.video_link,
+          module.video?.link,
+        );
+        const pdfSource = pdfExternalUrl ? "external" : (module.pdf_source || module.pdfSource || "upload");
+        const videoSource = videoExternalUrl ? "external" : (module.video_source || module.videoSource || "upload");
+        const pdfUrl = firstFilledValue(
+          module.pdf_url,
+          module.pdfUrl,
+          module.pdf_public_url,
+          module.pdfPublicUrl,
+          module.pdf_file_url,
+          module.pdfFileUrl,
+          pdfSource === "external" ? pdfExternalUrl : "",
+        );
+        const videoUrl = firstFilledValue(
+          module.video_url,
+          module.videoUrl,
+          module.video_public_url,
+          module.videoPublicUrl,
+          module.video_file_url,
+          module.videoFileUrl,
+          module.video?.url,
+          videoSource === "external" ? videoExternalUrl : "",
+        );
+
+        return {
+          id: module.id,
+          sortOrder: index + 1,
+          title: module.title.trim(),
+          description: module.description.trim(),
+          requiresAssignment:
+            module.requiresAssignment ??
+            module.requires_assignment ??
+            Boolean(module.assignment?.title),
+          requires_assignment:
+            module.requires_assignment ??
+            module.requiresAssignment ??
+            Boolean(module.assignment?.title),
+          pdfExternalUrl,
+          pdf_external_url: pdfExternalUrl || null,
+          pdfSource,
+          pdf_source: pdfExternalUrl ? "external" : pdfSource,
+          pdfUrl,
+          pdf_url: pdfUrl || null,
+          pdfLabel: module.pdfLabel || module.pdf_file_name || module.pdfName || "No PDF selected",
+          pdfName: module.pdfName || module.pdf_file_name || module.pdfLabel || "",
+          pdf_file_name: module.pdf_file_name || module.pdfName || module.pdfLabel || "",
+          pdf_storage_path: module.pdfStoragePath || module.pdf_storage_path || "",
+          videoExternalUrl,
+          video_external_url: videoExternalUrl || null,
+          videoSource,
+          video_source: videoExternalUrl ? "external" : videoSource,
+          videoUrl,
+          video_url: videoUrl || null,
+          videoName: module.videoName || module.video_file_name || module.video.uploadLabel || "",
+          video_file_name: module.video_file_name || module.videoName || module.video.uploadLabel || "",
+          video_storage_path: module.videoStoragePath || module.video_storage_path || "",
+          video: {
+            id: module.video.id || createId(),
+            title: module.video.title.trim() || `${module.title.trim() || "Module"} video`,
+            description: module.video.description.trim() || `${module.title.trim() || "Module"} video overview`,
+            duration: module.video.duration || "10 min",
+            link: videoExternalUrl,
+            url: videoUrl || videoExternalUrl,
+            uploadLabel: module.video.uploadLabel || "No video selected",
+          },
+          assignment:
+            (module.requiresAssignment ?? module.requires_assignment) && module.assignment?.title?.trim()
+            ? {
+                id: module.assignment.id || null,
+                title: module.assignment.title.trim(),
+                instructions: module.assignment.instructions.trim(),
+                submissionType: "file",
+                submission_type: "file",
+              }
+            : null,
+        };
+      }),
   };
 }
 
@@ -558,6 +626,21 @@ function createReviewDraft(submission = null) {
   };
 }
 
+function normalizeRoleKey(value) {
+  const normalizedValue = `${value ?? ""}`.trim().toLowerCase();
+  if (normalizedValue === "student" || normalizedValue === "estudiante") return "student";
+  if (normalizedValue === "admin" || normalizedValue === "administrador") return "admin";
+  return normalizedValue;
+}
+
+function getAssignedCourseIdsForStudent(courses = [], studentId) {
+  if (!studentId) return [];
+
+  return courses
+    .filter((course) => Array.isArray(course?.owners) && course.owners.some((ownerId) => String(ownerId) === String(studentId)))
+    .map((course) => course.id);
+}
+
 function createUserDraft() {
   return {
     name: "",
@@ -582,6 +665,7 @@ export function AdminWorkspacePage({
   onCreateUser,
   onResetUserPassword,
   onDeleteUser,
+  onSetStudentCourseAssignments,
   onSaveCourse,
   onDeleteCourse,
   onUpdateCourseVisibility,
@@ -597,6 +681,8 @@ export function AdminWorkspacePage({
         onCreateUser={onCreateUser}
         onResetUserPassword={onResetUserPassword}
         onDeleteUser={onDeleteUser}
+        courses={courses}
+        onSetStudentCourseAssignments={onSetStudentCourseAssignments}
       />
     );
   }
@@ -814,8 +900,19 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
   );
 }
 
-function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdateUser, onCreateUser, onResetUserPassword, onDeleteUser }) {
+function UsersAdminPanel({
+  users,
+  courses,
+  showAuthTestTools,
+  onUpdateUserStatus,
+  onUpdateUser,
+  onCreateUser,
+  onResetUserPassword,
+  onDeleteUser,
+  onSetStudentCourseAssignments,
+}) {
   const { t, language, translateRole } = useLanguage();
+  const safeCourses = Array.isArray(courses) ? courses : [];
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -832,6 +929,9 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
   const [deletingUserId, setDeletingUserId] = useState(null);
   const [statusUpdatingUserId, setStatusUpdatingUserId] = useState(null);
   const [pendingDeleteUser, setPendingDeleteUser] = useState(null);
+  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [assignmentDraftCourseIds, setAssignmentDraftCourseIds] = useState([]);
+  const [savingAssignments, setSavingAssignments] = useState(false);
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
@@ -843,6 +943,51 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
     const matchesStatus = statusFilter === "all" || (user.statusKey ?? user.status?.toLowerCase()) === statusFilter;
     return matchesSearch && matchesRole && matchesStatus;
   });
+
+  const studentUsers = users.filter((user) => normalizeRoleKey(user.roleKey ?? user.role) === "student");
+
+  useEffect(() => {
+    if (!studentUsers.length) {
+      if (selectedStudentId) setSelectedStudentId("");
+      return;
+    }
+
+    const selectedStillExists = studentUsers.some((user) => String(user.id) === String(selectedStudentId));
+    if (!selectedStillExists) {
+      setSelectedStudentId(studentUsers[0].id);
+    }
+  }, [selectedStudentId, studentUsers]);
+
+  useEffect(() => {
+    if (!selectedStudentId) {
+      setAssignmentDraftCourseIds([]);
+      return;
+    }
+
+    setAssignmentDraftCourseIds(getAssignedCourseIdsForStudent(safeCourses, selectedStudentId));
+  }, [safeCourses, selectedStudentId]);
+
+  const selectedStudent =
+    studentUsers.find((user) => String(user.id) === String(selectedStudentId)) ?? null;
+  const assignedCourseIds = getAssignedCourseIdsForStudent(safeCourses, selectedStudentId);
+  const assignedCourses = safeCourses.filter((course) =>
+    assignedCourseIds.some((courseId) => String(courseId) === String(course.id)),
+  );
+  const availableCourses = safeCourses.filter(
+    (course) => !assignedCourseIds.some((courseId) => String(courseId) === String(course.id)),
+  );
+
+  const toggleCourseAssignment = (courseId, shouldAssign) => {
+    setAssignmentDraftCourseIds((current) => {
+      const nextSet = new Set(current.map((entry) => String(entry)));
+      if (shouldAssign) nextSet.add(String(courseId));
+      else nextSet.delete(String(courseId));
+
+      return safeCourses
+        .map((course) => course.id)
+        .filter((id) => nextSet.has(String(id)));
+    });
+  };
 
   const startEditing = (user) => {
     setEditingUserId(user.id);
@@ -1027,6 +1172,39 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
     }
   };
 
+  const saveAssignments = async () => {
+    if (!selectedStudentId) return;
+
+    setSavingAssignments(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const previousAssignments = assignedCourseIds.map(String);
+      const nextAssignments = assignmentDraftCourseIds.map((entry) => String(entry));
+      const addedAssignments = nextAssignments.filter((courseId) => !previousAssignments.includes(courseId));
+      const removedAssignments = previousAssignments.filter((courseId) => !nextAssignments.includes(courseId));
+
+      const result = await onSetStudentCourseAssignments(selectedStudentId, assignmentDraftCourseIds);
+      if (!result?.ok) {
+        throw new Error(result?.error || t("admin.savingAssignmentsFailed"));
+      }
+
+      if (addedAssignments.length && !removedAssignments.length) {
+        setMessage(t("admin.courseAssignedSuccessfully"));
+      } else if (removedAssignments.length && !addedAssignments.length) {
+        setMessage(t("admin.accessRemovedSuccessfully"));
+      } else {
+        setMessage(t("admin.assignmentsSavedSuccessfully"));
+      }
+    } catch (assignmentError) {
+      console.error("Saving the course assignments failed:", assignmentError);
+      setError(assignmentError.message || t("admin.savingAssignmentsFailed"));
+    } finally {
+      setSavingAssignments(false);
+    }
+  };
+
   return (
     <div className="stack-layout">
       <section className="section-card">
@@ -1149,6 +1327,7 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
                 <th>{t("auth.name")}</th>
                 <th>{t("auth.email")}</th>
                 <th>{t("auth.username")}</th>
+                <th>{t("admin.assignedCoursesCount")}</th>
                 <th>{t("auth.role")}</th>
                 <th>{t("auth.status")}</th>
                 <th>{t("auth.country")}</th>
@@ -1176,6 +1355,17 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
                       ) : (
                         user.username || "—"
                       )}
+                    </td>
+                    <td>
+                      <span className="subtle-badge">
+                        {
+                          safeCourses.filter(
+                            (course) =>
+                              Array.isArray(course?.owners) &&
+                              course.owners.some((ownerId) => String(ownerId) === String(user.id)),
+                          ).length
+                        }
+                      </span>
                     </td>
                     <td>
                       {isEditing ? (
@@ -1245,6 +1435,115 @@ function UsersAdminPanel({ users, showAuthTestTools, onUpdateUserStatus, onUpdat
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{t("admin.assignCourses")}</span>
+            <h2>{t("admin.assignCoursesTitle")}</h2>
+            <p>{t("admin.assignCoursesHelp")}</p>
+          </div>
+          {selectedStudent ? (
+            <span className="count-badge">
+              {t("admin.assignedCoursesCountLabel", { count: assignedCourses.length })}
+            </span>
+          ) : null}
+        </div>
+
+        {!studentUsers.length ? (
+          <p className="empty-copy">{t("admin.noStudentsAvailable")}</p>
+        ) : (
+          <div className="assignment-manager-grid">
+            <div className="assignment-manager-column">
+              <label>
+                {t("admin.selectStudent")}
+                <select value={selectedStudentId} onChange={(event) => setSelectedStudentId(event.target.value)}>
+                  {studentUsers.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.name} · {student.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {selectedStudent ? (
+                <div className="assignment-student-card">
+                  <strong>{selectedStudent.name}</strong>
+                  <p>{selectedStudent.email}</p>
+                  <div className="assignment-summary-grid">
+                    <span className="subtle-badge">
+                      {selectedStudent.username || t("admin.noUsername")}
+                    </span>
+                    <span className="subtle-badge">
+                      {t("admin.assignedCoursesCountLabel", { count: assignedCourses.length })}
+                    </span>
+                  </div>
+                  {!assignedCourses.length ? (
+                    <p className="empty-copy">{t("admin.studentHasNoAssignedCourses")}</p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="assignment-summary-grid">
+                <article className="assignment-summary-card">
+                  <span className="eyebrow">{t("admin.assignedCourses")}</span>
+                  <strong>{assignedCourses.length}</strong>
+                  <p>
+                    {assignedCourses.length
+                      ? assignedCourses.map((course) => course.title).join(" · ")
+                      : t("admin.studentHasNoAssignedCourses")}
+                  </p>
+                </article>
+                <article className="assignment-summary-card">
+                  <span className="eyebrow">{t("admin.availableCourses")}</span>
+                  <strong>{availableCourses.length}</strong>
+                  <p>{t("student.onlyEnrolledStudentsCanViewCourse")}</p>
+                </article>
+              </div>
+            </div>
+
+            <div className="assignment-manager-column">
+              <div className="assignment-course-list">
+                {safeCourses.map((course) => {
+                  const isAssigned = assignmentDraftCourseIds.some((courseId) => String(courseId) === String(course.id));
+                  const enrolledStudentsCount = Array.isArray(course?.owners) ? course.owners.length : 0;
+
+                  return (
+                    <article className="assignment-course-card" key={course.id}>
+                      <div>
+                        <strong>{course.title}</strong>
+                        <p>{course.description}</p>
+                        <div className="assignment-course-meta">
+                          <Status status={course.status || "published"} />
+                          <span className="subtle-badge">
+                            {t("admin.enrolledStudentsCount", { count: enrolledStudentsCount })}
+                          </span>
+                        </div>
+                      </div>
+                      <ToggleSwitch
+                        checked={isAssigned}
+                        onChange={(checked) => toggleCourseAssignment(course.id, checked)}
+                        label={isAssigned ? t("admin.activeAccess") : t("admin.noAccess")}
+                      />
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={!selectedStudentId || savingAssignments}
+                  onClick={() => void saveAssignments()}
+                >
+                  {savingAssignments ? t("common.saving") : t("admin.saveAssignments")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       {pendingDeleteUser ? (
@@ -1492,7 +1791,7 @@ function ModuleEditor({
       <section className="nested-builder single-video-builder">
         <div className="nested-header">
           <span className="eyebrow">{t("admin.videoResource")}</span>
-          <h5>{module.video_url || module.videoUrl ? module.video.uploadLabel : module.videoPendingName || module.video.link || t("common.noVideoSelected")}</h5>
+          <h5>{module.video_url || module.videoUrl ? module.video.uploadLabel : module.videoPendingName || firstFilledValue(module.video_external_url, module.videoExternalUrl, module.video.link) || t("common.noVideoSelected")}</h5>
         </div>
 
         <label className="upload-field">
@@ -1534,8 +1833,8 @@ function ModuleEditor({
               <video controls width="100%" src={videoPreview.uploadedUrl} />
             </div>
           </>
-        ) : module.video.link ? (
-          <a href={module.video.link} target="_blank" rel="noreferrer">{t("common.openVideo")}</a>
+        ) : videoPreview.externalUrl ? (
+          <a href={videoPreview.externalUrl} target="_blank" rel="noreferrer">{t("common.openVideo")}</a>
         ) : module.videoPendingName ? (
           <small className="field-note">{t("common.noVideoUploadedYet")}</small>
         ) : (
@@ -1546,7 +1845,7 @@ function ModuleEditor({
           {t("admin.externalVideoLink")}
           <input
             id={`module-video-external-${module.id}`}
-            value={module.video.link}
+            value={firstFilledValue(module.video_external_url, module.videoExternalUrl, module.video.link)}
             onChange={(event) =>
               updateModule(module.id, (currentModule) => ({
                 ...currentModule,
@@ -1666,7 +1965,7 @@ function ModuleEditor({
         </div>
 
         <small className="field-note">
-          {module.video.link ? `Video link: ${module.video.link}` : t("common.noVideoLinkAdded")}
+          {videoPreview.externalUrl ? `Video link: ${videoPreview.externalUrl}` : t("common.noVideoLinkAdded")}
         </small>
       </section>
 
@@ -2435,7 +2734,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
         }
       }
 
-      if (module.videoFile && !(module.video_url || module.videoUrl || module.video?.link?.trim())) {
+      if (module.videoFile && !getModuleHasVideo(module)) {
         setPublishProgress(t("admin.uploadingModuleProgress", { current: index + 1, total: nextForm.modules.length }));
         updateModule(module.id, (currentModule) => ({
           ...currentModule,
@@ -2513,12 +2812,12 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
 
     const invalidModule = form.modules.find((module) => {
       const hasPdf = Boolean(module.pdf_url || module.pdfUrl || module.pdfFile);
-      const hasVideo = Boolean(module.video_url || module.videoUrl || module.video?.link?.trim() || module.videoFile);
+      const hasVideo = getModuleHasVideo(module);
       const needsPdfReselect = Boolean(module.pdfPendingName && !module.pdfFile && !(module.pdf_url || module.pdfUrl));
       const needsVideoReselect = Boolean(
         module.videoPendingName &&
         !module.videoFile &&
-        !(module.video_url || module.videoUrl || module.video?.link?.trim()),
+        !getModuleHasVideo(module),
       );
       return !hasPdf || !hasVideo || needsPdfReselect || needsVideoReselect || module.pdfUploading || module.video?.uploading;
     });
@@ -2529,7 +2828,7 @@ function PostCoursesPage({ courses, onSaveCourse, onDeleteCourse, onUpdateCourse
         (
           invalidModule.videoPendingName &&
           !invalidModule.videoFile &&
-          !(invalidModule.video_url || invalidModule.videoUrl || invalidModule.video?.link?.trim())
+          !getModuleHasVideo(invalidModule)
         ),
       );
       setSaveError(

@@ -632,8 +632,79 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
   margin-bottom: 18px;
 }
 
+.assignment-manager-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, .8fr) minmax(0, 1.2fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.assignment-manager-column {
+  display: grid;
+  gap: 16px;
+}
+
+.assignment-student-card,
+.assignment-summary-card,
+.assignment-course-card {
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(79, 202, 214, .06), rgba(79, 202, 214, 0) 40%),
+    var(--color-surface-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.assignment-student-card strong,
+.assignment-summary-card strong,
+.assignment-course-card strong {
+  color: var(--color-text);
+}
+
+.assignment-student-card p,
+.assignment-summary-card p,
+.assignment-course-card p {
+  margin: 6px 0 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.assignment-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.assignment-course-list {
+  display: grid;
+  gap: 12px;
+}
+
+.assignment-course-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.assignment-course-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
 @media (max-width: 960px) {
   .admin-user-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assignment-manager-grid,
+  .assignment-summary-grid,
+  .assignment-course-card {
     grid-template-columns: 1fr;
   }
 }

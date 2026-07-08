@@ -1,7 +1,6 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { cloneMockValue, createMockId, getMockCourses, setMockCourses } from "./mockStore.js";
 import { getModulesByCourse, replaceModulesForCourse } from "./moduleService.js";
-import { ensureDemoStudent } from "./userService.js";
 
 const OPTIONAL_COURSE_COLUMNS = ["image_url", "image_storage_path"];
 
@@ -18,9 +17,10 @@ function normalizeEntityId(value) {
   return Number.isNaN(numericValue) ? trimmedValue : numericValue;
 }
 
-function ownersForStatus(status, owners = [], demoStudentId = 1) {
-  if (normalizeCourseStatus(status) !== "published") return [];
-  return Array.from(new Set([...(Array.isArray(owners) ? owners : []), demoStudentId]));
+function normalizeOwners(owners = []) {
+  return Array.from(
+    new Set((Array.isArray(owners) ? owners : []).map((ownerId) => normalizeEntityId(ownerId)).filter(Boolean)),
+  );
 }
 
 function normalizeModules(modules = []) {
@@ -193,7 +193,11 @@ async function fetchEnrollmentRows() {
 
 function ownersForCourse(courseId, enrollments) {
   return enrollments
-    .filter((entry) => (entry.course_id ?? entry.courseId) === courseId)
+    .filter((entry) => {
+      const entryCourseId = entry.course_id ?? entry.courseId;
+      const entryStatus = `${entry.status ?? "active"}`.trim().toLowerCase();
+      return String(entryCourseId) === String(courseId) && entryStatus !== "inactive";
+    })
     .map((entry) => entry.student_id ?? entry.user_id ?? entry.owner_id)
     .filter(Boolean);
 }
@@ -223,118 +227,33 @@ async function syncEnrollments(courseId, owners = []) {
   const rows = owners.map((studentId) => ({
     course_id: courseId,
     student_id: studentId,
+    status: "active",
   }));
 
   const { data, error } = await supabase.from("enrollments").insert(rows).select("*");
-  if (error) {
-    console.error("Failed to insert enrollments in Supabase:", error);
-    throw error;
-  }
-  console.log("Created enrollment response:", data);
-}
-
-async function resolveDemoStudentId() {
-  const demoStudent = await ensureDemoStudent();
-  if (!demoStudent?.id) {
-    const missingStudentError = new Error("Maya Laurent demo student is missing.");
-    console.error("Student course access failed because the Maya Laurent demo student user is missing.", missingStudentError);
-    throw missingStudentError;
-  }
-  return demoStudent.id;
-}
-
-async function syncVisibilityEnrollment(courseId, status) {
-  if (!isSupabaseConfigured) return;
-
-  const normalizedStatus = normalizeCourseStatus(status);
-  const demoStudentId = await resolveDemoStudentId();
-
-  if (normalizedStatus === "published") {
-    const { data: existingRows, error: existingError } = await supabase
-      .from("enrollments")
-      .select("*")
-      .eq("course_id", courseId)
-      .eq("student_id", demoStudentId);
-
-    if (existingError) {
-      console.error("Failed to check demo student enrollment in Supabase:", existingError);
-      throw existingError;
-    }
-
-    if (!(existingRows ?? []).length) {
-      const { data, error } = await supabase
-        .from("enrollments")
-        .insert([{ course_id: courseId, student_id: demoStudentId }])
-        .select("*");
-
-      if (error) {
-        console.error("Failed to auto-enroll demo student in Supabase:", error);
-        throw error;
-      }
-
-      console.log("Created demo student enrollment response:", data);
-    }
-
+  if (!error) {
+    console.log("Created enrollment response:", data);
     return;
   }
 
-  const { error } = await supabase
-    .from("enrollments")
-    .delete()
-    .eq("course_id", courseId)
-    .eq("student_id", demoStudentId);
-
-  if (error) {
-    console.error("Failed to remove demo student enrollment in Supabase:", error);
-    throw error;
-  }
-}
-
-async function syncPublishedCoursesForDemoStudent(studentId) {
-  if (!isSupabaseConfigured || !studentId) return;
-
-  const demoStudentId = (await ensureDemoStudent())?.id ?? null;
-  if (!demoStudentId || String(demoStudentId) !== String(studentId)) return;
-
-  const { data: publishedCourses, error: publishedCoursesError } = await supabase
-    .from("courses")
-    .select("id")
-    .eq("status", "published");
-
-  if (publishedCoursesError) {
-    console.error("Failed to load published courses for Maya Laurent enrollment sync:", publishedCoursesError);
-    throw publishedCoursesError;
+  const details = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
+  if (details.includes("status") && (details.includes("column") || details.includes("schema cache"))) {
+    console.warn("Enrollment status column is missing. Retrying course enrollment sync without status.");
+    const fallbackRows = owners.map((studentId) => ({
+      course_id: courseId,
+      student_id: studentId,
+    }));
+    const fallbackResponse = await supabase.from("enrollments").insert(fallbackRows).select("*");
+    if (fallbackResponse.error) {
+      console.error("Failed to insert fallback enrollments in Supabase:", fallbackResponse.error);
+      throw fallbackResponse.error;
+    }
+    console.log("Created fallback enrollment response:", fallbackResponse.data);
+    return;
   }
 
-  const publishedCourseIds = (publishedCourses ?? []).map((course) => course.id).filter(Boolean);
-  if (!publishedCourseIds.length) return;
-
-  const { data: existingEnrollments, error: enrollmentError } = await supabase
-    .from("enrollments")
-    .select("course_id")
-    .eq("student_id", studentId)
-    .in("course_id", publishedCourseIds);
-
-  if (enrollmentError) {
-    console.error("Failed to load Maya Laurent enrollments for published-course sync:", enrollmentError);
-    throw enrollmentError;
-  }
-
-  const enrolledCourseIds = new Set((existingEnrollments ?? []).map((row) => row.course_id ?? row.courseId).filter(Boolean));
-  const missingCourseIds = publishedCourseIds.filter((courseId) => !enrolledCourseIds.has(courseId));
-  if (!missingCourseIds.length) return;
-
-  const { data, error } = await supabase
-    .from("enrollments")
-    .insert(missingCourseIds.map((courseId) => ({ course_id: courseId, student_id: studentId })))
-    .select("*");
-
-  if (error) {
-    console.error("Failed to backfill Maya Laurent enrollments for published courses:", error);
-    throw error;
-  }
-
-  console.log("Backfilled Maya Laurent enrollment rows for published courses:", data);
+  console.error("Failed to insert enrollments in Supabase:", error);
+  throw error;
 }
 
 function persistMockCourse(updater) {
@@ -389,11 +308,10 @@ export async function getCourses() {
 
 export async function createCourse(course, options = {}) {
   const status = normalizeCourseStatus(course.status);
-  const demoStudentId = (await ensureDemoStudent())?.id ?? 1;
   const payload = {
     ...buildCourseRow(course),
     status,
-    owners: ownersForStatus(status, course.owners, demoStudentId),
+    owners: normalizeOwners(course.owners),
     modules: normalizeModules(course.modules),
   };
 
@@ -420,30 +338,23 @@ export async function createCourse(course, options = {}) {
     throw moduleError;
   }
 
-  try {
-    await syncEnrollments(data.id, owners);
-  } catch (enrollmentError) {
-    console.error("Enrollment sync failed after course create:", enrollmentError);
-  }
-
   return normalizeCourse(data, owners, savedModules);
 }
 
 export async function updateCourse(courseId, updates, options = {}) {
   const status = normalizeCourseStatus(updates.status);
-  const demoStudentId = (await ensureDemoStudent())?.id ?? 1;
   const payload = {
     ...buildCourseRow(updates),
     status,
-    owners: ownersForStatus(status, updates.owners, demoStudentId),
+    owners: normalizeOwners(updates.owners),
     modules: normalizeModules(updates.modules),
   };
 
   if (!isSupabaseConfigured) {
     const nextCourses = persistMockCourse((courses) =>
-      courses.map((course) => (course.id === courseId ? { ...course, ...cloneMockValue(payload) } : course)),
+      courses.map((course) => (String(course.id) === String(courseId) ? { ...course, ...cloneMockValue(payload) } : course)),
     );
-    return nextCourses.find((course) => course.id === courseId) ?? null;
+    return nextCourses.find((course) => String(course.id) === String(courseId)) ?? null;
   }
 
   const { owners, modules, ...courseRow } = payload;
@@ -456,12 +367,6 @@ export async function updateCourse(courseId, updates, options = {}) {
   console.log("Updated course response:", data);
 
   const savedModules = await replaceModulesForCourse(courseId, modules, { onProgress: options.onProgress });
-
-  try {
-    await syncEnrollments(courseId, owners);
-  } catch (enrollmentError) {
-    console.error("Enrollment sync failed after course update:", enrollmentError);
-  }
 
   return normalizeCourse(data, owners, savedModules);
 }
@@ -504,11 +409,9 @@ export async function getStudentCourses(studentId) {
       (course) =>
         normalizeCourseStatus(course.status) === "published" &&
         Array.isArray(course.owners) &&
-        course.owners.includes(studentId),
+        course.owners.some((ownerId) => String(ownerId) === String(studentId)),
     );
   }
-
-  await syncPublishedCoursesForDemoStudent(studentId);
 
   const { data: enrollmentRows, error } = await supabase.from("enrollments").select("*").eq("student_id", studentId);
   if (error) {
@@ -516,9 +419,14 @@ export async function getStudentCourses(studentId) {
     throw error;
   }
 
-  const courseIds = (enrollmentRows ?? []).map((row) => row.course_id ?? row.courseId).filter(Boolean);
+  const activeEnrollmentRows = (enrollmentRows ?? []).filter(
+    (row) => `${row.status ?? "active"}`.trim().toLowerCase() !== "inactive",
+  );
+
+  const courseIds = Array.from(
+    new Set(activeEnrollmentRows.map((row) => row.course_id ?? row.courseId).filter(Boolean)),
+  );
   if (!courseIds.length) {
-    console.error(`Student course access failed because Maya Laurent has no enrollment rows. student_id=${studentId}`);
     return [];
   }
 
@@ -571,7 +479,9 @@ export async function getStudentCourseAccess(studentId, courseId) {
       return { reason: "missing-enrollment", course: null, enrollment: null, courseStatus: null };
     }
 
-    const mockEnrollmentExists = Array.isArray(mockCourse.owners) && mockCourse.owners.includes(studentId);
+    const mockEnrollmentExists =
+      Array.isArray(mockCourse.owners) &&
+      mockCourse.owners.some((ownerId) => String(ownerId) === String(studentId));
     console.log("Enrollment result:", mockEnrollmentExists ? [{ course_id: mockCourse.id, student_id: studentId }] : []);
     console.log("Course status:", mockCourse.status ?? "published");
 
@@ -603,7 +513,7 @@ export async function getStudentCourseAccess(studentId, courseId) {
     .select("*")
     .eq("student_id", studentId)
     .eq("course_id", normalizedCourseId)
-    .limit(1);
+    .limit(5);
 
   if (enrollmentError) {
     console.error("Failed to load the exact student enrollment from Supabase:", enrollmentError);
@@ -612,7 +522,11 @@ export async function getStudentCourseAccess(studentId, courseId) {
 
   console.log("Enrollment result:", enrollmentRows ?? []);
 
-  if (!(enrollmentRows ?? []).length) {
+  const activeEnrollmentRows = (enrollmentRows ?? []).filter(
+    (row) => `${row.status ?? "active"}`.trim().toLowerCase() !== "inactive",
+  );
+
+  if (!activeEnrollmentRows.length) {
     console.error("Student course access failed because the course is not assigned to Maya Laurent:", normalizedCourseId);
     return { reason: "missing-enrollment", course: null, enrollment: null, courseStatus: null };
   }
@@ -645,7 +559,7 @@ export async function getStudentCourseAccess(studentId, courseId) {
     return {
       reason: "not-published",
       course: normalizedCourse,
-      enrollment: enrollmentRows?.[0] ?? null,
+      enrollment: activeEnrollmentRows?.[0] ?? null,
       courseStatus: courseRow.status ?? null,
     };
   }
@@ -653,7 +567,7 @@ export async function getStudentCourseAccess(studentId, courseId) {
   return {
     reason: null,
     course: normalizedCourse,
-    enrollment: enrollmentRows?.[0] ?? null,
+    enrollment: activeEnrollmentRows?.[0] ?? null,
     courseStatus: courseRow.status ?? "published",
   };
 }
@@ -662,19 +576,17 @@ export async function updateCourseStatus(courseId, status) {
   const nextStatus = normalizeCourseStatus(status);
 
   if (!isSupabaseConfigured) {
-    const demoStudentId = (await ensureDemoStudent())?.id ?? 1;
     const nextCourses = getMockCourses().map((course) =>
-      course.id === courseId
+      String(course.id) === String(courseId)
         ? {
             ...course,
             status: nextStatus,
-            owners: ownersForStatus(nextStatus, course.owners, demoStudentId),
           }
         : course,
     );
 
     setMockCourses(nextCourses);
-    return nextCourses.find((course) => course.id === courseId) ?? null;
+    return nextCourses.find((course) => String(course.id) === String(courseId)) ?? null;
   }
 
   const { data, error } = await supabase
@@ -690,8 +602,6 @@ export async function updateCourseStatus(courseId, status) {
   }
 
   console.log("Updated course status response:", data);
-
-  await syncVisibilityEnrollment(courseId, nextStatus);
 
   const modules = await getModulesByCourse(courseId);
   const enrollments = await fetchEnrollmentRows();

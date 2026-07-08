@@ -43,6 +43,7 @@ import {
   publishCourse,
   unpublishCourse,
 } from "../services/courseService.js";
+import { ensureDemoStudentEnrollments, setStudentCourseAssignments } from "../services/enrollmentService.js";
 import { getCertificates, generateCertificate, getStudentCertificates } from "../services/certificateService.js";
 import { getStudentProgress, updateStudentProgress } from "../services/progressService.js";
 import { getCommunityPosts, createCommunityPost, createCommunityComment } from "../services/communityService.js";
@@ -282,6 +283,14 @@ export function App() {
       initialDemoStudent;
     const nextStudentId = activeDemoStudent?.id;
 
+    if (nextStudentId) {
+      try {
+        await ensureDemoStudentEnrollments(nextStudentId);
+      } catch (enrollmentError) {
+        console.error("Preparing demo student enrollments failed:", enrollmentError);
+      }
+    }
+
     const [
       nextCourses,
       nextStudentCourses,
@@ -440,7 +449,6 @@ export function App() {
       const courseId = `${pathname.split("/").pop() ?? ""}`.trim();
       return (
         studentCourses.find((course) => String(course.id) === courseId)?.title ||
-        courses.find((course) => String(course.id) === courseId)?.title ||
         t("student.courseDetail")
       );
     }
@@ -561,13 +569,6 @@ export function App() {
         : await createCourse(course, options);
       setCourses((currentCourses) => upsertCourseList(currentCourses, savedCourse));
 
-      setStudentCourses((currentCourses) => {
-        const shouldOwnCourse =
-          Boolean(activeStudentId) && Array.isArray(savedCourse.owners) && savedCourse.owners.includes(activeStudentId);
-        if (!shouldOwnCourse) return currentCourses.filter((existingCourse) => existingCourse.id !== savedCourse.id);
-        return upsertCourseList(currentCourses, savedCourse);
-      });
-
       void refreshCourses().catch((refreshError) => {
         console.error("Refreshing courses after save failed:", refreshError);
       });
@@ -588,18 +589,6 @@ export function App() {
       const updatedCourse = visibleToStudents ? await publishCourse(courseId) : await unpublishCourse(courseId);
 
       setCourses((currentCourses) => upsertCourseList(currentCourses, updatedCourse));
-      setStudentCourses((currentCourses) => {
-        if (!visibleToStudents) return currentCourses.filter((course) => course.id !== courseId);
-
-        const shouldShowCourse =
-          Boolean(activeStudentId) &&
-          Array.isArray(updatedCourse.owners) &&
-          updatedCourse.owners.includes(activeStudentId) &&
-          updatedCourse.status === "published";
-
-        if (!shouldShowCourse) return currentCourses;
-        return upsertCourseList(currentCourses, updatedCourse);
-      });
 
       void refreshCourses().catch((refreshError) => {
         console.error("Refreshing courses after visibility update failed:", refreshError);
@@ -612,6 +601,31 @@ export function App() {
     } catch (error) {
       console.error("Updating course visibility failed:", error);
       return { ok: false, error: formatSupabaseError(error, t("admin.updatingCourseVisibilityFailed")) };
+    }
+  }
+
+  async function handleSetStudentCourseAssignments(studentId, courseIds) {
+    try {
+      await setStudentCourseAssignments(studentId, courseIds);
+      const [nextUsers, nextCourses] = await Promise.all([getUsers(), getCourses()]);
+      setUsers(nextUsers);
+      setCourses(nextCourses);
+
+      if (String(activeStudentId ?? "") === String(studentId)) {
+        setStudentCourses(await getStudentCourses(studentId));
+      } else {
+        void refreshCourses().catch((refreshError) => {
+          console.error("Refreshing courses after assignment update failed:", refreshError);
+        });
+      }
+
+      return { ok: true };
+    } catch (error) {
+      console.error("Saving student course assignments failed:", error);
+      return {
+        ok: false,
+        error: formatSupabaseError(error, t("admin.savingAssignmentsFailed")),
+      };
     }
   }
 
@@ -736,5 +750,5 @@ export function App() {
         DEMO_ACCOUNTS.admin
       : studentProfile ?? demoSession ?? DEMO_ACCOUNTS.student;
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={authConfigured ? currentUser : demoHeaderProfile} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={authConfigured ? currentUser : demoHeaderProfile} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onUpdateCourseVisibility={handleUpdateCourseVisibility} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }
