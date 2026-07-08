@@ -7,10 +7,10 @@ import { uploadCourseImage, uploadModulePdf, uploadModuleVideo } from "../servic
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 import { ROUTES } from "../routes/appRoutes.js";
 import {
+  getEmbeddablePdfUrl,
+  getEmbeddableVideoUrl,
   isGoogleDriveUrl,
-  toEmbeddablePdfUrl,
-  toEmbeddableVideoUrl,
-} from "../utils/googleDriveLinks.js";
+} from "../utils/mediaLinks.js";
 
 function createId() {
   return Date.now() + Math.floor(Math.random() * 100000);
@@ -31,17 +31,34 @@ function formatFileSize(bytes) {
   return `${Math.max(1, Math.round(normalizedBytes / 1024))} KB`;
 }
 
+function firstFilledValue(...values) {
+  return values.find((value) => `${value ?? ""}`.trim()) || "";
+}
+
 function getModulePdfViewerSource(module) {
   const uploadedPdfSource =
     module?.pdf_storage_path || module?.pdfStoragePath
-      ? module?.pdf_url || module?.pdfUrl || ""
+      ? firstFilledValue(
+        module?.pdf_url,
+        module?.pdfUrl,
+        module?.pdf_public_url,
+        module?.pdfPublicUrl,
+        module?.pdf_file_url,
+        module?.pdfFileUrl,
+      )
       : "";
   const externalPdfSource =
-    module?.pdf_external_url ||
-    module?.pdfExternalUrl ||
+    firstFilledValue(
+    module?.pdf_external_url,
+    module?.pdfExternalUrl,
+    module?.external_pdf_url,
+    module?.externalPdfUrl,
+    module?.pdfLink,
+    module?.pdf_link,
     ((module?.pdf_source === "external" || module?.pdfSource === "external")
-      ? module?.pdf_url || module?.pdfUrl || ""
-      : "");
+      ? firstFilledValue(module?.pdf_url, module?.pdfUrl)
+      : ""),
+    );
   if (uploadedPdfSource) {
     return {
       uploadedUrl: uploadedPdfSource,
@@ -53,7 +70,7 @@ function getModulePdfViewerSource(module) {
     };
   }
 
-  const viewerUrl = toEmbeddablePdfUrl(externalPdfSource);
+  const viewerUrl = getEmbeddablePdfUrl(externalPdfSource);
   return {
     uploadedUrl: "",
     viewerUrl,
@@ -67,14 +84,31 @@ function getModulePdfViewerSource(module) {
 function getModuleVideoViewerSource(module) {
   const uploadedVideoSource =
     module?.video_storage_path || module?.videoStoragePath
-      ? module?.video_url || module?.videoUrl || ""
+      ? firstFilledValue(
+        module?.video_url,
+        module?.videoUrl,
+        module?.video_public_url,
+        module?.videoPublicUrl,
+        module?.video_file_url,
+        module?.videoFileUrl,
+        module?.video?.url,
+      )
       : "";
   const externalVideoSource =
-    module?.video_external_url ||
-    module?.videoExternalUrl ||
+    firstFilledValue(
+    module?.video_external_url,
+    module?.videoExternalUrl,
+    module?.external_video_url,
+    module?.externalVideoUrl,
+    module?.video_embed_url,
+    module?.videoEmbedUrl,
+    module?.videoLink,
+    module?.video_link,
+    module?.video?.link,
     ((module?.video_source === "external" || module?.videoSource === "external")
-      ? module?.video_url || module?.videoUrl || module?.video?.link || ""
-      : module?.video?.link || "");
+      ? firstFilledValue(module?.video_url, module?.videoUrl, module?.video?.link)
+      : ""),
+    );
   if (uploadedVideoSource) {
     return {
       uploadedUrl: uploadedVideoSource,
@@ -86,7 +120,7 @@ function getModuleVideoViewerSource(module) {
     };
   }
 
-  const viewerUrl = toEmbeddableVideoUrl(externalVideoSource);
+  const viewerUrl = getEmbeddableVideoUrl(externalVideoSource);
   return {
     uploadedUrl: "",
     viewerUrl,

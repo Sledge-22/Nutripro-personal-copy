@@ -20,19 +20,47 @@ function fileNameFromUrl(url, fallback) {
 }
 
 function mapModuleRow(module) {
-  const pdfExternalUrl = module.pdf_external_url ?? module.pdfExternalUrl ?? "";
-  const videoExternalUrl = module.video_external_url ?? module.videoExternalUrl ?? "";
+  const pdfExternalUrl =
+    module.pdf_external_url ??
+    module.pdfExternalUrl ??
+    module.external_pdf_url ??
+    module.externalPdfUrl ??
+    module.pdfLink ??
+    module.pdf_link ??
+    "";
+  const videoExternalUrl =
+    module.video_external_url ??
+    module.videoExternalUrl ??
+    module.external_video_url ??
+    module.externalVideoUrl ??
+    module.video_embed_url ??
+    module.videoEmbedUrl ??
+    module.videoLink ??
+    module.video_link ??
+    "";
   const pdfSource = module.pdf_source ?? module.pdfSource ?? (pdfExternalUrl ? "external" : "upload");
   const videoSource = module.video_source ?? module.videoSource ?? (videoExternalUrl ? "external" : "upload");
   const videoUrl =
     module.video_url ??
     module.videoUrl ??
+    module.video_public_url ??
+    module.videoPublicUrl ??
+    module.video_file_url ??
+    module.videoFileUrl ??
     module.video_link ??
     module.video?.url ??
     module.video?.link ??
     videoExternalUrl ??
     "";
-  const pdfUrl = module.pdf_url ?? module.pdfUrl ?? pdfExternalUrl ?? "";
+  const pdfUrl =
+    module.pdf_url ??
+    module.pdfUrl ??
+    module.pdf_public_url ??
+    module.pdfPublicUrl ??
+    module.pdf_file_url ??
+    module.pdfFileUrl ??
+    pdfExternalUrl ??
+    "";
   const pdfName = module.pdf_file_name ?? module.pdfName ?? module.pdf_label ?? fileNameFromUrl(pdfUrl, "No PDF selected");
   const videoName = module.video_file_name ?? module.videoName ?? module.video_upload_label ?? fileNameFromUrl(videoUrl, "No video selected");
   const requiresAssignment =
@@ -72,7 +100,14 @@ function mapModuleRow(module) {
       title: module.video_title ?? module.video?.title ?? `${module.title ?? "Module"} video`,
       description: module.video_description ?? module.video?.description ?? "",
       duration: module.video_duration ?? module.video?.duration ?? "10 min",
-      link: module.video_link ?? module.video?.link ?? "",
+      link:
+        module.video_link ??
+        module.videoLink ??
+        module.video_external_url ??
+        module.external_video_url ??
+        module.video_embed_url ??
+        module.video?.link ??
+        "",
       url: videoUrl,
       uploadLabel: videoName,
     },
@@ -81,12 +116,46 @@ function mapModuleRow(module) {
 }
 
 function toModuleRow(courseId, module, index, allowOptionalColumns = true) {
-  const pdfExternalUrl = module.pdf_external_url ?? module.pdfExternalUrl ?? null;
-  const videoExternalUrl = module.video_external_url ?? module.videoExternalUrl ?? null;
+  const pdfExternalUrl =
+    module.pdf_external_url ??
+    module.pdfExternalUrl ??
+    module.external_pdf_url ??
+    module.externalPdfUrl ??
+    module.pdfLink ??
+    module.pdf_link ??
+    null;
+  const videoExternalUrl =
+    module.video_external_url ??
+    module.videoExternalUrl ??
+    module.external_video_url ??
+    module.externalVideoUrl ??
+    module.video_embed_url ??
+    module.videoEmbedUrl ??
+    module.videoLink ??
+    module.video_link ??
+    null;
   const pdfSource = module.pdf_source ?? module.pdfSource ?? (pdfExternalUrl ? "external" : "upload");
   const videoSource = module.video_source ?? module.videoSource ?? (videoExternalUrl ? "external" : "upload");
-  const pdfUrl = module.pdf_url ?? module.pdfUrl ?? pdfExternalUrl ?? null;
-  const videoUrl = module.video_url ?? module.videoUrl ?? module.video?.url ?? module.video?.link ?? videoExternalUrl ?? null;
+  const pdfUrl =
+    module.pdf_url ??
+    module.pdfUrl ??
+    module.pdf_public_url ??
+    module.pdfPublicUrl ??
+    module.pdf_file_url ??
+    module.pdfFileUrl ??
+    pdfExternalUrl ??
+    null;
+  const videoUrl =
+    module.video_url ??
+    module.videoUrl ??
+    module.video_public_url ??
+    module.videoPublicUrl ??
+    module.video_file_url ??
+    module.videoFileUrl ??
+    module.video?.url ??
+    module.video?.link ??
+    videoExternalUrl ??
+    null;
 
   const row = {
     course_id: courseId,

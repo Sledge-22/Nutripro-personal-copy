@@ -6,12 +6,12 @@ import { getStudentCourseAccess } from "../services/courseService.js";
 import { uploadAssignmentFile, uploadProfilePicture } from "../services/storageService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 import {
+  getEmbeddablePdfUrl,
+  getEmbeddableVideoUrl,
   isDirectPdfUrl,
   isDirectVideoUrl,
   isGoogleDriveUrl,
-  toEmbeddablePdfUrl,
-  toEmbeddableVideoUrl,
-} from "../utils/googleDriveLinks.js";
+} from "../utils/mediaLinks.js";
 
 function goTo(pathname) {
   window.history.pushState({}, "", pathname);
@@ -20,6 +20,70 @@ function goTo(pathname) {
 
 function getCourseModules(course) {
   return Array.isArray(course?.modules) ? course.modules : [];
+}
+
+function firstFilledValue(...values) {
+  return values.find((value) => `${value ?? ""}`.trim()) || "";
+}
+
+function getUploadedPdfSource(module) {
+  const storagePath = module?.pdf_storage_path || module?.pdfStoragePath || "";
+  if (!storagePath) return "";
+
+  return firstFilledValue(
+    module?.pdf_url,
+    module?.pdfUrl,
+    module?.pdf_public_url,
+    module?.pdfPublicUrl,
+    module?.pdf_file_url,
+    module?.pdfFileUrl,
+  );
+}
+
+function getExternalPdfSource(module) {
+  return firstFilledValue(
+    module?.pdf_external_url,
+    module?.pdfExternalUrl,
+    module?.external_pdf_url,
+    module?.externalPdfUrl,
+    module?.pdfLink,
+    module?.pdf_link,
+    (module?.pdf_source === "external" || module?.pdfSource === "external")
+      ? firstFilledValue(module?.pdf_url, module?.pdfUrl)
+      : "",
+  );
+}
+
+function getUploadedVideoSource(module) {
+  const storagePath = module?.video_storage_path || module?.videoStoragePath || "";
+  if (!storagePath) return "";
+
+  return firstFilledValue(
+    module?.video_url,
+    module?.videoUrl,
+    module?.video_public_url,
+    module?.videoPublicUrl,
+    module?.video_file_url,
+    module?.videoFileUrl,
+    module?.video?.url,
+  );
+}
+
+function getExternalVideoSource(module) {
+  return firstFilledValue(
+    module?.video_external_url,
+    module?.videoExternalUrl,
+    module?.external_video_url,
+    module?.externalVideoUrl,
+    module?.video_embed_url,
+    module?.videoEmbedUrl,
+    module?.videoLink,
+    module?.video_link,
+    module?.video?.link,
+    (module?.video_source === "external" || module?.videoSource === "external")
+      ? firstFilledValue(module?.video_url, module?.videoUrl, module?.video?.link)
+      : "",
+  );
 }
 
 function StudentCourseState({ eyebrow, title, text }) {
@@ -562,38 +626,29 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     );
   }
 
-  const uploadedPdfSource =
-    activeModule?.pdf_storage_path || activeModule?.pdfStoragePath
-      ? activeModule?.pdf_url || activeModule?.pdfUrl || ""
-      : "";
-  const externalPdfSource =
-    activeModule?.pdf_external_url ||
-    activeModule?.pdfExternalUrl ||
-    ((activeModule?.pdf_source === "external" || activeModule?.pdfSource === "external")
-      ? activeModule?.pdf_url || activeModule?.pdfUrl || ""
-      : "");
+  const uploadedPdfSource = getUploadedPdfSource(activeModule);
+  const externalPdfSource = getExternalPdfSource(activeModule);
   const pdfSource = uploadedPdfSource || externalPdfSource || "";
-  const uploadedVideoSource =
-    activeModule?.video_storage_path || activeModule?.videoStoragePath
-      ? activeModule?.video_url || activeModule?.videoUrl || ""
-      : "";
-  const externalVideoSource =
-    activeModule?.video_external_url ||
-    activeModule?.videoExternalUrl ||
-    ((activeModule?.video_source === "external" || activeModule?.videoSource === "external")
-      ? activeModule?.video_url || activeModule?.videoUrl || activeModule?.video?.link || ""
-      : activeModule?.video?.link || "");
+  const uploadedVideoSource = getUploadedVideoSource(activeModule);
+  const externalVideoSource = getExternalVideoSource(activeModule);
   const videoSource = uploadedVideoSource || externalVideoSource || "";
-  const embeddedPdfSource = !uploadedPdfSource ? toEmbeddablePdfUrl(externalPdfSource) : "";
+  const embeddedPdfSource = !uploadedPdfSource ? getEmbeddablePdfUrl(externalPdfSource) : "";
   const hasDirectExternalPdf = !uploadedPdfSource && isDirectPdfUrl(externalPdfSource);
   const hasDirectUploadedVideo = Boolean(uploadedVideoSource && isDirectVideoUrl(uploadedVideoSource));
   const hasDirectExternalVideo = !uploadedVideoSource && isDirectVideoUrl(externalVideoSource);
-  const embeddedVideoSource = !uploadedVideoSource ? toEmbeddableVideoUrl(externalVideoSource) : "";
+  const embeddedVideoSource = !uploadedVideoSource ? getEmbeddableVideoUrl(externalVideoSource) : "";
   const isGoogleDrivePdf = isGoogleDriveUrl(externalPdfSource);
   const isGoogleDriveVideo = isGoogleDriveUrl(externalVideoSource);
-  const pdfLabel = activeModule?.pdfLabel || activeModule?.pdfName || t("common.noPdfSelected");
+  const pdfLabel =
+    activeModule?.pdfLabel ||
+    activeModule?.pdfName ||
+    externalPdfSource ||
+    t("common.noPdfSelected");
   const videoLabel =
-    activeModule?.videoName || activeModule?.video?.uploadLabel || externalVideoSource || t("common.noVideoSelected");
+    activeModule?.videoName ||
+    activeModule?.video?.uploadLabel ||
+    externalVideoSource ||
+    t("common.noVideoSelected");
   const assignmentType = "file";
   const assignmentStatus = assignmentState.submission?.status || "";
   const hasSubmission = Boolean(assignmentState.submission);
@@ -601,7 +656,9 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     assignmentState.submission?.grade !== null && assignmentState.submission?.grade !== undefined;
   const assignmentApprovedForCompletion = assignmentStatus === "approved" || assignmentHasGrade;
   const hasPdfRequirement = Boolean(
-    pdfSource || (activeModule?.pdfLabel && activeModule.pdfLabel !== t("common.noPdfSelected")) || activeModule?.pdfName,
+    pdfSource ||
+      (activeModule?.pdfLabel && activeModule.pdfLabel !== t("common.noPdfSelected")) ||
+      activeModule?.pdfName,
   );
   const hasVideoRequirement = Boolean(
     videoSource ||
@@ -612,9 +669,11 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const pdfSeen = activeModule ? completed[`pdf-${activeModule.id}`] : false;
   const videoSeen = activeModule ? completed[`video-${activeModule.id}`] : false;
   const moduleDone = activeModule ? completed[`module-${activeModule.id}`] : false;
-  const pdfRequirementMet = !hasPdfRequirement || pdfSeen;
-  const videoRequirementMet = !hasVideoRequirement || videoSeen;
-  const assignmentRequirementMet = !hasAssignmentRequirement || (hasSubmission && assignmentApprovedForCompletion);
+  const pdfAvailable = Boolean(pdfSource);
+  const videoAvailable = Boolean(videoSource);
+  const pdfRequirementMet = !hasPdfRequirement || pdfAvailable;
+  const videoRequirementMet = !hasVideoRequirement || videoAvailable;
+  const assignmentRequirementMet = !hasAssignmentRequirement || hasSubmission;
   const canComplete = pdfRequirementMet && videoRequirementMet && assignmentRequirementMet;
 
   const markSeen = (key) => {
@@ -1021,10 +1080,10 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
           <div className="progress-steps">
             <span className={pdfRequirementMet ? "subtle-badge" : "count-badge"}>
-              {!hasPdfRequirement ? t("common.noPdfRequired") : pdfSeen ? t("common.pdfViewed") : t("common.pdfPending")}
+              {!hasPdfRequirement ? t("common.noPdfRequired") : pdfAvailable ? t("common.pdfAvailable") : t("common.pdfPending")}
             </span>
             <span className={videoRequirementMet ? "subtle-badge" : "count-badge"}>
-              {!hasVideoRequirement ? t("common.noVideoRequired") : videoSeen ? t("common.videoViewed") : t("common.videoPending")}
+              {!hasVideoRequirement ? t("common.noVideoRequired") : videoAvailable ? t("common.videoAvailable") : t("common.videoPending")}
             </span>
             {hasAssignmentRequirement ? (
               <span className={assignmentRequirementMet ? "subtle-badge" : "count-badge"}>

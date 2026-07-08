@@ -37,33 +37,125 @@ function normalizeModules(modules = []) {
       module.requires_assignment ??
       module.requiresAssignment ??
       Boolean(module.assignment?.title),
-    pdfUrl: module.pdf_url ?? module.pdfUrl ?? "",
-    pdf_url: module.pdf_url ?? module.pdfUrl ?? "",
-    pdfLabel: module.pdfLabel ?? module.pdfName ?? module.pdf_file_name ?? "No PDF selected",
-    pdfName: module.pdfName ?? module.pdf_file_name ?? module.pdfLabel ?? "No PDF selected",
+    pdfUrl:
+      module.pdf_url ??
+      module.pdfUrl ??
+      module.pdf_public_url ??
+      module.pdfPublicUrl ??
+      module.pdf_file_url ??
+      module.pdfFileUrl ??
+      "",
+    pdf_url:
+      module.pdf_url ??
+      module.pdfUrl ??
+      module.pdf_public_url ??
+      module.pdfPublicUrl ??
+      module.pdf_file_url ??
+      module.pdfFileUrl ??
+      "",
+    pdfLabel: module.pdfLabel ?? module.pdfName ?? module.pdf_file_name ?? module.pdf_external_url ?? module.pdfExternalUrl ?? module.external_pdf_url ?? module.externalPdfUrl ?? "No PDF selected",
+    pdfName: module.pdfName ?? module.pdf_file_name ?? module.pdfLabel ?? module.pdf_external_url ?? module.pdfExternalUrl ?? module.external_pdf_url ?? module.externalPdfUrl ?? "No PDF selected",
     pdf_file_name: module.pdf_file_name ?? module.pdfName ?? module.pdfLabel ?? "",
     pdf_storage_path: module.pdf_storage_path ?? module.pdfStoragePath ?? "",
-    pdfExternalUrl: module.pdf_external_url ?? module.pdfExternalUrl ?? "",
-    pdf_external_url: module.pdf_external_url ?? module.pdfExternalUrl ?? "",
-    pdfSource: module.pdf_source ?? module.pdfSource ?? ((module.pdf_external_url ?? module.pdfExternalUrl) ? "external" : "upload"),
-    pdf_source: module.pdf_source ?? module.pdfSource ?? ((module.pdf_external_url ?? module.pdfExternalUrl) ? "external" : "upload"),
-    videoUrl: module.video_url ?? module.videoUrl ?? module.video?.url ?? module.video?.link ?? module.video_external_url ?? module.videoExternalUrl ?? "",
-    video_url: module.video_url ?? module.videoUrl ?? module.video?.url ?? module.video?.link ?? module.video_external_url ?? module.videoExternalUrl ?? "",
-    videoName: module.videoName ?? module.video_file_name ?? module.video?.uploadLabel ?? "No video selected",
+    pdfExternalUrl:
+      module.pdf_external_url ??
+      module.pdfExternalUrl ??
+      module.external_pdf_url ??
+      module.externalPdfUrl ??
+      module.pdfLink ??
+      module.pdf_link ??
+      "",
+    pdf_external_url:
+      module.pdf_external_url ??
+      module.pdfExternalUrl ??
+      module.external_pdf_url ??
+      module.externalPdfUrl ??
+      module.pdfLink ??
+      module.pdf_link ??
+      "",
+    pdfSource:
+      module.pdf_source ??
+      module.pdfSource ??
+      ((module.pdf_external_url ?? module.pdfExternalUrl ?? module.external_pdf_url ?? module.externalPdfUrl ?? module.pdfLink ?? module.pdf_link) ? "external" : "upload"),
+    pdf_source:
+      module.pdf_source ??
+      module.pdfSource ??
+      ((module.pdf_external_url ?? module.pdfExternalUrl ?? module.external_pdf_url ?? module.externalPdfUrl ?? module.pdfLink ?? module.pdf_link) ? "external" : "upload"),
+    videoUrl:
+      module.video_url ??
+      module.videoUrl ??
+      module.video_public_url ??
+      module.videoPublicUrl ??
+      module.video_file_url ??
+      module.videoFileUrl ??
+      module.video?.url ??
+      module.video?.link ??
+      module.video_external_url ??
+      module.videoExternalUrl ??
+      module.external_video_url ??
+      module.externalVideoUrl ??
+      module.video_embed_url ??
+      module.videoEmbedUrl ??
+      module.videoLink ??
+      module.video_link ??
+      "",
+    video_url:
+      module.video_url ??
+      module.videoUrl ??
+      module.video_public_url ??
+      module.videoPublicUrl ??
+      module.video_file_url ??
+      module.videoFileUrl ??
+      module.video?.url ??
+      module.video?.link ??
+      module.video_external_url ??
+      module.videoExternalUrl ??
+      module.external_video_url ??
+      module.externalVideoUrl ??
+      module.video_embed_url ??
+      module.videoEmbedUrl ??
+      module.videoLink ??
+      module.video_link ??
+      "",
+    videoName: module.videoName ?? module.video_file_name ?? module.video?.uploadLabel ?? module.video_external_url ?? module.videoExternalUrl ?? module.external_video_url ?? module.externalVideoUrl ?? module.video_embed_url ?? module.videoEmbedUrl ?? module.videoLink ?? module.video_link ?? "No video selected",
     video_file_name: module.video_file_name ?? module.videoName ?? module.video?.uploadLabel ?? "",
     video_storage_path: module.video_storage_path ?? module.videoStoragePath ?? "",
-    videoExternalUrl: module.video_external_url ?? module.videoExternalUrl ?? "",
-    video_external_url: module.video_external_url ?? module.videoExternalUrl ?? "",
-    videoSource: module.video_source ?? module.videoSource ?? ((module.video_external_url ?? module.videoExternalUrl) ? "external" : "upload"),
-    video_source: module.video_source ?? module.videoSource ?? ((module.video_external_url ?? module.videoExternalUrl) ? "external" : "upload"),
+    videoExternalUrl:
+      module.video_external_url ??
+      module.videoExternalUrl ??
+      module.external_video_url ??
+      module.externalVideoUrl ??
+      module.video_embed_url ??
+      module.videoEmbedUrl ??
+      module.videoLink ??
+      module.video_link ??
+      "",
+    video_external_url:
+      module.video_external_url ??
+      module.videoExternalUrl ??
+      module.external_video_url ??
+      module.externalVideoUrl ??
+      module.video_embed_url ??
+      module.videoEmbedUrl ??
+      module.videoLink ??
+      module.video_link ??
+      "",
+    videoSource:
+      module.video_source ??
+      module.videoSource ??
+      ((module.video_external_url ?? module.videoExternalUrl ?? module.external_video_url ?? module.externalVideoUrl ?? module.video_embed_url ?? module.videoEmbedUrl ?? module.videoLink ?? module.video_link) ? "external" : "upload"),
+    video_source:
+      module.video_source ??
+      module.videoSource ??
+      ((module.video_external_url ?? module.videoExternalUrl ?? module.external_video_url ?? module.externalVideoUrl ?? module.video_embed_url ?? module.videoEmbedUrl ?? module.videoLink ?? module.video_link) ? "external" : "upload"),
     video: {
       id: module.video?.id ?? Date.now() + index + 1000,
       title: module.video?.title ?? "",
       description: module.video?.description ?? "",
       duration: module.video?.duration ?? "10 min",
-      link: module.video?.link ?? "",
-      url: module.video?.url ?? module.video_url ?? module.videoUrl ?? module.video?.link ?? "",
-      uploadLabel: module.video?.uploadLabel ?? module.videoName ?? module.video_file_name ?? "No video selected",
+      link: module.video?.link ?? module.video_external_url ?? module.videoExternalUrl ?? module.external_video_url ?? module.externalVideoUrl ?? module.video_embed_url ?? module.videoEmbedUrl ?? module.videoLink ?? module.video_link ?? "",
+      url: module.video?.url ?? module.video_url ?? module.videoUrl ?? module.video?.link ?? module.video_external_url ?? module.videoExternalUrl ?? module.external_video_url ?? module.externalVideoUrl ?? module.video_embed_url ?? module.videoEmbedUrl ?? module.videoLink ?? module.video_link ?? "",
+      uploadLabel: module.video?.uploadLabel ?? module.videoName ?? module.video_file_name ?? module.video_external_url ?? module.videoExternalUrl ?? module.external_video_url ?? module.externalVideoUrl ?? module.video_embed_url ?? module.videoEmbedUrl ?? module.videoLink ?? module.video_link ?? "No video selected",
     },
     assignment: module.assignment
         ? {

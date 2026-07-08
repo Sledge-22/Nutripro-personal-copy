@@ -55,37 +55,46 @@ export function isDirectVideoUrl(url) {
   );
 }
 
-export function toEmbeddablePdfUrl(url) {
-  const value = `${url ?? ""}`.trim();
-  if (!value) return "";
-  if (isGoogleDriveUrl(value)) return toGoogleDrivePreviewUrl(value);
-  if (isDirectPdfUrl(value)) return value;
-  return "";
-}
-
-export function toEmbeddableVideoUrl(url) {
+export function toYouTubeEmbedUrl(url) {
   const value = `${url ?? ""}`.trim();
   if (!value) return "";
 
-  const youtubeMatch =
+  const match =
     value.match(/[?&]v=([^&]+)/i) ||
     value.match(/youtu\.be\/([^?&/]+)/i) ||
     value.match(/youtube\.com\/embed\/([^?&/]+)/i);
-  if (youtubeMatch?.[1]) {
-    return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
-  }
 
-  const vimeoMatch =
+  return match?.[1] ? `https://www.youtube.com/embed/${match[1]}` : "";
+}
+
+export function toVimeoEmbedUrl(url) {
+  const value = `${url ?? ""}`.trim();
+  if (!value) return "";
+
+  const match =
     value.match(/vimeo\.com\/(\d+)/i) ||
     value.match(/player\.vimeo\.com\/video\/(\d+)/i);
-  if (vimeoMatch?.[1]) {
-    return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
-  }
 
-  if (isGoogleDriveUrl(value)) {
-    return toGoogleDrivePreviewUrl(value);
-  }
+  return match?.[1] ? `https://player.vimeo.com/video/${match[1]}` : "";
+}
 
+export function getEmbeddableVideoUrl(url) {
+  const value = `${url ?? ""}`.trim();
+  if (!value) return "";
+
+  return (
+    toYouTubeEmbedUrl(value) ||
+    toVimeoEmbedUrl(value) ||
+    (isGoogleDriveUrl(value) ? toGoogleDrivePreviewUrl(value) : "")
+  );
+}
+
+export function getEmbeddablePdfUrl(url) {
+  const value = `${url ?? ""}`.trim();
+  if (!value) return "";
+
+  if (isGoogleDriveUrl(value)) return toGoogleDrivePreviewUrl(value);
+  if (isDirectPdfUrl(value)) return value;
   return "";
 }
 
