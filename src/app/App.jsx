@@ -49,7 +49,14 @@ import {
   maybeGenerateCertificate,
 } from "../services/certificateService.js";
 import { getStudentProgress, updateStudentProgress } from "../services/progressService.js";
-import { getCommunityPosts, createCommunityPost, createCommunityComment } from "../services/communityService.js";
+import {
+  getCommunityPosts,
+  createCommunityPost,
+  createCommunityComment,
+  toggleCommunityPostUpvote,
+  updateCommunityPost,
+  updateCommunityComment,
+} from "../services/communityService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 
 const DEMO_SESSION_STORAGE_KEY = "nutripro-demo-session";
@@ -420,6 +427,7 @@ export function App() {
     { path: ROUTES.admin.dashboard, label: t("common.dashboard"), icon: "dashboard" },
     { path: ROUTES.admin.users, label: t("common.usersAdmin"), icon: "users" },
     { path: ROUTES.admin.postCourses, label: t("common.postCourses"), icon: "courses" },
+    { path: ROUTES.admin.community, label: t("common.community"), icon: "community" },
     { path: ROUTES.admin.assignmentReviews, label: t("common.assignmentReviews"), icon: "certificate" },
     { path: ROUTES.admin.certificates, label: t("common.certificatesGenerator"), icon: "certificate" },
   ]), [t]);
@@ -437,6 +445,7 @@ export function App() {
       [ROUTES.admin.dashboard]: t("common.dashboard"),
       [ROUTES.admin.users]: t("common.usersAdmin"),
       [ROUTES.admin.postCourses]: t("common.postCourses"),
+      [ROUTES.admin.community]: t("common.community"),
       [ROUTES.admin.assignmentReviews]: t("common.assignmentReviews"),
       [ROUTES.admin.certificates]: t("common.certificatesGenerator"),
       [ROUTES.student.dashboard]: t("common.dashboard"),
@@ -627,6 +636,21 @@ export function App() {
     setPosts(await getCommunityPosts());
   }
 
+  async function handleToggleCommunityPostUpvote(postId, userId) {
+    await toggleCommunityPostUpvote(postId, userId);
+    setPosts(await getCommunityPosts());
+  }
+
+  async function handleUpdateCommunityPost(postId, updates) {
+    await updateCommunityPost(postId, updates);
+    setPosts(await getCommunityPosts());
+  }
+
+  async function handleUpdateCommunityComment(commentId, updates) {
+    await updateCommunityComment(commentId, updates);
+    setPosts(await getCommunityPosts());
+  }
+
   async function handleUpdateStudentProfile(updates) {
     if (!activeStudentId) return { ok: false, error: t("student.demoStudentMissing") };
 
@@ -749,7 +773,7 @@ export function App() {
     }
 
     if (workspaceLoading && role === "Student" && pathname.startsWith("/student/courses/")) {
-      return <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />;
+      return <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onTogglePostUpvote={handleToggleCommunityPostUpvote} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />;
     }
   } else if (!role) {
     return <LoginPage authMode={isDemoAuthMode ? "demo" : "production"} onChoose={handleDemoAccess} onLogin={handleAuthLogin} loading={false} error={loginError} info={loginInfo} />;
@@ -762,5 +786,5 @@ export function App() {
         DEMO_ACCOUNTS.admin
       : studentProfile ?? demoSession ?? DEMO_ACCOUNTS.student;
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={authConfigured ? currentUser : demoHeaderProfile} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={authConfigured ? currentUser : demoHeaderProfile} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} posts={posts} currentUser={authConfigured ? currentUser : demoHeaderProfile} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onTogglePostUpvote={handleToggleCommunityPostUpvote} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onTogglePostUpvote={handleToggleCommunityPostUpvote} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }

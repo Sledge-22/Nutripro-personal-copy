@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { CertificateModal, Icon, Progress, Stat, Status, Welcome } from "../components/ui.jsx";
+import { CommunityBoard } from "../components/CommunityBoard.jsx";
 import { ROUTES } from "../routes/appRoutes.js";
 import { getStudentSubmission, submitAssignment } from "../services/assignmentService.js";
 import { getStudentCourseAccess } from "../services/courseService.js";
@@ -163,6 +164,9 @@ export function StudentWorkspacePage({
   progressState,
   onCreatePost,
   onCreateComment,
+  onTogglePostUpvote,
+  onUpdatePost,
+  onUpdateComment,
   onUpdateProfile,
   onUpdateProgress,
 }) {
@@ -311,7 +315,18 @@ export function StudentWorkspacePage({
   }
 
   if (pathname === ROUTES.student.community) {
-    return <CommunityPage posts={posts} studentProfile={studentProfile} onCreatePost={onCreatePost} onCreateComment={onCreateComment} />;
+    return (
+      <CommunityBoard
+        posts={posts}
+        currentUser={studentProfile}
+        courses={ownedCourses}
+        onCreatePost={onCreatePost}
+        onCreateComment={onCreateComment}
+        onTogglePostUpvote={onTogglePostUpvote}
+        onUpdatePost={onUpdatePost}
+        onUpdateComment={onUpdateComment}
+      />
+    );
   }
 
   if (pathname === ROUTES.student.courses) {
@@ -1243,135 +1258,5 @@ function StudentCertificatesPage({ certificates, courses, studentId, onPreview }
         ))}
       </div>
     </>
-  );
-}
-
-function CommunityPage({ posts, studentProfile, onCreatePost, onCreateComment }) {
-  const { t } = useLanguage();
-  const [form, setForm] = useState({ title: "", body: "" });
-  const [commentDrafts, setCommentDrafts] = useState({});
-
-  const submit = (event) => {
-    event.preventDefault();
-    void onCreatePost({
-      studentId: studentProfile?.id,
-      studentProfile,
-      author: studentProfile?.name || "Maya Laurent",
-      title: form.title,
-      body: form.body,
-    });
-    setForm({ title: "", body: "" });
-  };
-
-  const submitComment = (postId) => {
-    const body = `${commentDrafts[postId] ?? ""}`.trim();
-    if (!body) return;
-
-    void onCreateComment(postId, {
-      studentId: studentProfile?.id,
-      studentProfile,
-      author: studentProfile?.name || "Maya Laurent",
-      body,
-    });
-
-    setCommentDrafts((current) => ({
-      ...current,
-      [postId]: "",
-    }));
-  };
-
-  return (
-    <div className="community-layout">
-      <section>
-        <div className="page-intro">
-          <div>
-            <span className="eyebrow">{t("student.studentCommunity")}</span>
-            <h2>{t("student.recentDiscussions")}</h2>
-            <p>{t("student.shareIdeas")}</p>
-          </div>
-        </div>
-        <div className="post-list">
-          {posts.map((post) => (
-            <article key={post.id}>
-              {post.profilePictureUrl || post.profile_picture_url ? (
-                <img className="post-avatar avatar-image" src={post.profilePictureUrl || post.profile_picture_url} alt={post.author} />
-              ) : (
-                <div className="post-avatar">{post.initials}</div>
-              )}
-              <div>
-                <div className="post-meta">
-                  <strong>{post.author}</strong>
-                  {post.country ? <span>{post.country}</span> : null}
-                  <span>{post.time}</span>
-                </div>
-                <h3>{post.title}</h3>
-                <p>{post.body}</p>
-
-                <div className="community-comments">
-                  {(post.comments ?? []).map((comment) => (
-                    <div className="community-comment" key={comment.id}>
-                      <div className="post-meta">
-                        <strong>{comment.author}</strong>
-                        {comment.country ? <span>{comment.country}</span> : null}
-                        <span>{comment.time}</span>
-                      </div>
-                      <p>{comment.body}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="community-comment-form">
-                  <textarea
-                    rows="3"
-                    value={commentDrafts[post.id] ?? ""}
-                    onChange={(event) =>
-                      setCommentDrafts((current) => ({
-                        ...current,
-                        [post.id]: event.target.value,
-                      }))
-                    }
-                    placeholder={t("student.writeComment")}
-                  />
-                  <button className="secondary-btn" type="button" onClick={() => submitComment(post.id)}>
-                    {t("student.publishComment")}
-                  </button>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <form className="section-card post-form" onSubmit={submit}>
-        <span className="eyebrow">{t("student.newDiscussion")}</span>
-        <h2>{t("student.createPost")}</h2>
-
-        <label>
-          {t("student.postTitle")}
-          <input
-            required
-            value={form.title}
-            onChange={(event) => setForm({ ...form, title: event.target.value })}
-            placeholder={t("student.whatDiscuss")}
-          />
-        </label>
-
-        <label>
-          {t("student.yourPost")}
-          <textarea
-            required
-            rows="6"
-            value={form.body}
-            onChange={(event) => setForm({ ...form, body: event.target.value })}
-            placeholder={t("student.shareThought")}
-          />
-        </label>
-
-        <button className="primary-btn" type="submit">
-          <Icon name="plus" />
-          {t("student.publishPost")}
-        </button>
-      </form>
-    </div>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Icon, OverviewCard, Stat, Status, Welcome } from "../components/ui.jsx";
+import { CommunityBoard } from "../components/CommunityBoard.jsx";
 import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
 import { getSubmissionsForAdmin, reviewSubmission } from "../services/assignmentService.js";
 import { deleteCourseDraft, getCourseDrafts, markCourseDraftPublished, saveCourseDraft } from "../services/courseDraftService.js";
@@ -682,6 +683,8 @@ export function AdminWorkspacePage({
   users,
   courses,
   certificates,
+  posts,
+  currentUser,
   showAuthTestTools = true,
   onUpdateUserStatus,
   onUpdateUser,
@@ -692,6 +695,11 @@ export function AdminWorkspacePage({
   onSaveCourse,
   onDeleteCourse,
   onGenerateCertificate,
+  onCreatePost,
+  onCreateComment,
+  onTogglePostUpvote,
+  onUpdatePost,
+  onUpdateComment,
 }) {
   if (pathname === "/admin/users") {
     return (
@@ -716,6 +724,21 @@ export function AdminWorkspacePage({
         courses={courses}
         onSaveCourse={onSaveCourse}
         onDeleteCourse={onDeleteCourse}
+      />
+    );
+  }
+
+  if (pathname === "/admin/community") {
+    return (
+      <CommunityBoard
+        posts={posts}
+        currentUser={currentUser}
+        courses={courses}
+        onCreatePost={onCreatePost}
+        onCreateComment={onCreateComment}
+        onTogglePostUpvote={onTogglePostUpvote}
+        onUpdatePost={onUpdatePost}
+        onUpdateComment={onUpdateComment}
       />
     );
   }

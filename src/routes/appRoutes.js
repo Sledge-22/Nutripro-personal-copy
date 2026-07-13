@@ -9,6 +9,7 @@ export const ROUTES = {
     dashboard: "/admin",
     users: "/admin/users",
     postCourses: "/admin/post-courses",
+    community: "/admin/community",
     assignmentReviews: "/admin/assignment-reviews",
     certificates: "/admin/certificates",
   },
