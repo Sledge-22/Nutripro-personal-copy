@@ -300,7 +300,12 @@ export function StudentWorkspacePage({
     return (
       <>
         {previewCertificate && <CertificateModal certificate={previewCertificate} onClose={() => setPreviewCertificate(null)} />}
-        <StudentCertificatesPage certificates={studentCertificates} onPreview={setPreviewCertificate} />
+        <StudentCertificatesPage
+          certificates={studentCertificates}
+          courses={ownedCourses}
+          studentId={studentId}
+          onPreview={setPreviewCertificate}
+        />
       </>
     );
   }
@@ -1146,8 +1151,51 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   );
 }
 
-function StudentCertificatesPage({ certificates, onPreview }) {
+function StudentCertificatesPage({ certificates, courses, studentId, onPreview }) {
   const { t } = useLanguage();
+  const [waitingForGrading, setWaitingForGrading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkWaitingAssignments = async () => {
+      if (!studentId || !courses?.length) {
+        if (!cancelled) setWaitingForGrading(false);
+        return;
+      }
+
+      const assignments = courses.flatMap((course) =>
+        (course.modules ?? [])
+          .map((module) => module.assignment)
+          .filter((assignment) => assignment?.id),
+      );
+
+      if (!assignments.length) {
+        if (!cancelled) setWaitingForGrading(false);
+        return;
+      }
+
+      try {
+        const submissions = await Promise.all(
+          assignments.map((assignment) => getStudentSubmission(assignment.id, studentId)),
+        );
+        const hasWaitingSubmission = submissions.some((submission) => {
+          const status = `${submission?.status ?? ""}`.trim().toLowerCase();
+          return submission && status === "submitted";
+        });
+        if (!cancelled) setWaitingForGrading(hasWaitingSubmission);
+      } catch (error) {
+        console.error("Checking certificate waiting-for-grading state failed:", error);
+        if (!cancelled) setWaitingForGrading(false);
+      }
+    };
+
+    void checkWaitingAssignments();
+    return () => {
+      cancelled = true;
+    };
+  }, [courses, studentId]);
+
   return (
     <>
       <div className="page-intro">
@@ -1157,6 +1205,13 @@ function StudentCertificatesPage({ certificates, onPreview }) {
           <p>{t("student.certificatesGeneratedForCompletedCourses")}</p>
         </div>
       </div>
+      {!certificates.length ? (
+        <section className="section-card">
+          <span className="eyebrow">{waitingForGrading ? t("student.waitingForAssignmentGrading") : t("student.certificateAvailable")}</span>
+          <h3>{waitingForGrading ? t("student.waitingForAssignmentGrading") : t("student.unlockCertificateTitle")}</h3>
+          <p>{waitingForGrading ? t("student.assignmentWaitingForGradingHelp") : t("student.unlockCertificateHelp")}</p>
+        </section>
+      ) : null}
       <div className="certificate-grid">
         {certificates.map((certificate) => (
           <article key={certificate.id}>
@@ -1182,7 +1237,7 @@ function StudentCertificatesPage({ certificates, onPreview }) {
               </div>
             </dl>
             <button className="secondary-btn" onClick={() => onPreview(certificate)}>
-              {t("common.previewCertificate")}
+              {t("student.viewCertificate")}
             </button>
           </article>
         ))}

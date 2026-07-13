@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
+import { maybeGenerateCertificate } from "./certificateService.js";
 import {
   createMockId,
   getMockAssignmentSubmissions,
@@ -586,7 +587,15 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
     const nextSubmissions = [...submissions, nextSubmission];
 
     setMockAssignmentSubmissions(nextSubmissions);
-    return hydrateMockSubmission(nextSubmission);
+    const hydratedSubmission = hydrateMockSubmission(nextSubmission);
+    if (hydratedSubmission?.courseId) {
+      try {
+        await maybeGenerateCertificate(normalizedStudentId, hydratedSubmission.courseId);
+      } catch (certificateError) {
+        console.error("Checking certificate eligibility after mock assignment submission failed:", certificateError);
+      }
+    }
+    return hydratedSubmission;
   }
 
   const { data: existingRows, error: existingError } = await supabase
@@ -611,7 +620,16 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
     throw error;
   }
 
-  return (await hydrateSubmissions([data]))[0] ?? null;
+  const hydratedSubmission = (await hydrateSubmissions([data]))[0] ?? null;
+  if (hydratedSubmission?.courseId) {
+    try {
+      await maybeGenerateCertificate(normalizedStudentId, hydratedSubmission.courseId);
+    } catch (certificateError) {
+      console.error("Checking certificate eligibility after assignment submission failed:", certificateError);
+    }
+  }
+
+  return hydratedSubmission;
 }
 
 export async function getSubmissionsForAdmin() {
@@ -715,8 +733,17 @@ export async function reviewSubmission(submissionId, status, adminFeedback, grad
     setMockAssignmentSubmissions(
       submissions.map((submission) => (submission.id === existingSubmission.id ? nextSubmission : submission)),
     );
+    const hydratedSubmission = hydrateMockSubmission(nextSubmission);
+    const certificateOutcome = hydratedSubmission?.studentId && hydratedSubmission?.courseId
+      ? await maybeGenerateCertificate(hydratedSubmission.studentId, hydratedSubmission.courseId)
+      : null;
 
-    return hydrateMockSubmission(nextSubmission);
+    return hydratedSubmission
+      ? {
+          ...hydratedSubmission,
+          certificateOutcome,
+        }
+      : null;
   }
 
   const { data, error } = await supabase
@@ -731,5 +758,15 @@ export async function reviewSubmission(submissionId, status, adminFeedback, grad
     throw error;
   }
 
-  return (await hydrateSubmissions([data]))[0] ?? null;
+  const hydratedSubmission = (await hydrateSubmissions([data]))[0] ?? null;
+  const certificateOutcome = hydratedSubmission?.studentId && hydratedSubmission?.courseId
+    ? await maybeGenerateCertificate(hydratedSubmission.studentId, hydratedSubmission.courseId)
+    : null;
+
+  return hydratedSubmission
+    ? {
+        ...hydratedSubmission,
+        certificateOutcome,
+      }
+    : null;
 }

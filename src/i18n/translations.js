@@ -11,6 +11,9 @@ export const translations = {
     certificateModal: {
       certifiesThat: "Esto certifica que",
       successfullyCompleted: "ha completado con éxito",
+      print: "Imprimir / Guardar como PDF",
+      logoAlt: "Logo de Nutripro",
+      footer: "Nutripro · Formación en nutrición deportiva",
     },
     validation: {
       assignmentTextRequired: "Se requiere una respuesta en texto para esta tarea.",
@@ -520,6 +523,8 @@ export const translations = {
       studentResponse: "Respuesta del estudiante",
       currentStatus: "Estado actual",
       assignmentReviewSaved: "La revisión de la entrega se guardó.",
+      assignmentGradedCertificateGenerated: "Tarea calificada. Certificado generado automáticamente.",
+      assignmentGradedCertificatePending: "Tarea calificada. El certificado se desbloqueará cuando se completen todos los requisitos del curso.",
       savingReviewFailed: "No se pudo guardar la revisión.",
       generateCertificate: "Generar certificado",
       certificateTemplate: "PLANTILLA DE CERTIFICADO",
@@ -575,6 +580,12 @@ export const translations = {
       yourCertificates: "Tus certificados",
       certificatesGeneratedForCompletedCourses: "Certificados generados para tus cursos completados.",
       certificateOfCompletion: "CERTIFICADO DE FINALIZACIÓN",
+      waitingForAssignmentGrading: "Esperando calificación de la tarea",
+      certificateAvailable: "Certificado disponible",
+      unlockCertificateTitle: "Certificado disponible",
+      unlockCertificateHelp: "Completa todos los módulos y las tareas calificadas requeridas para desbloquear tu certificado.",
+      assignmentWaitingForGradingHelp: "Tu tarea fue enviada y está esperando calificación.",
+      viewCertificate: "Ver certificado",
       recentDiscussions: "Debates recientes",
       shareIdeas: "Comparte ideas con otros estudiantes de Nutripro.",
       studentCommunity: "COMUNIDAD DE ESTUDIANTES",
@@ -594,6 +605,9 @@ export const translations = {
     certificateModal: {
       certifiesThat: "This certifies that",
       successfullyCompleted: "has successfully completed",
+      print: "Print / Save as PDF",
+      logoAlt: "Nutripro logo",
+      footer: "Nutripro · Sports Nutrition Learning",
     },
     validation: {
       assignmentTextRequired: "A text response is required for this assignment.",
@@ -1103,6 +1117,8 @@ export const translations = {
       studentResponse: "Student response",
       currentStatus: "Current status",
       assignmentReviewSaved: "Submission review saved.",
+      assignmentGradedCertificateGenerated: "Assignment graded. Certificate generated automatically.",
+      assignmentGradedCertificatePending: "Assignment graded. Certificate will unlock when all course requirements are complete.",
       savingReviewFailed: "Saving the review failed.",
       generateCertificate: "Generate certificate",
       certificateTemplate: "CERTIFICATE TEMPLATE",
@@ -1158,6 +1174,12 @@ export const translations = {
       yourCertificates: "Your certificates",
       certificatesGeneratedForCompletedCourses: "Certificates generated for your completed courses.",
       certificateOfCompletion: "CERTIFICATE OF COMPLETION",
+      waitingForAssignmentGrading: "Waiting for assignment grading",
+      certificateAvailable: "Certificate available",
+      unlockCertificateTitle: "Certificate available",
+      unlockCertificateHelp: "Complete all modules and required graded assignments to unlock your certificate.",
+      assignmentWaitingForGradingHelp: "Your assignment has been submitted and is waiting for grading.",
+      viewCertificate: "View certificate",
       recentDiscussions: "Recent discussions",
       shareIdeas: "Share ideas with other Nutripro students.",
       studentCommunity: "STUDENT COMMUNITY",
@@ -1166,3 +1188,5 @@ export const translations = {
     },
   },
 };
+
+

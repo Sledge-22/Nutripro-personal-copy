@@ -3858,8 +3858,18 @@ function AssignmentReviewsPage() {
         throw new Error(t("validation.gradeRange"));
       }
 
-      await reviewSubmission(selectedSubmission.id, reviewForm.status, reviewForm.adminFeedback, gradeValue);
-      setReviewMessage(t("admin.assignmentReviewSaved"));
+      const reviewedSubmission = await reviewSubmission(
+        selectedSubmission.id,
+        reviewForm.status,
+        reviewForm.adminFeedback,
+        gradeValue,
+      );
+      const certificateOutcome = reviewedSubmission?.certificateOutcome;
+      setReviewMessage(
+        certificateOutcome?.generated
+          ? t("admin.assignmentGradedCertificateGenerated")
+          : t("admin.assignmentGradedCertificatePending"),
+      );
       await loadSubmissions(selectedSubmission.id);
     } catch (error) {
       console.error("Saving assignment review failed:", error);

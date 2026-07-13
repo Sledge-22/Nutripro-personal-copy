@@ -42,7 +42,12 @@ import {
   getStudentCourses,
 } from "../services/courseService.js";
 import { ensureDemoStudentEnrollments, setStudentCourseAssignments } from "../services/enrollmentService.js";
-import { getCertificates, generateCertificate, getStudentCertificates } from "../services/certificateService.js";
+import {
+  getCertificates,
+  generateCertificate,
+  getStudentCertificates,
+  maybeGenerateCertificate,
+} from "../services/certificateService.js";
 import { getStudentProgress, updateStudentProgress } from "../services/progressService.js";
 import { getCommunityPosts, createCommunityPost, createCommunityComment } from "../services/communityService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
@@ -649,6 +654,35 @@ export function App() {
 
     const nextProgress = await updateStudentProgress(activeStudentId, updates);
     setProgressState(nextProgress);
+
+    const touchedModuleIds = Array.from(
+      new Set(
+        Object.keys(updates)
+          .map((key) => key.split("-")[1])
+          .filter(Boolean),
+      ),
+    );
+    const touchedCourseIds = Array.from(
+      new Set(
+        courses
+          .filter((course) =>
+            (course.modules ?? []).some((module) => touchedModuleIds.includes(String(module.id))),
+          )
+          .map((course) => course.id)
+          .filter(Boolean),
+      ),
+    );
+
+    if (touchedCourseIds.length) {
+      for (const courseId of touchedCourseIds) {
+        try {
+          await maybeGenerateCertificate(activeStudentId, courseId);
+        } catch (certificateError) {
+          console.error("Checking certificate eligibility after progress update failed:", certificateError);
+        }
+      }
+      await refreshCertificates(activeStudentId);
+    }
   }
 
   if (pathname === ROUTES.auth.setupPreview) {
