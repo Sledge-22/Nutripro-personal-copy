@@ -312,9 +312,9 @@ export function CommunityBoard({
         text: result?.missingPostId
           ? t("community.pdfMissingPostId")
           : result?.updateFailed
-            ? `${t("community.pdfMetadataUpdateFailed")} ${result?.updateErrorMessage ?? ""}`.trim()
+            ? `${t("community.pdfMetadataUpdateFailed")} ${result?.updateErrorMessage || "Unknown error"}`.trim()
             : result?.pdfUploadFailed
-              ? `${t("community.pdfUploadFailedPrefix")} ${result?.uploadErrorMessage ?? ""}`.trim()
+              ? `${t("community.pdfUploadFailedPrefix")} ${result?.uploadErrorMessage || "Unknown error"}`.trim()
               : t("community.postPublished"),
       });
     } catch (error) {

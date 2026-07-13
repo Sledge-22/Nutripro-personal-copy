@@ -121,5 +121,16 @@ export async function uploadCourseImage(file) {
 }
 
 export async function uploadCommunityPdf(file, postId = "post") {
+  if (!postId) {
+    throw new Error("Post ID was missing before PDF upload.");
+  }
+  console.log("[Community PDF] starting upload");
+  console.log("[Community PDF] selected file:", {
+    name: file?.name,
+    type: file?.type,
+    size: file?.size,
+  });
+  console.log("[Community PDF] bucket:", COMMUNITY_PDF_BUCKET);
+  console.log("[Community PDF] post id:", postId);
   return uploadToBucket(COMMUNITY_PDF_BUCKET, file, `community-posts/${postId}`, { contentType: "application/pdf" });
 }

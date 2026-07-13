@@ -221,15 +221,20 @@ function createCreatedTimestamp() {
   return new Date().toISOString();
 }
 
-function getErrorMessage(error, fallback = "Unknown error.") {
+function getErrorMessage(error, fallback = "Unknown error") {
   if (!error) return fallback;
-  if (typeof error === "string") return error;
-  if (error.message) return error.message;
-  if (error.error_description) return error.error_description;
-  if (error.details) return error.details;
-  if (error.hint) return error.hint;
+  if (typeof error === "string") return error.trim() || fallback;
+  if (typeof error.message === "string" && error.message.trim()) return error.message.trim();
+  if (typeof error.error_description === "string" && error.error_description.trim()) {
+    return error.error_description.trim();
+  }
+  if (typeof error.details === "string" && error.details.trim()) return error.details.trim();
+  if (typeof error.hint === "string" && error.hint.trim()) return error.hint.trim();
+  if (error.statusCode) return `Status ${error.statusCode}`;
+  if (error.status) return `Status ${error.status}`;
   try {
-    return JSON.stringify(error);
+    const serialized = JSON.stringify(error, Object.getOwnPropertyNames(error));
+    return serialized && serialized !== "{}" ? serialized : fallback;
   } catch {
     return fallback;
   }
@@ -442,7 +447,7 @@ export async function createCommunityPost(post) {
           uploadError: pdfError,
         });
         pdfUploadFailed = true;
-        uploadErrorMessage = getErrorMessage(pdfError, "The PDF upload failed.");
+        uploadErrorMessage = getErrorMessage(pdfError, "Unknown error");
       }
     }
 
