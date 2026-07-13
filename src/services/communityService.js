@@ -87,11 +87,27 @@ function normalizePost(row, author = {}, comments = [], votes = []) {
   const authorInfo = normalizeAuthorInfo(row, author);
   const normalizedComments = comments.map((comment) => normalizeComment(comment, comment.author ?? {}));
   const postVotes = votes.filter((vote) => String(vote.post_id ?? vote.postId ?? "") === String(row.id));
-  const upvoterIds = postVotes
+  const latestVoteByUser = new Map();
+
+  postVotes.forEach((vote) => {
+    const userId = String(vote.user_id ?? vote.userId ?? "");
+    if (!userId) return;
+
+    const currentVote = latestVoteByUser.get(userId);
+    const currentTime = new Date(currentVote?.created_at ?? currentVote?.createdAt ?? 0).getTime();
+    const nextTime = new Date(vote.created_at ?? vote.createdAt ?? 0).getTime();
+
+    if (!currentVote || nextTime >= currentTime) {
+      latestVoteByUser.set(userId, vote);
+    }
+  });
+
+  const effectiveVotes = Array.from(latestVoteByUser.values());
+  const upvoterIds = effectiveVotes
     .filter((vote) => `${vote.vote_type ?? vote.voteType ?? ""}`.toLowerCase() === "upvote")
     .map((vote) => String(vote.user_id ?? vote.userId))
     .filter(Boolean);
-  const downvoterIds = postVotes
+  const downvoterIds = effectiveVotes
     .filter((vote) => `${vote.vote_type ?? vote.voteType ?? ""}`.toLowerCase() === "downvote")
     .map((vote) => String(vote.user_id ?? vote.userId))
     .filter(Boolean);
