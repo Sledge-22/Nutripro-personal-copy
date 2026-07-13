@@ -316,12 +316,19 @@ export async function createCommunityPost(post) {
   const payload = buildPostPayload(post);
   const pdfFile = post.pdfFile ?? null;
 
+  console.log("[Community PDF] selected file", pdfFile);
+  if (pdfFile) {
+    console.log("[Community PDF] validating file", pdfFile.name, pdfFile.type, pdfFile.size);
+  }
+
   if (!isSupabaseConfigured) {
     const createdId = createMockId(getMockCommunityPosts());
     let pdfMetadata = {};
 
     if (pdfFile) {
+      console.log("[Community PDF] created post id", createdId);
       const uploadResult = await uploadCommunityPdf(pdfFile, createdId);
+      console.log("[Community PDF] upload result", uploadResult, null);
       pdfMetadata = {
         pdf_file_name: uploadResult.fileName,
         pdf_storage_path: uploadResult.storagePath,
@@ -329,10 +336,10 @@ export async function createCommunityPost(post) {
         pdf_file_size: uploadResult.fileSize,
         pdf_uploaded_at: createCreatedTimestamp(),
       };
+      console.log("[Community PDF] updating post with pdf metadata", pdfMetadata);
     }
 
-    return {
-      post: createMockPost(
+    const finalPost = createMockPost(
         normalizePost(
           {
             id: createdId,
@@ -344,20 +351,28 @@ export async function createCommunityPost(post) {
           [],
           [],
         ),
-      ),
+      );
+    console.log("[Community PDF] final post", finalPost);
+    return {
+      post: finalPost,
       pdfUploadFailed: false,
     };
   }
 
   try {
+    console.log("[Community PDF] creating post");
     const { data, error } = await supabase.from("community_posts").insert(payload).select("*").single();
+    console.log("[Community PDF] created post result", data, error);
     if (error) throw error;
     let normalizedPost = normalizePost(data, authorProfile, [], []);
     let pdfUploadFailed = false;
+    let updateFailed = false;
 
     if (pdfFile) {
       try {
+        console.log("[Community PDF] created post id", data.id);
         const uploadResult = await uploadCommunityPdf(pdfFile, data.id);
+        console.log("[Community PDF] public url result", uploadResult?.publicUrl);
         const pdfPayload = {
           pdf_file_name: uploadResult.fileName,
           pdf_storage_path: uploadResult.storagePath,
@@ -365,21 +380,29 @@ export async function createCommunityPost(post) {
           pdf_file_size: uploadResult.fileSize,
           pdf_uploaded_at: createCreatedTimestamp(),
         };
-        const { data: updatedPost, error: updateError } = await supabase
-          .from("community_posts")
-          .update(pdfPayload)
-          .eq("id", data.id)
-          .select("*")
-          .single();
-        if (updateError) throw updateError;
-        normalizedPost = normalizePost(updatedPost, authorProfile, [], []);
+        console.log("[Community PDF] updating post with pdf metadata", pdfPayload);
+        try {
+          const { data: updatedPost, error: updateError } = await supabase
+            .from("community_posts")
+            .update(pdfPayload)
+            .eq("id", data.id)
+            .select("*")
+            .single();
+          console.log("[Community PDF] update result", updatedPost, updateError);
+          if (updateError) throw updateError;
+          normalizedPost = normalizePost(updatedPost, authorProfile, [], []);
+        } catch (updateError) {
+          console.error("Updating the community post with PDF metadata failed:", updateError);
+          updateFailed = true;
+        }
       } catch (pdfError) {
         console.error("Uploading the community PDF failed after post creation:", pdfError);
         pdfUploadFailed = true;
       }
     }
 
-    return { post: normalizedPost, pdfUploadFailed };
+    console.log("[Community PDF] final post", normalizedPost);
+    return { post: normalizedPost, pdfUploadFailed, updateFailed };
   } catch (error) {
     console.error("Creating community post in Supabase failed. Falling back to mock post:", error);
     const createdId = createMockId(getMockCommunityPosts());
@@ -388,7 +411,9 @@ export async function createCommunityPost(post) {
 
     if (pdfFile) {
       try {
+        console.log("[Community PDF] created post id", createdId);
         const uploadResult = await uploadCommunityPdf(pdfFile, createdId);
+        console.log("[Community PDF] upload result", uploadResult, null);
         pdfMetadata = {
           pdf_file_name: uploadResult.fileName,
           pdf_storage_path: uploadResult.storagePath,
@@ -402,8 +427,7 @@ export async function createCommunityPost(post) {
       }
     }
 
-    return {
-      post: createMockPost(
+    const finalPost = createMockPost(
         normalizePost(
           {
             id: createdId,
@@ -415,7 +439,10 @@ export async function createCommunityPost(post) {
           [],
           [],
         ),
-      ),
+      );
+    console.log("[Community PDF] final post", finalPost);
+    return {
+      post: finalPost,
       pdfUploadFailed,
     };
   }

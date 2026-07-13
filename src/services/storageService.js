@@ -35,7 +35,7 @@ export function getStoragePublicUrl(bucket, path) {
   return buildPublicUrl(bucket, path);
 }
 
-async function uploadToBucket(bucket, file, pathPrefix) {
+async function uploadToBucket(bucket, file, pathPrefix, options = {}) {
   if (!isSupabaseConfigured) {
     const fileName = file?.name || "upload-placeholder";
     const safeName = sanitizeFileName(fileName);
@@ -61,7 +61,12 @@ async function uploadToBucket(bucket, file, pathPrefix) {
   const fileName = file.name || "upload-placeholder";
   const safeName = sanitizeFileName(fileName);
   const storagePath = `${pathPrefix}/${Date.now()}-${safeName}`;
-  const { error } = await supabase.storage.from(bucket).upload(storagePath, file, { upsert: true });
+  console.log(`[Storage] uploading to bucket ${bucket}`, storagePath);
+  const { data, error } = await supabase.storage.from(bucket).upload(storagePath, file, {
+    upsert: true,
+    contentType: options.contentType,
+  });
+  console.log(`[Storage] upload result for ${bucket}`, data, error);
   if (error) {
     console.error(`Supabase upload failed for bucket ${bucket}:`, error);
     throw error;
@@ -116,5 +121,5 @@ export async function uploadCourseImage(file) {
 }
 
 export async function uploadCommunityPdf(file, postId = "post") {
-  return uploadToBucket(COMMUNITY_PDF_BUCKET, file, `community-pdfs/${postId}`);
+  return uploadToBucket(COMMUNITY_PDF_BUCKET, file, `community-posts/${postId}`, { contentType: "application/pdf" });
 }
