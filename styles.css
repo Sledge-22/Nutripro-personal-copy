@@ -191,7 +191,15 @@ td strong { color: var(--ink); }
 .table-actions button:hover, .row-actions button:hover { border-color: var(--green-500); }
 .danger-text { color: var(--danger) !important; }
 .split-layout { display: grid; grid-template-columns: minmax(330px, .72fr) minmax(520px, 1.28fr); gap: 20px; align-items: start; }
+.split-layout > * { min-width: 0; }
 .course-form, .post-form { position: sticky; top: 20px; }
+.course-form,
+.right-rail,
+.builder-stack,
+.builder-header,
+.module-generator-card,
+.bulk-upload-grid,
+.bulk-upload-grid > * { min-width: 0; }
 .right-rail { display: grid; gap: 20px; }
 label { display: block; margin: 17px 0; color: #3d504a; font-size: 13px; font-weight: 700; }
 label small { float: right; color: #8a9893; font-weight: 400; }
