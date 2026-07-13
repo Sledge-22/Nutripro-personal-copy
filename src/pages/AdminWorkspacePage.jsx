@@ -10,6 +10,7 @@ import {
   getEmbeddablePdfUrl,
   getEmbeddableVideoUrl,
   isGoogleDriveUrl,
+  isVimeoUrl,
 } from "../utils/mediaLinks.js";
 
 function createId() {
@@ -1974,6 +1975,12 @@ function ModuleEditor({
         </label>
         <small className="field-note">{t("admin.externalVideoHelper")}</small>
         <small className="field-note">{t("admin.googleDrivePermissionHelper")}</small>
+        {isVimeoUrl(firstFilledValue(module.video_external_url, module.videoExternalUrl, module.video.link)) ? (
+          <>
+            <small className="field-note">{t("admin.vimeoRecommended")}</small>
+            <small className="field-note">{t("admin.vimeoDomainRestriction")}</small>
+          </>
+        ) : null}
 
         {videoPreview.usesExternal ? (
           <div className="resource-preview-card">
@@ -1983,7 +1990,7 @@ function ModuleEditor({
                 <div className="resource-viewer-shell compact">
                   <iframe
                     className="resource-viewer-frame resource-preview-frame"
-                    title={t("common.videoPreviewTitle")}
+                    title={isVimeoUrl(videoPreview.externalUrl) ? t("common.vimeoVideoPlayerTitle") : t("common.videoPreviewTitle")}
                     src={videoPreview.viewerUrl}
                     width="100%"
                     height="220"

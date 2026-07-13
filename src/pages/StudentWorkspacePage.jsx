@@ -11,6 +11,7 @@ import {
   isDirectPdfUrl,
   isDirectVideoUrl,
   isGoogleDriveUrl,
+  isVimeoUrl,
 } from "../utils/mediaLinks.js";
 
 function goTo(pathname) {
@@ -936,7 +937,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                 <div className="resource-viewer-shell">
                   <iframe
                     className="resource-viewer-frame video-viewer-frame"
-                    title={t("common.videoPreviewTitle")}
+                    title={isVimeoUrl(externalVideoSource) ? t("common.vimeoVideoPlayerTitle") : t("common.videoPreviewTitle")}
                     src={embeddedVideoSource}
                     width="100%"
                     height="480"
