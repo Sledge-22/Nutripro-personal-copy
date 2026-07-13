@@ -9,6 +9,7 @@ import {
 } from "./mockStore.js";
 
 const VALID_SUBMISSION_STATUSES = new Set(["submitted", "approved", "needs_revision", "rejected"]);
+const OPTIONAL_ASSIGNMENT_COLUMNS = ["title_en", "title_es", "instructions_en", "instructions_es"];
 
 function normalizeEntityId(value) {
   const trimmedValue = `${value ?? ""}`.trim();
@@ -51,11 +52,24 @@ function normalizeOptionalNumber(value) {
 function normalizeAssignment(row) {
   if (!row) return null;
 
+  const titleEn = row.title_en ?? row.titleEn ?? "";
+  const titleEs = row.title_es ?? row.titleEs ?? "";
+  const instructionsEn = row.instructions_en ?? row.instructionsEn ?? "";
+  const instructionsEs = row.instructions_es ?? row.instructionsEs ?? "";
+
   return {
     id: row.id,
     moduleId: row.module_id ?? row.moduleId,
-    title: row.title ?? "",
-    instructions: row.instructions ?? "",
+    title: row.title ?? titleEn ?? titleEs ?? "",
+    instructions: row.instructions ?? instructionsEn ?? instructionsEs ?? "",
+    titleEn,
+    title_en: titleEn,
+    titleEs,
+    title_es: titleEs,
+    instructionsEn,
+    instructions_en: instructionsEn,
+    instructionsEs,
+    instructions_es: instructionsEs,
     submissionType: normalizeSubmissionType(row.submission_type ?? row.submissionType),
     submission_type: normalizeSubmissionType(row.submission_type ?? row.submissionType),
   };
@@ -112,11 +126,45 @@ function normalizeSubmission(row, context = {}) {
 }
 
 function sanitizeAssignmentData(assignmentData = {}) {
+  const titleEn = `${assignmentData.titleEn ?? assignmentData.title_en ?? ""}`.trim();
+  const titleEs = `${assignmentData.titleEs ?? assignmentData.title_es ?? ""}`.trim();
+  const instructionsEn = `${assignmentData.instructionsEn ?? assignmentData.instructions_en ?? ""}`.trim();
+  const instructionsEs = `${assignmentData.instructionsEs ?? assignmentData.instructions_es ?? ""}`.trim();
+  const fallbackTitle = `${assignmentData.title ?? ""}`.trim();
+  const fallbackInstructions = `${assignmentData.instructions ?? ""}`.trim();
+
   return {
-    title: `${assignmentData.title ?? ""}`.trim(),
-    instructions: `${assignmentData.instructions ?? ""}`.trim(),
+    title: fallbackTitle || titleEn || titleEs,
+    instructions: fallbackInstructions || instructionsEn || instructionsEs,
+    title_en: titleEn || null,
+    title_es: titleEs || null,
+    instructions_en: instructionsEn || null,
+    instructions_es: instructionsEs || null,
     submission_type: "file",
   };
+}
+
+async function runAssignmentMutationWithFallback(operation, payload, attempt = 0) {
+  const { data, error } = await operation(payload);
+  if (!error) return data;
+
+  const columnName = OPTIONAL_ASSIGNMENT_COLUMNS.find(
+    (column) =>
+      column in payload &&
+      (error.message?.includes(`'${column}'`) ||
+        error.message?.includes(`module_assignments.${column}`) ||
+        error.details?.includes(column) ||
+        error.hint?.includes(column)),
+  );
+
+  if (columnName && attempt < OPTIONAL_ASSIGNMENT_COLUMNS.length) {
+    const nextPayload = { ...payload };
+    delete nextPayload[columnName];
+    console.warn(`Retrying assignment mutation without optional column ${columnName}. Run the matching SQL later to enable it.`);
+    return runAssignmentMutationWithFallback(operation, nextPayload, attempt + 1);
+  }
+
+  throw error;
 }
 
 function allMockModules() {
@@ -289,21 +337,24 @@ export async function createAssignment(moduleId, assignmentData) {
         id: nextMockAssignmentId(),
         moduleId: normalizedModuleId,
         ...payload,
+        titleEn: payload.title_en ?? "",
+        titleEs: payload.title_es ?? "",
+        instructionsEn: payload.instructions_en ?? "",
+        instructionsEs: payload.instructions_es ?? "",
         submissionType: payload.submission_type,
       })),
     );
   }
 
-  const { data, error } = await supabase
-    .from("module_assignments")
-    .insert([{ module_id: normalizedModuleId, ...payload }])
-    .select("*")
-    .single();
-
-  if (error) {
-    console.error("Failed to create module assignment in Supabase:", error);
-    throw error;
-  }
+  const data = await runAssignmentMutationWithFallback(
+    (nextPayload) =>
+      supabase
+        .from("module_assignments")
+        .insert([{ module_id: normalizedModuleId, ...nextPayload }])
+        .select("*")
+        .single(),
+    payload,
+  );
 
   return normalizeAssignment(data);
 }
@@ -326,22 +377,25 @@ export async function updateAssignment(assignmentId, assignmentData) {
         id: normalizedAssignmentId,
         moduleId: assignmentEntry.module.id,
         ...payload,
+        titleEn: payload.title_en ?? "",
+        titleEs: payload.title_es ?? "",
+        instructionsEn: payload.instructions_en ?? "",
+        instructionsEs: payload.instructions_es ?? "",
         submissionType: payload.submission_type,
       })),
     );
   }
 
-  const { data, error } = await supabase
-    .from("module_assignments")
-    .update(payload)
-    .eq("id", normalizedAssignmentId)
-    .select("*")
-    .single();
-
-  if (error) {
-    console.error("Failed to update module assignment in Supabase:", error);
-    throw error;
-  }
+  const data = await runAssignmentMutationWithFallback(
+    (nextPayload) =>
+      supabase
+        .from("module_assignments")
+        .update(nextPayload)
+        .eq("id", normalizedAssignmentId)
+        .select("*")
+        .single(),
+    payload,
+  );
 
   return normalizeAssignment(data);
 }

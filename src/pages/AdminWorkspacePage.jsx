@@ -190,6 +190,14 @@ function createAssignmentDraft() {
     id: null,
     title: "",
     instructions: "",
+    titleEn: "",
+    title_en: "",
+    titleEs: "",
+    title_es: "",
+    instructionsEn: "",
+    instructions_en: "",
+    instructionsEs: "",
+    instructions_es: "",
     submissionType: "file",
     submission_type: "file",
   };
@@ -484,6 +492,14 @@ function createCourseDraft(course = null) {
             id: module.assignment.id || null,
             title: module.assignment.title || "",
             instructions: module.assignment.instructions || "",
+            titleEn: module.assignment.title_en || module.assignment.titleEn || "",
+            title_en: module.assignment.title_en || module.assignment.titleEn || "",
+            titleEs: module.assignment.title_es || module.assignment.titleEs || "",
+            title_es: module.assignment.title_es || module.assignment.titleEs || "",
+            instructionsEn: module.assignment.instructions_en || module.assignment.instructionsEn || "",
+            instructions_en: module.assignment.instructions_en || module.assignment.instructionsEn || "",
+            instructionsEs: module.assignment.instructions_es || module.assignment.instructionsEs || "",
+            instructions_es: module.assignment.instructions_es || module.assignment.instructionsEs || "",
             submissionType: "file",
             submission_type: "file",
           }
@@ -594,6 +610,14 @@ function buildCoursePayload(form, editingId, existingCourse) {
                 id: module.assignment.id || null,
                 title: module.assignment.title.trim(),
                 instructions: module.assignment.instructions.trim(),
+                titleEn: `${module.assignment.titleEn || module.assignment.title_en || ""}`.trim(),
+                title_en: `${module.assignment.titleEn || module.assignment.title_en || ""}`.trim(),
+                titleEs: `${module.assignment.titleEs || module.assignment.title_es || ""}`.trim(),
+                title_es: `${module.assignment.titleEs || module.assignment.title_es || ""}`.trim(),
+                instructionsEn: `${module.assignment.instructionsEn || module.assignment.instructions_en || ""}`.trim(),
+                instructions_en: `${module.assignment.instructionsEn || module.assignment.instructions_en || ""}`.trim(),
+                instructionsEs: `${module.assignment.instructionsEs || module.assignment.instructions_es || ""}`.trim(),
+                instructions_es: `${module.assignment.instructionsEs || module.assignment.instructions_es || ""}`.trim(),
                 submissionType: "file",
                 submission_type: "file",
               }
@@ -2101,13 +2125,18 @@ function ModuleEditor({
         {module.requiresAssignment || module.requires_assignment ? (
           <>
             <label>
-              {t("admin.assignmentTitle")}
+              {t("admin.assignmentTitleSpanish")}
               <input
-                value={module.assignment.title}
+                value={module.assignment.titleEs || module.assignment.title_es || ""}
                 onChange={(event) =>
                   updateAssignment(module.id, (assignment) => ({
                     ...assignment,
-                    title: event.target.value,
+                    titleEs: event.target.value,
+                    title_es: event.target.value,
+                    title:
+                      assignment.titleEn ||
+                      assignment.title_en ||
+                      event.target.value,
                   }))
                 }
                 placeholder={t("admin.weeklyHomework")}
@@ -2115,19 +2144,59 @@ function ModuleEditor({
             </label>
 
             <label>
-              {t("common.instructions")}
+              {t("admin.assignmentInstructionsSpanish")}
               <textarea
                 rows="4"
-                value={module.assignment.instructions}
+                value={module.assignment.instructionsEs || module.assignment.instructions_es || ""}
                 onChange={(event) =>
                   updateAssignment(module.id, (assignment) => ({
                     ...assignment,
-                    instructions: event.target.value,
+                    instructionsEs: event.target.value,
+                    instructions_es: event.target.value,
+                    instructions:
+                      assignment.instructionsEn ||
+                      assignment.instructions_en ||
+                      event.target.value,
                   }))
                 }
                 placeholder={t("admin.tellStudentsWhatToSubmit")}
               />
             </label>
+
+            <label>
+              {t("admin.assignmentTitleEnglish")}
+              <input
+                value={module.assignment.titleEn || module.assignment.title_en || ""}
+                onChange={(event) =>
+                  updateAssignment(module.id, (assignment) => ({
+                    ...assignment,
+                    titleEn: event.target.value,
+                    title_en: event.target.value,
+                    title: event.target.value || assignment.titleEs || assignment.title_es,
+                  }))
+                }
+                placeholder={t("admin.weeklyHomework")}
+              />
+            </label>
+
+            <label>
+              {t("admin.assignmentInstructionsEnglish")}
+              <textarea
+                rows="4"
+                value={module.assignment.instructionsEn || module.assignment.instructions_en || ""}
+                onChange={(event) =>
+                  updateAssignment(module.id, (assignment) => ({
+                    ...assignment,
+                    instructionsEn: event.target.value,
+                    instructions_en: event.target.value,
+                    instructions: event.target.value || assignment.instructionsEs || assignment.instructions_es,
+                  }))
+                }
+                placeholder={t("admin.tellStudentsWhatToSubmit")}
+              />
+            </label>
+
+            <small className="field-note">{t("admin.assignmentTranslationHelper")}</small>
 
             <div className="assignment-mode-card">
               <span className="subtle-badge">{t("admin.fileUploadOnly")}</span>

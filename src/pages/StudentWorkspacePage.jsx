@@ -27,6 +27,26 @@ function firstFilledValue(...values) {
   return values.find((value) => `${value ?? ""}`.trim()) || "";
 }
 
+function getLocalizedAssignmentCopy(assignment, language = "es") {
+  if (!assignment) return { title: "", instructions: "" };
+
+  const spanishTitle = firstFilledValue(assignment.titleEs, assignment.title_es);
+  const englishTitle = firstFilledValue(assignment.titleEn, assignment.title_en);
+  const spanishInstructions = firstFilledValue(assignment.instructionsEs, assignment.instructions_es);
+  const englishInstructions = firstFilledValue(assignment.instructionsEn, assignment.instructions_en);
+
+  return {
+    title:
+      language === "es"
+        ? firstFilledValue(spanishTitle, englishTitle, assignment.title)
+        : firstFilledValue(englishTitle, spanishTitle, assignment.title),
+    instructions:
+      language === "es"
+        ? firstFilledValue(spanishInstructions, englishInstructions, assignment.instructions)
+        : firstFilledValue(englishInstructions, spanishInstructions, assignment.instructions),
+  };
+}
+
 function getUploadedPdfSource(module) {
   const storagePath = module?.pdf_storage_path || module?.pdfStoragePath || "";
   if (!storagePath) return "";
@@ -537,6 +557,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const assignmentRequired =
     activeModule?.requiresAssignment ?? activeModule?.requires_assignment ?? Boolean(activeModule?.assignment?.id);
   const activeAssignment = assignmentRequired ? activeModule?.assignment ?? null : null;
+  const localizedAssignment = getLocalizedAssignmentCopy(activeAssignment, language);
 
   useEffect(() => {
     let cancelled = false;
@@ -1000,8 +1021,8 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
               <div className="section-heading">
                 <div>
                   <span className="eyebrow">{t("common.moduleAssignment")}</span>
-                  <h2>{activeAssignment.title}</h2>
-                  <p>{activeAssignment.instructions}</p>
+                  <h2>{localizedAssignment.title}</h2>
+                  <p>{localizedAssignment.instructions}</p>
                 </div>
               </div>
 
