@@ -95,8 +95,9 @@ function normalizePost(row, author = {}, comments = [], votes = []) {
     .filter((vote) => `${vote.vote_type ?? vote.voteType ?? ""}`.toLowerCase() === "downvote")
     .map((vote) => String(vote.user_id ?? vote.userId))
     .filter(Boolean);
-  const upvoteCount = Number(row.upvote_count ?? row.upvoteCount ?? upvoterIds.length ?? 0);
-  const downvoteCount = Number(row.downvote_count ?? row.downvoteCount ?? downvoterIds.length ?? 0);
+  const upvoteCount = upvoterIds.length;
+  const downvoteCount = downvoterIds.length;
+  const voteScore = upvoteCount - downvoteCount;
 
   return {
     id: row.id,
@@ -111,7 +112,10 @@ function normalizePost(row, author = {}, comments = [], votes = []) {
     createdAt: row.created_at ?? row.createdAt ?? "",
     upvoteCount,
     downvoteCount,
-    voteScore: Number(row.vote_score ?? row.voteScore ?? (upvoteCount - downvoteCount)),
+    voteScore,
+    upvote_count: upvoteCount,
+    downvote_count: downvoteCount,
+    vote_score: voteScore,
     upvoterIds,
     downvoterIds,
     commentCount: Number(row.comment_count ?? row.commentCount ?? normalizedComments.length),
