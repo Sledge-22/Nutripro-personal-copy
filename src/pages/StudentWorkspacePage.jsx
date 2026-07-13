@@ -164,7 +164,7 @@ export function StudentWorkspacePage({
   progressState,
   onCreatePost,
   onCreateComment,
-  onTogglePostUpvote,
+  onTogglePostVote,
   onUpdatePost,
   onUpdateComment,
   onUpdateProfile,
@@ -322,7 +322,7 @@ export function StudentWorkspacePage({
         courses={ownedCourses}
         onCreatePost={onCreatePost}
         onCreateComment={onCreateComment}
-        onTogglePostUpvote={onTogglePostUpvote}
+        onTogglePostVote={onTogglePostVote}
         onUpdatePost={onUpdatePost}
         onUpdateComment={onUpdateComment}
       />

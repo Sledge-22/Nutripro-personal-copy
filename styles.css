@@ -524,7 +524,12 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
 .community-post-shell { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 18px; align-items: start; }
 .community-vote { display: grid; justify-items: center; gap: 6px; padding: 14px 10px; min-width: 80px; border-radius: 18px; border: 1px solid var(--color-border); background: rgba(255,255,255,.04); color: var(--color-muted); font-weight: 700; }
 .community-vote.is-active { color: var(--color-accent); border-color: rgba(79,202,214,.38); background: rgba(79,202,214,.1); }
+.community-vote.is-downvote.is-active { color: #f0c058; border-color: rgba(240,192,88,.28); background: rgba(240,192,88,.1); }
 .community-vote small { font-size: .76rem; color: inherit; }
+.community-vote-stack { display: grid; justify-items: center; gap: 8px; padding: 14px 10px; min-width: 80px; border-radius: 18px; border: 1px solid var(--color-border); background: rgba(255,255,255,.03); }
+.community-vote-score { font-family: var(--font-heading); font-size: 1.2rem; color: var(--color-text); }
+.community-vote-caption { color: var(--color-muted); font-size: .76rem; }
+.community-vote-icon { font-size: 14px; line-height: 1; }
 .community-post-content { min-width: 0; display: grid; gap: 12px; }
 .community-post-topline { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; }
 .community-author-block { min-width: 0; display: grid; gap: 8px; }

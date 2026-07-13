@@ -72,6 +72,8 @@ function normalizeComment(row, author = {}) {
     time: formatCommunityDate(row.created_at ?? row.createdAt ?? row.time),
     createdAt: row.created_at ?? row.createdAt ?? "",
     upvoteCount: Number(row.upvote_count ?? row.upvoteCount ?? 0),
+    downvoteCount: Number(row.downvote_count ?? row.downvoteCount ?? 0),
+    voteScore: Number(row.vote_score ?? row.voteScore ?? 0),
     isHelpfulAnswer: Boolean(row.is_helpful_answer ?? row.isHelpfulAnswer),
     isRemoved: Boolean(row.is_removed ?? row.isRemoved),
     removedAt: row.removed_at ?? row.removedAt ?? null,
@@ -84,10 +86,17 @@ function normalizeComment(row, author = {}) {
 function normalizePost(row, author = {}, comments = [], votes = []) {
   const authorInfo = normalizeAuthorInfo(row, author);
   const normalizedComments = comments.map((comment) => normalizeComment(comment, comment.author ?? {}));
-  const upvoterIds = votes
-    .filter((vote) => String(vote.post_id ?? vote.postId ?? "") === String(row.id))
+  const postVotes = votes.filter((vote) => String(vote.post_id ?? vote.postId ?? "") === String(row.id));
+  const upvoterIds = postVotes
+    .filter((vote) => `${vote.vote_type ?? vote.voteType ?? ""}`.toLowerCase() === "upvote")
     .map((vote) => String(vote.user_id ?? vote.userId))
     .filter(Boolean);
+  const downvoterIds = postVotes
+    .filter((vote) => `${vote.vote_type ?? vote.voteType ?? ""}`.toLowerCase() === "downvote")
+    .map((vote) => String(vote.user_id ?? vote.userId))
+    .filter(Boolean);
+  const upvoteCount = Number(row.upvote_count ?? row.upvoteCount ?? upvoterIds.length ?? 0);
+  const downvoteCount = Number(row.downvote_count ?? row.downvoteCount ?? downvoterIds.length ?? 0);
 
   return {
     id: row.id,
@@ -100,8 +109,11 @@ function normalizePost(row, author = {}, comments = [], votes = []) {
     tags: normalizeTags(row.tags),
     time: formatCommunityDate(row.created_at ?? row.createdAt ?? row.time),
     createdAt: row.created_at ?? row.createdAt ?? "",
-    upvoteCount: Number(row.upvote_count ?? row.upvoteCount ?? upvoterIds.length ?? 0),
+    upvoteCount,
+    downvoteCount,
+    voteScore: Number(row.vote_score ?? row.voteScore ?? (upvoteCount - downvoteCount)),
     upvoterIds,
+    downvoterIds,
     commentCount: Number(row.comment_count ?? row.commentCount ?? normalizedComments.length),
     comments: normalizedComments,
     isPinned: Boolean(row.is_pinned ?? row.isPinned),
@@ -181,6 +193,8 @@ function buildPostPayload(post) {
     course_id: post.courseId || null,
     tags: normalizeTags(post.tags),
     upvote_count: 0,
+    downvote_count: 0,
+    vote_score: 0,
     comment_count: 0,
     is_pinned: Boolean(post.isPinned),
     is_resolved: Boolean(post.isResolved),
@@ -200,6 +214,8 @@ function buildCommentPayload(postId, comment) {
     author_role: normalizeRole(comment.authorRole ?? authorProfile.role ?? "student"),
     body: `${comment.body ?? ""}`.trim(),
     upvote_count: 0,
+    downvote_count: 0,
+    vote_score: 0,
     is_helpful_answer: false,
     is_removed: false,
   };
@@ -214,7 +230,7 @@ export async function getCommunityPosts() {
     const [postsResult, commentsResult, votesResult] = await Promise.all([
       supabase.from("community_posts").select("*").order("is_pinned", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false }),
       supabase.from("community_comments").select("*").order("created_at", { ascending: true }).order("id", { ascending: true }),
-      supabase.from("community_votes").select("*").eq("vote_type", "upvote"),
+      supabase.from("community_votes").select("*"),
     ]);
 
     if (postsResult.error) throw postsResult.error;
@@ -248,7 +264,7 @@ export async function getCommunityPosts() {
     });
   } catch (error) {
     console.error("Loading community posts from Supabase failed. Falling back to mock community posts:", error);
-    return getMockCommunityPosts();
+    return getMockCommunityPosts().map((post) => normalizePost(post, post, post.comments ?? [], []));
   }
 }
 
@@ -327,22 +343,46 @@ export async function createCommunityComment(postId, comment) {
   return normalizeComment(data, authorProfile);
 }
 
-export async function toggleCommunityPostUpvote(postId, userId) {
+export async function toggleCommunityPostVote(postId, userId, voteType = "upvote") {
+  const normalizedVoteType = `${voteType ?? ""}`.trim().toLowerCase();
   if (!userId) throw new Error("A user id is required to vote.");
+  if (!["upvote", "downvote"].includes(normalizedVoteType)) throw new Error("A valid vote type is required.");
 
   if (!isSupabaseConfigured) {
     let updatedPost = null;
     updateMockPosts((posts) =>
       posts.map((post) => {
         if (String(post.id) !== String(postId)) return post;
-        const currentIds = Array.isArray(post.upvoterIds) ? post.upvoterIds.map(String) : [];
-        const hasVote = currentIds.includes(String(userId));
-        const nextIds = hasVote ? currentIds.filter((id) => id !== String(userId)) : [...currentIds, String(userId)];
+        const currentUpIds = Array.isArray(post.upvoterIds) ? post.upvoterIds.map(String) : [];
+        const currentDownIds = Array.isArray(post.downvoterIds) ? post.downvoterIds.map(String) : [];
+        const hasUpvote = currentUpIds.includes(String(userId));
+        const hasDownvote = currentDownIds.includes(String(userId));
+        let nextUpIds = currentUpIds;
+        let nextDownIds = currentDownIds;
+
+        if (normalizedVoteType === "upvote") {
+          if (hasUpvote) nextUpIds = currentUpIds.filter((id) => id !== String(userId));
+          else {
+            nextUpIds = [...currentUpIds, String(userId)];
+            nextDownIds = currentDownIds.filter((id) => id !== String(userId));
+          }
+        } else if (hasDownvote) {
+          nextDownIds = currentDownIds.filter((id) => id !== String(userId));
+        } else {
+          nextDownIds = [...currentDownIds, String(userId)];
+          nextUpIds = currentUpIds.filter((id) => id !== String(userId));
+        }
+
         updatedPost = {
           ...post,
-          upvoterIds: nextIds,
-          upvoteCount: nextIds.length,
-          upvote_count: nextIds.length,
+          upvoterIds: nextUpIds,
+          downvoterIds: nextDownIds,
+          upvoteCount: nextUpIds.length,
+          upvote_count: nextUpIds.length,
+          downvoteCount: nextDownIds.length,
+          downvote_count: nextDownIds.length,
+          voteScore: nextUpIds.length - nextDownIds.length,
+          vote_score: nextUpIds.length - nextDownIds.length,
         };
         return updatedPost;
       }),
@@ -352,26 +392,36 @@ export async function toggleCommunityPostUpvote(postId, userId) {
 
   const { data: existingVote, error: existingVoteError } = await supabase
     .from("community_votes")
-    .select("id")
+    .select("id, vote_type")
     .eq("post_id", postId)
     .eq("user_id", userId)
     .maybeSingle();
 
   if (existingVoteError) throw existingVoteError;
 
-  if (existingVote?.id) {
+  if (existingVote?.id && `${existingVote.vote_type ?? ""}`.toLowerCase() === normalizedVoteType) {
     const { error } = await supabase.from("community_votes").delete().eq("id", existingVote.id);
+    if (error) throw error;
+  } else if (existingVote?.id) {
+    const { error } = await supabase
+      .from("community_votes")
+      .update({ vote_type: normalizedVoteType })
+      .eq("id", existingVote.id);
     if (error) throw error;
   } else {
     const { error } = await supabase.from("community_votes").insert({
       user_id: userId,
       post_id: postId,
-      vote_type: "upvote",
+      vote_type: normalizedVoteType,
     });
     if (error) throw error;
   }
 
   return true;
+}
+
+export async function toggleCommunityPostUpvote(postId, userId) {
+  return toggleCommunityPostVote(postId, userId, "upvote");
 }
 
 export async function updateCommunityPost(postId, updates) {
