@@ -224,20 +224,42 @@ function createCreatedTimestamp() {
 function getErrorMessage(error, fallback = "Unknown error") {
   if (!error) return fallback;
   if (typeof error === "string") return error.trim() || fallback;
+  if (error instanceof Error && typeof error.message === "string" && error.message.trim()) return error.message.trim();
   if (typeof error.message === "string" && error.message.trim()) return error.message.trim();
   if (typeof error.error_description === "string" && error.error_description.trim()) {
     return error.error_description.trim();
   }
   if (typeof error.details === "string" && error.details.trim()) return error.details.trim();
   if (typeof error.hint === "string" && error.hint.trim()) return error.hint.trim();
+  if (error.code) return `Code: ${error.code}`;
   if (error.statusCode) return `Status ${error.statusCode}`;
   if (error.status) return `Status ${error.status}`;
   try {
     const serialized = JSON.stringify(error, Object.getOwnPropertyNames(error));
     return serialized && serialized !== "{}" ? serialized : fallback;
   } catch {
-    return fallback;
+    try {
+      return String(error);
+    } catch {
+      return fallback;
+    }
   }
+}
+
+function createCommunityPdfDebug(overrides = {}) {
+  return {
+    step: "",
+    bucketName: "community-pdfs",
+    storagePath: "",
+    postId: "",
+    fileName: "",
+    fileType: "",
+    fileSize: null,
+    uploadData: null,
+    uploadErrorMessage: "",
+    updateErrorMessage: "",
+    ...overrides,
+  };
 }
 
 function buildPostPayload(post) {
@@ -334,6 +356,12 @@ export async function createCommunityPost(post) {
   const authorProfile = resolveDemoProfile(post.studentProfile);
   const payload = buildPostPayload(post);
   const pdfFile = post.pdfFile ?? null;
+  let communityPdfDebug = createCommunityPdfDebug({
+    step: pdfFile ? "ready-to-validate" : "text-only-post",
+    fileName: pdfFile?.name ?? "",
+    fileType: pdfFile?.type ?? "",
+    fileSize: typeof pdfFile?.size === "number" ? pdfFile.size : null,
+  });
 
   console.log("[Community PDF] selected file", pdfFile);
   if (pdfFile) {
@@ -375,7 +403,12 @@ export async function createCommunityPost(post) {
     return {
       post: finalPost,
       pdfUploadFailed: false,
+      communityPdfDebug,
     };
+  }
+
+  if (!supabase) {
+    throw new Error("Supabase client is not initialized.");
   }
 
   try {
@@ -383,12 +416,17 @@ export async function createCommunityPost(post) {
     const { data, error } = await supabase.from("community_posts").insert(payload).select("*").single();
     console.log("[Community PDF] created post result", data, error);
     if (error) throw error;
+    console.log("[Community PDF] created post:", data);
     if (!data?.id) {
       return {
         post: normalizePost(data ?? payload, authorProfile, [], []),
         pdfUploadFailed: true,
         missingPostId: true,
         uploadErrorMessage: "Post was created, but the PDF could not upload because the post ID was missing.",
+        communityPdfDebug: {
+          ...communityPdfDebug,
+          step: "missing-post-id",
+        },
       };
     }
     let normalizedPost = normalizePost(data, authorProfile, [], []);
@@ -396,10 +434,27 @@ export async function createCommunityPost(post) {
     let updateFailed = false;
     let uploadErrorMessage = "";
     let updateErrorMessage = "";
+    communityPdfDebug = {
+      ...communityPdfDebug,
+      step: "post-created",
+      postId: data.id,
+    };
 
     if (pdfFile) {
       try {
         const bucketName = "community-pdfs";
+        const isPdf =
+          pdfFile.type === "application/pdf" ||
+          `${pdfFile.name ?? ""}`.toLowerCase().endsWith(".pdf");
+        if (!pdfFile) {
+          throw new Error("PDF file was selected but missing during upload.");
+        }
+        if (!isPdf) {
+          throw new Error("Selected file is not a valid PDF.");
+        }
+        if (Number(pdfFile.size ?? 0) > 25 * 1024 * 1024) {
+          throw new Error("Selected PDF exceeds the 25 MB limit.");
+        }
         console.log("[Community PDF] bucket:", bucketName);
         console.log("[Community PDF] post id:", data.id);
         console.log("[Community PDF] file:", {
@@ -407,10 +462,33 @@ export async function createCommunityPost(post) {
           type: pdfFile?.type,
           size: pdfFile?.size,
         });
+        console.log("[Community PDF] file before upload", pdfFile);
         console.log("[Community PDF] created post id", data.id);
+        communityPdfDebug = {
+          ...communityPdfDebug,
+          step: "upload-starting",
+          bucketName,
+          postId: data.id,
+          fileName: pdfFile?.name ?? "",
+          fileType: pdfFile?.type ?? "",
+          fileSize: typeof pdfFile?.size === "number" ? pdfFile.size : null,
+        };
         const uploadResult = await uploadCommunityPdf(pdfFile, data.id);
+        console.log("[Community PDF] upload data:", uploadResult?.uploadData);
         console.log("[Community PDF] storage path:", uploadResult?.storagePath);
         console.log("[Community PDF] public url result", uploadResult?.publicUrl);
+        if (!uploadResult?.uploadData) {
+          throw new Error("Storage upload returned no data and no error.");
+        }
+        if (!uploadResult?.publicUrl) {
+          throw new Error("PDF uploaded, but Supabase did not return a public URL.");
+        }
+        communityPdfDebug = {
+          ...communityPdfDebug,
+          step: "upload-succeeded",
+          storagePath: uploadResult?.storagePath ?? "",
+          uploadData: uploadResult?.uploadData ?? null,
+        };
         const pdfPayload = {
           pdf_file_name: uploadResult.fileName,
           pdf_storage_path: uploadResult.storagePath,
@@ -428,11 +506,27 @@ export async function createCommunityPost(post) {
             .single();
           console.log("[Community PDF] update result", updatedPost, updateError);
           if (updateError) throw updateError;
+          if (
+            !updatedPost?.pdf_file_name ||
+            !updatedPost?.pdf_storage_path ||
+            !updatedPost?.pdf_public_url
+          ) {
+            throw new Error("community_posts update succeeded but returned post is missing PDF metadata.");
+          }
+          communityPdfDebug = {
+            ...communityPdfDebug,
+            step: "metadata-saved",
+          };
           normalizedPost = normalizePost(updatedPost, authorProfile, [], []);
         } catch (updateError) {
           console.error("Updating the community post with PDF metadata failed:", updateError);
           updateFailed = true;
           updateErrorMessage = getErrorMessage(updateError, "The post could not be updated with the attachment.");
+          communityPdfDebug = {
+            ...communityPdfDebug,
+            step: "metadata-update-failed",
+            updateErrorMessage,
+          };
         }
       } catch (pdfError) {
         console.error("Uploading the community PDF failed after post creation:", pdfError);
@@ -448,63 +542,39 @@ export async function createCommunityPost(post) {
         });
         pdfUploadFailed = true;
         uploadErrorMessage = getErrorMessage(pdfError, "Unknown error");
+        communityPdfDebug = {
+          ...communityPdfDebug,
+          step: "upload-failed",
+          bucketName: pdfError?.bucketName || communityPdfDebug.bucketName,
+          storagePath: pdfError?.storagePath || communityPdfDebug.storagePath,
+          uploadErrorMessage,
+        };
       }
     }
 
     console.log("[Community PDF] final post", normalizedPost);
-    return { post: normalizedPost, pdfUploadFailed, updateFailed, uploadErrorMessage, updateErrorMessage };
-  } catch (error) {
-    console.error("Creating community post in Supabase failed. Falling back to mock post:", error);
-    const createdId = createMockId(getMockCommunityPosts());
-    let pdfMetadata = {};
-    let pdfUploadFailed = false;
-
-    if (pdfFile) {
-      try {
-        console.log("[Community PDF] bucket:", "community-pdfs");
-        console.log("[Community PDF] post id:", createdId);
-        console.log("[Community PDF] file:", {
-          name: pdfFile?.name,
-          type: pdfFile?.type,
-          size: pdfFile?.size,
-        });
-        console.log("[Community PDF] created post id", createdId);
-        const uploadResult = await uploadCommunityPdf(pdfFile, createdId);
-        console.log("[Community PDF] storage path:", uploadResult?.storagePath);
-        console.log("[Community PDF] upload result", uploadResult, null);
-        pdfMetadata = {
-          pdf_file_name: uploadResult.fileName,
-          pdf_storage_path: uploadResult.storagePath,
-          pdf_public_url: uploadResult.publicUrl,
-          pdf_file_size: uploadResult.fileSize,
-          pdf_uploaded_at: createCreatedTimestamp(),
-        };
-      } catch (pdfError) {
-        console.error("Uploading the community PDF in mock fallback failed:", pdfError);
-        console.error("[Community PDF] upload error object:", pdfError);
-        console.error("[Community PDF] upload error message:", getErrorMessage(pdfError));
-        pdfUploadFailed = true;
-      }
-    }
-
-    const finalPost = createMockPost(
-        normalizePost(
-          {
-            id: createdId,
-            ...payload,
-            ...pdfMetadata,
-            created_at: createCreatedTimestamp(),
-          },
-          authorProfile,
-          [],
-          [],
-        ),
-      );
-    console.log("[Community PDF] final post", finalPost);
     return {
-      post: finalPost,
+      post: normalizedPost,
       pdfUploadFailed,
+      updateFailed,
+      uploadErrorMessage,
+      updateErrorMessage,
+      communityPdfDebug,
     };
+  } catch (error) {
+    const uploadErrorMessage = getErrorMessage(error, "Unknown error: no readable error details were returned");
+    console.error("[Community PDF] caught exception:", error);
+    console.error("[Community PDF] caught exception message:", uploadErrorMessage);
+    throw Object.assign(
+      new Error(uploadErrorMessage),
+      {
+        communityPdfDebug: {
+          ...communityPdfDebug,
+          step: communityPdfDebug.step || "post-create-failed",
+          uploadErrorMessage,
+        },
+      },
+    );
   }
 }
 

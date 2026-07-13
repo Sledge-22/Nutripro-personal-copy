@@ -552,6 +552,8 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
 .community-alert.warning { background: rgba(240,192,88,.08); color: #f0c058; }
 .community-alert.error { background: rgba(214,106,92,.08); color: #f79b8f; }
 .community-alert.info { background: rgba(255,255,255,.04); color: var(--color-text); }
+.community-debug-grid { margin-top: 10px; display: grid; gap: 6px; color: var(--color-text); font-size: .92rem; }
+.community-debug-grid span { overflow-wrap: anywhere; }
 .community-sidebar-list { display: grid; gap: 10px; }
 .community-sidebar-link { display: grid; gap: 4px; text-align: left; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--color-border); background: rgba(255,255,255,.03); color: var(--color-text); }
 .community-sidebar-link span { color: var(--color-muted); font-size: .88rem; }

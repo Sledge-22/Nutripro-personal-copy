@@ -54,6 +54,10 @@ async function uploadToBucket(bucket, file, pathPrefix, options = {}) {
     };
   }
 
+  if (!supabase) {
+    throw new Error("Supabase client is not initialized.");
+  }
+
   if (!(file instanceof File || file?.name)) {
     throw new Error("A real file is required for upload.");
   }
@@ -61,6 +65,9 @@ async function uploadToBucket(bucket, file, pathPrefix, options = {}) {
   const fileName = file.name || "upload-placeholder";
   const safeName = sanitizeFileName(fileName);
   const storagePath = `${pathPrefix}/${Date.now()}-${safeName}`;
+  if (!storagePath || storagePath.includes("undefined")) {
+    throw new Error(`Invalid storage path generated for bucket "${bucket}": ${storagePath}`);
+  }
   console.log(`[Storage] uploading to bucket ${bucket}`, storagePath);
   const { data, error } = await supabase.storage.from(bucket).upload(storagePath, file, {
     upsert: true,
@@ -69,10 +76,20 @@ async function uploadToBucket(bucket, file, pathPrefix, options = {}) {
   console.log(`[Storage] upload result for ${bucket}`, data, error);
   if (error) {
     console.error(`Supabase upload failed for bucket ${bucket}:`, error);
-    throw error;
+    const uploadFailure = new Error(
+      `Storage upload failed for bucket "${bucket}" at path "${storagePath}": ${error?.message || error?.error_description || error?.details || error?.hint || "Unknown storage error"}`,
+    );
+    uploadFailure.cause = error;
+    uploadFailure.bucketName = bucket;
+    uploadFailure.storagePath = storagePath;
+    throw uploadFailure;
+  }
+  if (!data && !error) {
+    throw new Error(`Storage upload returned no data and no error for bucket "${bucket}" at path "${storagePath}".`);
   }
 
-  const publicUrl = buildPublicUrl(bucket, storagePath);
+  const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(storagePath);
+  const publicUrl = publicUrlData?.publicUrl || buildPublicUrl(bucket, storagePath);
 
   console.log(`Supabase upload result for ${bucket}:`, {
     bucket,
@@ -94,6 +111,7 @@ async function uploadToBucket(bucket, file, pathPrefix, options = {}) {
     storagePath,
     fileName,
     publicUrl,
+    uploadData: data,
     fileType: file?.type || "",
     fileSize: typeof file?.size === "number" ? file.size : null,
     mock: false,

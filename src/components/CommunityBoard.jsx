@@ -104,6 +104,27 @@ function getCategoryOptions(t, canModerate) {
     .map((key) => ({ value: key, label: t(`community.categories.${key}`) }));
 }
 
+function getReadableErrorMessage(error) {
+  if (!error) return "No error object returned";
+  if (typeof error === "string") return error;
+  if (error instanceof Error && error.message) return error.message;
+  if (error.message) return error.message;
+  if (error.error_description) return error.error_description;
+  if (error.details) return error.details;
+  if (error.hint) return error.hint;
+  if (error.code) return `Code: ${error.code}`;
+  if (error.statusCode) return `Status code: ${error.statusCode}`;
+  if (error.status) return `Status: ${error.status}`;
+  try {
+    const json = JSON.stringify(error, Object.getOwnPropertyNames(error));
+    if (json && json !== "{}") return json;
+  } catch {}
+  try {
+    return String(error);
+  } catch {}
+  return "Unknown error: no readable error details were returned";
+}
+
 function VoteButton({ active, direction, onClick, label }) {
   return (
     <button
@@ -201,6 +222,7 @@ export function CommunityBoard({
   const [validation, setValidation] = useState("");
   const [warning, setWarning] = useState("");
   const [removeDrafts, setRemoveDrafts] = useState({});
+  const [communityPdfDebug, setCommunityPdfDebug] = useState(null);
 
   const visiblePosts = useMemo(() => {
     const safePosts = Array.isArray(posts) ? posts : [];
@@ -261,6 +283,7 @@ export function CommunityBoard({
     event.preventDefault();
     setValidation("");
     setMessage({ type: "", text: "" });
+    setCommunityPdfDebug(null);
 
     const title = composer.title.trim();
     const body = composer.body.trim();
@@ -299,16 +322,20 @@ export function CommunityBoard({
         isPinned: canModerate && composer.category === "announcement",
         pdfFile,
       });
-      setComposer({
-        title: "",
-        body: "",
-        category: canModerate ? "announcement" : "question",
-        courseId: "",
-        tags: "",
-        pdfFile: null,
-      });
+      setCommunityPdfDebug(result?.communityPdfDebug ?? null);
+      const hasPdfFailure = result?.pdfUploadFailed || result?.updateFailed || result?.missingPostId;
+      if (!hasPdfFailure) {
+        setComposer({
+          title: "",
+          body: "",
+          category: canModerate ? "announcement" : "question",
+          courseId: "",
+          tags: "",
+          pdfFile: null,
+        });
+      }
       setMessage({
-        type: result?.pdfUploadFailed || result?.updateFailed ? "warning" : "success",
+        type: hasPdfFailure ? "warning" : "success",
         text: result?.missingPostId
           ? t("community.pdfMissingPostId")
           : result?.updateFailed
@@ -319,7 +346,8 @@ export function CommunityBoard({
       });
     } catch (error) {
       console.error("Creating a community post failed:", error);
-      setMessage({ type: "error", text: t("community.errorLoad") });
+      setCommunityPdfDebug(error?.communityPdfDebug ?? null);
+      setMessage({ type: "error", text: `${t("community.pdfUploadFailedPrefix")} ${getReadableErrorMessage(error)}` });
     }
   };
 
@@ -485,15 +513,33 @@ export function CommunityBoard({
                   category: canModerate ? "announcement" : "question",
                   courseId: "",
                   tags: "",
+                  pdfFile: null,
                 });
                 setValidation("");
                 setWarning("");
+                setCommunityPdfDebug(null);
               }}
             >
               {t("common.cancel")}
             </button>
           </div>
         </form>
+
+        {(import.meta.env.DEV || canModerate) && communityPdfDebug ? (
+          <div className="community-alert warning">
+            <strong>{t("community.pdfDebugInfo")}</strong>
+            <div className="community-debug-grid">
+              <span>{t("community.currentStep")}: {communityPdfDebug.step || "unknown"}</span>
+              <span>{t("community.bucketName")}: {communityPdfDebug.bucketName || "community-pdfs"}</span>
+              <span>{t("community.storagePath")}: {communityPdfDebug.storagePath || "—"}</span>
+              <span>{t("community.postId")}: {communityPdfDebug.postId || "—"}</span>
+              <span>{t("community.fileName")}: {communityPdfDebug.fileName || "—"}</span>
+              <span>{t("community.fileType")}: {communityPdfDebug.fileType || "—"}</span>
+              <span>{t("community.fileSize")}: {communityPdfDebug.fileSize ? formatFileSize(communityPdfDebug.fileSize) : "—"}</span>
+              <span>{t("community.failurePoint")}: {communityPdfDebug.uploadErrorMessage || communityPdfDebug.updateErrorMessage || "—"}</span>
+            </div>
+          </div>
+        ) : null}
 
         <div className="section-card community-toolbar">
           <label className="community-search">
