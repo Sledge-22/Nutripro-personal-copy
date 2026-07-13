@@ -31,6 +31,10 @@ function buildPublicUrl(bucket, path) {
   return `${supabaseUrl}/storage/v1/object/public/${bucket}/${encodedPath}`;
 }
 
+export function getStoragePublicUrl(bucket, path) {
+  return buildPublicUrl(bucket, path);
+}
+
 async function uploadToBucket(bucket, file, pathPrefix) {
   if (!isSupabaseConfigured) {
     const fileName = file?.name || "upload-placeholder";

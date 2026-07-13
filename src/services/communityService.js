@@ -2,6 +2,7 @@ import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { createMockId, getMockCommunityPosts, getMockUsers, setMockCommunityPosts } from "./mockStore.js";
 import { DEMO_STUDENT_EMAIL, DEMO_STUDENT_NAME } from "./userService.js";
 import { uploadCommunityPdf } from "./storageService.js";
+import { getStoragePublicUrl } from "./storageService.js";
 
 const MODERATOR_ROLES = new Set(["admin", "instructor", "support"]);
 
@@ -87,6 +88,22 @@ function normalizeComment(row, author = {}) {
 function normalizePost(row, author = {}, comments = [], votes = []) {
   const authorInfo = normalizeAuthorInfo(row, author);
   const normalizedComments = comments.map((comment) => normalizeComment(comment, comment.author ?? {}));
+  const pdfStoragePath =
+    row.pdf_storage_path ??
+    row.pdfStoragePath ??
+    row.attachment_storage_path ??
+    row.attachmentStoragePath ??
+    "";
+  const pdfPublicUrl =
+    row.pdf_public_url ??
+    row.pdfPublicUrl ??
+    row.pdf_url ??
+    row.pdfUrl ??
+    row.attachment_public_url ??
+    row.attachmentPublicUrl ??
+    row.attachment_url ??
+    row.attachmentUrl ??
+    (pdfStoragePath ? getStoragePublicUrl("community-pdfs", pdfStoragePath) : "");
   const postVotes = votes.filter((vote) => String(vote.post_id ?? vote.postId ?? "") === String(row.id));
   const latestVoteByUser = new Map();
 
@@ -127,11 +144,11 @@ function normalizePost(row, author = {}, comments = [], votes = []) {
     tags: normalizeTags(row.tags),
     time: formatCommunityDate(row.created_at ?? row.createdAt ?? row.time),
     createdAt: row.created_at ?? row.createdAt ?? "",
-    pdfFileName: row.pdf_file_name ?? row.pdfFileName ?? "",
-    pdfStoragePath: row.pdf_storage_path ?? row.pdfStoragePath ?? "",
-    pdfPublicUrl: row.pdf_public_url ?? row.pdfPublicUrl ?? "",
-    pdfFileSize: row.pdf_file_size ?? row.pdfFileSize ?? null,
-    pdfUploadedAt: row.pdf_uploaded_at ?? row.pdfUploadedAt ?? null,
+    pdfFileName: row.pdf_file_name ?? row.pdfFileName ?? row.attachment_file_name ?? row.attachmentFileName ?? "",
+    pdfStoragePath,
+    pdfPublicUrl,
+    pdfFileSize: row.pdf_file_size ?? row.pdfFileSize ?? row.attachment_file_size ?? row.attachmentFileSize ?? null,
+    pdfUploadedAt: row.pdf_uploaded_at ?? row.pdfUploadedAt ?? row.attachment_uploaded_at ?? row.attachmentUploadedAt ?? null,
     upvoteCount,
     downvoteCount,
     voteScore,

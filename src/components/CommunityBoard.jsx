@@ -529,6 +529,8 @@ export function CommunityBoard({
               const expanded = expandedPostId === post.id;
               const courseTitle = getPostCourseTitle(post, courseMap);
               const comments = getVisibleComments(post, canModerate);
+              const hasPdfMetadata = Boolean(post.pdfFileName || post.pdfStoragePath || post.pdfPublicUrl);
+              const canShowPdf = Boolean(post.pdfPublicUrl);
               const viewerHasUpvoted = Array.isArray(post.upvoterIds) && post.upvoterIds.map(String).includes(String(currentUser?.id ?? ""));
               const viewerHasDownvoted = Array.isArray(post.downvoterIds) && post.downvoterIds.map(String).includes(String(currentUser?.id ?? ""));
               const canResolvePost = canModerate || String(post.studentId ?? "") === String(currentUser?.id ?? "");
@@ -576,7 +578,7 @@ export function CommunityBoard({
                   <h3>{post.title}</h3>
                       <p className="community-post-body">{expanded ? post.body : post.body}</p>
 
-                      {post.pdfPublicUrl ? (
+                      {canShowPdf ? (
                         <div className="community-pdf-card">
                           <div>
                             <span className="community-badge neutral">{t("community.pdfAttached")}</span>
@@ -587,7 +589,7 @@ export function CommunityBoard({
                             {t("community.openPdf")}
                           </a>
                         </div>
-                      ) : null}
+                      ) : canModerate && hasPdfMetadata ? <div className="community-alert warning">{t("community.pdfMetadataMissingUrl")}</div> : null}
 
                       {Array.isArray(post.tags) && post.tags.length ? (
                         <div className="community-tags">
@@ -679,7 +681,7 @@ export function CommunityBoard({
 
                       {expanded ? (
                         <div className="community-thread">
-                          {post.pdfPublicUrl ? (
+                          {canShowPdf ? (
                             <div className="community-pdf-preview">
                               <div className="community-pdf-preview-head">
                                 <strong>{post.pdfFileName || "community-resource.pdf"}</strong>
@@ -700,7 +702,7 @@ export function CommunityBoard({
                                 {t("community.openPdfNewTab")}
                               </a>
                             </div>
-                          ) : null}
+                          ) : canModerate && hasPdfMetadata ? <div className="community-alert warning">{t("community.pdfMetadataMissingUrl")}</div> : null}
 
                           <div className="community-comments">
                             {comments.length ? (
