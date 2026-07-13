@@ -224,7 +224,15 @@ function createCreatedTimestamp() {
 function getErrorMessage(error, fallback = "Unknown error.") {
   if (!error) return fallback;
   if (typeof error === "string") return error;
-  return error.message ?? error.error_description ?? error.details ?? fallback;
+  if (error.message) return error.message;
+  if (error.error_description) return error.error_description;
+  if (error.details) return error.details;
+  if (error.hint) return error.hint;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return fallback;
+  }
 }
 
 function buildPostPayload(post) {
@@ -386,8 +394,17 @@ export async function createCommunityPost(post) {
 
     if (pdfFile) {
       try {
+        const bucketName = "community-pdfs";
+        console.log("[Community PDF] bucket:", bucketName);
+        console.log("[Community PDF] post id:", data.id);
+        console.log("[Community PDF] file:", {
+          name: pdfFile?.name,
+          type: pdfFile?.type,
+          size: pdfFile?.size,
+        });
         console.log("[Community PDF] created post id", data.id);
         const uploadResult = await uploadCommunityPdf(pdfFile, data.id);
+        console.log("[Community PDF] storage path:", uploadResult?.storagePath);
         console.log("[Community PDF] public url result", uploadResult?.publicUrl);
         const pdfPayload = {
           pdf_file_name: uploadResult.fileName,
@@ -414,6 +431,8 @@ export async function createCommunityPost(post) {
         }
       } catch (pdfError) {
         console.error("Uploading the community PDF failed after post creation:", pdfError);
+        console.error("[Community PDF] upload error object:", pdfError);
+        console.error("[Community PDF] upload error message:", getErrorMessage(pdfError));
         console.error("[Community PDF] upload failed", {
           bucketName: "community-pdfs",
           storagePath: `community-posts/${data.id}/<timestamp>-<safeFileName>`,
@@ -437,8 +456,16 @@ export async function createCommunityPost(post) {
 
     if (pdfFile) {
       try {
+        console.log("[Community PDF] bucket:", "community-pdfs");
+        console.log("[Community PDF] post id:", createdId);
+        console.log("[Community PDF] file:", {
+          name: pdfFile?.name,
+          type: pdfFile?.type,
+          size: pdfFile?.size,
+        });
         console.log("[Community PDF] created post id", createdId);
         const uploadResult = await uploadCommunityPdf(pdfFile, createdId);
+        console.log("[Community PDF] storage path:", uploadResult?.storagePath);
         console.log("[Community PDF] upload result", uploadResult, null);
         pdfMetadata = {
           pdf_file_name: uploadResult.fileName,
@@ -449,6 +476,8 @@ export async function createCommunityPost(post) {
         };
       } catch (pdfError) {
         console.error("Uploading the community PDF in mock fallback failed:", pdfError);
+        console.error("[Community PDF] upload error object:", pdfError);
+        console.error("[Community PDF] upload error message:", getErrorMessage(pdfError));
         pdfUploadFailed = true;
       }
     }
