@@ -515,6 +515,7 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
 .community-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .community-form-grid .full-span { grid-column: 1 / -1; }
 .community-form-grid label, .community-remove-panel label { display: grid; gap: 8px; color: var(--color-muted); font-size: .92rem; }
+.community-field-helper { color: var(--color-muted); font-size: .85rem; }
 .community-toolbar { display: grid; gap: 14px; }
 .community-search { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; padding: 0 14px; border-radius: 16px; border: 1px solid var(--color-border); background: rgba(255,255,255,.03); }
 .community-search input { border: 0; background: transparent; padding: 14px 0; }
@@ -557,6 +558,13 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
 .community-guidelines { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
 .community-remove-panel { display: grid; gap: 12px; padding: 14px; border-radius: 18px; background: rgba(255,255,255,.03); border: 1px solid var(--color-border); }
 .community-empty-comments, .community-removed-note { color: var(--color-muted); }
+.community-attachment-chip, .community-pdf-card, .community-pdf-preview-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.community-attachment-chip { padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,.03); border: 1px solid var(--color-border); }
+.community-pdf-card { padding: 14px 16px; border-radius: 18px; border: 1px solid var(--color-border); background: rgba(255,255,255,.03); }
+.community-pdf-card strong, .community-pdf-preview strong { color: var(--color-text); display: block; }
+.community-pdf-card small, .community-pdf-preview span, .community-pdf-preview p { color: var(--color-muted); }
+.community-pdf-preview { display: grid; gap: 12px; padding: 16px; border-radius: 20px; border: 1px solid var(--color-border); background: rgba(255,255,255,.03); }
+.community-pdf-preview iframe { width: 100%; height: 600px; border: 0; border-radius: 18px; background: rgba(0,0,0,.18); }
 .danger-btn { padding: 11px 16px; border-radius: 999px; border: 1px solid rgba(214,106,92,.25); background: rgba(214,106,92,.08); color: #f79b8f; font-weight: 700; }
 .ghost-btn { padding: 11px 16px; border-radius: 999px; border: 1px solid var(--color-border); background: rgba(255,255,255,.03); color: var(--color-text); font-weight: 700; }
 

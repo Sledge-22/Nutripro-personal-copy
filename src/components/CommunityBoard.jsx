@@ -2,8 +2,10 @@ import React, { useMemo, useState } from "react";
 import { Icon } from "./ui.jsx";
 import { isModeratorRole } from "../services/communityService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+import { getEmbeddablePdfUrl } from "../utils/mediaLinks.js";
 
 const TITLE_LIMIT = 140;
+const COMMUNITY_PDF_MAX_BYTES = 25 * 1024 * 1024;
 const BAD_LINKS_PATTERN = /(https?:\/\/\S+\s*){3,}/i;
 const PAYMENT_INFO_PATTERN = /\b(?:\d[ -]*?){13,16}\b/;
 const REPEATED_CHAR_PATTERN = /(.)\1{7,}/;
@@ -87,6 +89,13 @@ function getPostVoteCount(post) {
 function getPostCourseTitle(post, courseMap) {
   if (post?.courseTitle) return post.courseTitle;
   return courseMap.get(String(post?.courseId ?? ""))?.title ?? "";
+}
+
+function formatFileSize(bytes) {
+  const normalizedBytes = Number(bytes);
+  if (!Number.isFinite(normalizedBytes) || normalizedBytes <= 0) return "";
+  if (normalizedBytes >= 1024 * 1024) return `${(normalizedBytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(normalizedBytes / 1024))} KB`;
 }
 
 function getCategoryOptions(t, canModerate) {
@@ -181,6 +190,7 @@ export function CommunityBoard({
     category: canModerate ? "announcement" : "question",
     courseId: "",
     tags: "",
+    pdfFile: null,
   });
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -254,6 +264,7 @@ export function CommunityBoard({
 
     const title = composer.title.trim();
     const body = composer.body.trim();
+    const pdfFile = composer.pdfFile;
     if (!title || !body || !composer.category) {
       setValidation(t("community.validation.required"));
       return;
@@ -262,12 +273,20 @@ export function CommunityBoard({
       setValidation(t("community.validation.titleLimit", { count: TITLE_LIMIT }));
       return;
     }
+    if (pdfFile && pdfFile.type !== "application/pdf" && !`${pdfFile.name ?? ""}`.toLowerCase().endsWith(".pdf")) {
+      setValidation(t("community.pdfOnlyError"));
+      return;
+    }
+    if (pdfFile && Number(pdfFile.size ?? 0) > COMMUNITY_PDF_MAX_BYTES) {
+      setValidation(t("community.pdfSizeError"));
+      return;
+    }
 
     const nextWarning = detectPostWarning(title, body) ? t("community.warningGuidelines") : "";
     setWarning(nextWarning);
 
     try {
-      await onCreatePost({
+      const result = await onCreatePost({
         studentId: currentUser?.id,
         studentProfile: currentUser,
         author: currentUser?.name,
@@ -278,6 +297,7 @@ export function CommunityBoard({
         courseId: composer.courseId || null,
         tags: composer.tags,
         isPinned: canModerate && composer.category === "announcement",
+        pdfFile,
       });
       setComposer({
         title: "",
@@ -285,8 +305,12 @@ export function CommunityBoard({
         category: canModerate ? "announcement" : "question",
         courseId: "",
         tags: "",
+        pdfFile: null,
       });
-      setMessage({ type: "success", text: t("community.postPublished") });
+      setMessage({
+        type: result?.pdfUploadFailed ? "warning" : "success",
+        text: result?.pdfUploadFailed ? t("community.pdfUploadFailedAfterPost") : t("community.postPublished"),
+      });
     } catch (error) {
       console.error("Creating a community post failed:", error);
       setMessage({ type: "error", text: t("community.errorLoad") });
@@ -416,6 +440,24 @@ export function CommunityBoard({
                 placeholder={t("community.tagsPlaceholder")}
               />
             </label>
+
+            <label className="full-span">
+              <span>{t("community.attachPdf")}</span>
+              <span className="community-field-helper">{t("community.attachPdfHelp")}</span>
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                onChange={(event) => setComposerValue("pdfFile", event.target.files?.[0] ?? null)}
+              />
+              {composer.pdfFile ? (
+                <div className="community-attachment-chip">
+                  <span>{composer.pdfFile.name}</span>
+                  <button type="button" className="ghost-btn" onClick={() => setComposerValue("pdfFile", null)}>
+                    {t("community.removePdf")}
+                  </button>
+                </div>
+              ) : null}
+            </label>
           </div>
 
           {validation ? <div className="community-alert error">{validation}</div> : null}
@@ -531,8 +573,21 @@ export function CommunityBoard({
                         </div>
                       </div>
 
-                      <h3>{post.title}</h3>
+                  <h3>{post.title}</h3>
                       <p className="community-post-body">{expanded ? post.body : post.body}</p>
+
+                      {post.pdfPublicUrl ? (
+                        <div className="community-pdf-card">
+                          <div>
+                            <span className="community-badge neutral">{t("community.pdfAttached")}</span>
+                            <strong>{post.pdfFileName || "community-resource.pdf"}</strong>
+                            {post.pdfFileSize ? <small>{formatFileSize(post.pdfFileSize)}</small> : null}
+                          </div>
+                          <a className="secondary-btn" href={post.pdfPublicUrl} target="_blank" rel="noreferrer">
+                            {t("community.openPdf")}
+                          </a>
+                        </div>
+                      ) : null}
 
                       {Array.isArray(post.tags) && post.tags.length ? (
                         <div className="community-tags">
@@ -624,6 +679,29 @@ export function CommunityBoard({
 
                       {expanded ? (
                         <div className="community-thread">
+                          {post.pdfPublicUrl ? (
+                            <div className="community-pdf-preview">
+                              <div className="community-pdf-preview-head">
+                                <strong>{post.pdfFileName || "community-resource.pdf"}</strong>
+                                {post.pdfFileSize ? <span>{formatFileSize(post.pdfFileSize)}</span> : null}
+                              </div>
+                              {getEmbeddablePdfUrl(post.pdfPublicUrl) ? (
+                                <>
+                                  <iframe
+                                    title={post.pdfFileName || "Community PDF"}
+                                    src={getEmbeddablePdfUrl(post.pdfPublicUrl)}
+                                  />
+                                  <p>{t("community.pdfPreviewFallback")}</p>
+                                </>
+                              ) : (
+                                <p>{t("community.pdfPreviewFallback")}</p>
+                              )}
+                              <a className="ghost-btn" href={post.pdfPublicUrl} target="_blank" rel="noreferrer">
+                                {t("community.openPdfNewTab")}
+                              </a>
+                            </div>
+                          ) : null}
+
                           <div className="community-comments">
                             {comments.length ? (
                               comments.map((comment) => {

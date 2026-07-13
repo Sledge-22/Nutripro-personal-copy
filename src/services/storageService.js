@@ -5,6 +5,7 @@ const VIDEO_BUCKET = "module-videos";
 const ASSIGNMENT_BUCKET = "assignment-submissions";
 const PROFILE_PICTURE_BUCKET = "profile-pictures";
 const COURSE_IMAGE_BUCKET = "course-images";
+const COMMUNITY_PDF_BUCKET = "community-pdfs";
 
 const sanitizeFileName = (name) => {
   const parts = name.split(".");
@@ -108,4 +109,8 @@ export async function uploadProfilePicture(file) {
 
 export async function uploadCourseImage(file) {
   return uploadToBucket(COURSE_IMAGE_BUCKET, file, "courses");
+}
+
+export async function uploadCommunityPdf(file, postId = "post") {
+  return uploadToBucket(COMMUNITY_PDF_BUCKET, file, `community-pdfs/${postId}`);
 }

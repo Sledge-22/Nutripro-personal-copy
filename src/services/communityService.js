@@ -1,6 +1,7 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { createMockId, getMockCommunityPosts, getMockUsers, setMockCommunityPosts } from "./mockStore.js";
 import { DEMO_STUDENT_EMAIL, DEMO_STUDENT_NAME } from "./userService.js";
+import { uploadCommunityPdf } from "./storageService.js";
 
 const MODERATOR_ROLES = new Set(["admin", "instructor", "support"]);
 
@@ -126,6 +127,11 @@ function normalizePost(row, author = {}, comments = [], votes = []) {
     tags: normalizeTags(row.tags),
     time: formatCommunityDate(row.created_at ?? row.createdAt ?? row.time),
     createdAt: row.created_at ?? row.createdAt ?? "",
+    pdfFileName: row.pdf_file_name ?? row.pdfFileName ?? "",
+    pdfStoragePath: row.pdf_storage_path ?? row.pdfStoragePath ?? "",
+    pdfPublicUrl: row.pdf_public_url ?? row.pdfPublicUrl ?? "",
+    pdfFileSize: row.pdf_file_size ?? row.pdfFileSize ?? null,
+    pdfUploadedAt: row.pdf_uploaded_at ?? row.pdfUploadedAt ?? null,
     upvoteCount,
     downvoteCount,
     voteScore,
@@ -291,40 +297,110 @@ export async function getCommunityPosts() {
 export async function createCommunityPost(post) {
   const authorProfile = resolveDemoProfile(post.studentProfile);
   const payload = buildPostPayload(post);
+  const pdfFile = post.pdfFile ?? null;
 
   if (!isSupabaseConfigured) {
-    return createMockPost(
-      normalizePost(
-        {
-          id: createMockId(getMockCommunityPosts()),
-          ...payload,
-          created_at: createCreatedTimestamp(),
-        },
-        authorProfile,
-        [],
-        [],
+    const createdId = createMockId(getMockCommunityPosts());
+    let pdfMetadata = {};
+
+    if (pdfFile) {
+      const uploadResult = await uploadCommunityPdf(pdfFile, createdId);
+      pdfMetadata = {
+        pdf_file_name: uploadResult.fileName,
+        pdf_storage_path: uploadResult.storagePath,
+        pdf_public_url: uploadResult.publicUrl,
+        pdf_file_size: uploadResult.fileSize,
+        pdf_uploaded_at: createCreatedTimestamp(),
+      };
+    }
+
+    return {
+      post: createMockPost(
+        normalizePost(
+          {
+            id: createdId,
+            ...payload,
+            ...pdfMetadata,
+            created_at: createCreatedTimestamp(),
+          },
+          authorProfile,
+          [],
+          [],
+        ),
       ),
-    );
+      pdfUploadFailed: false,
+    };
   }
 
   try {
     const { data, error } = await supabase.from("community_posts").insert(payload).select("*").single();
     if (error) throw error;
-    return normalizePost(data, authorProfile, [], []);
+    let normalizedPost = normalizePost(data, authorProfile, [], []);
+    let pdfUploadFailed = false;
+
+    if (pdfFile) {
+      try {
+        const uploadResult = await uploadCommunityPdf(pdfFile, data.id);
+        const pdfPayload = {
+          pdf_file_name: uploadResult.fileName,
+          pdf_storage_path: uploadResult.storagePath,
+          pdf_public_url: uploadResult.publicUrl,
+          pdf_file_size: uploadResult.fileSize,
+          pdf_uploaded_at: createCreatedTimestamp(),
+        };
+        const { data: updatedPost, error: updateError } = await supabase
+          .from("community_posts")
+          .update(pdfPayload)
+          .eq("id", data.id)
+          .select("*")
+          .single();
+        if (updateError) throw updateError;
+        normalizedPost = normalizePost(updatedPost, authorProfile, [], []);
+      } catch (pdfError) {
+        console.error("Uploading the community PDF failed after post creation:", pdfError);
+        pdfUploadFailed = true;
+      }
+    }
+
+    return { post: normalizedPost, pdfUploadFailed };
   } catch (error) {
     console.error("Creating community post in Supabase failed. Falling back to mock post:", error);
-    return createMockPost(
-      normalizePost(
-        {
-          id: createMockId(getMockCommunityPosts()),
-          ...payload,
-          created_at: createCreatedTimestamp(),
-        },
-        authorProfile,
-        [],
-        [],
+    const createdId = createMockId(getMockCommunityPosts());
+    let pdfMetadata = {};
+    let pdfUploadFailed = false;
+
+    if (pdfFile) {
+      try {
+        const uploadResult = await uploadCommunityPdf(pdfFile, createdId);
+        pdfMetadata = {
+          pdf_file_name: uploadResult.fileName,
+          pdf_storage_path: uploadResult.storagePath,
+          pdf_public_url: uploadResult.publicUrl,
+          pdf_file_size: uploadResult.fileSize,
+          pdf_uploaded_at: createCreatedTimestamp(),
+        };
+      } catch (pdfError) {
+        console.error("Uploading the community PDF in mock fallback failed:", pdfError);
+        pdfUploadFailed = true;
+      }
+    }
+
+    return {
+      post: createMockPost(
+        normalizePost(
+          {
+            id: createdId,
+            ...payload,
+            ...pdfMetadata,
+            created_at: createCreatedTimestamp(),
+          },
+          authorProfile,
+          [],
+          [],
+        ),
       ),
-    );
+      pdfUploadFailed,
+    };
   }
 }
 

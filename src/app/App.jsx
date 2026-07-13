@@ -627,8 +627,9 @@ export function App() {
   }
 
   async function handleCreatePost(payload) {
-    await createCommunityPost(payload);
+    const result = await createCommunityPost(payload);
     setPosts(await getCommunityPosts());
+    return result;
   }
 
   async function handleCreateComment(postId, payload) {
