@@ -309,11 +309,13 @@ export function CommunityBoard({
       });
       setMessage({
         type: result?.pdfUploadFailed || result?.updateFailed ? "warning" : "success",
-        text: result?.updateFailed
-          ? t("community.pdfMetadataUpdateFailed")
-          : result?.pdfUploadFailed
-            ? t("community.pdfUploadFailedAfterPost")
-            : t("community.postPublished"),
+        text: result?.missingPostId
+          ? t("community.pdfMissingPostId")
+          : result?.updateFailed
+            ? `${t("community.pdfMetadataUpdateFailed")} ${result?.updateErrorMessage ?? ""}`.trim()
+            : result?.pdfUploadFailed
+              ? `${t("community.pdfUploadFailedPrefix")} ${result?.uploadErrorMessage ?? ""}`.trim()
+              : t("community.postPublished"),
       });
     } catch (error) {
       console.error("Creating a community post failed:", error);

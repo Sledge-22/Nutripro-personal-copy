@@ -221,6 +221,12 @@ function createCreatedTimestamp() {
   return new Date().toISOString();
 }
 
+function getErrorMessage(error, fallback = "Unknown error.") {
+  if (!error) return fallback;
+  if (typeof error === "string") return error;
+  return error.message ?? error.error_description ?? error.details ?? fallback;
+}
+
 function buildPostPayload(post) {
   const authorProfile = resolveDemoProfile(post.studentProfile);
   const normalizedCategory = `${post.category ?? "discussion"}`.trim().toLowerCase() || "discussion";
@@ -364,9 +370,19 @@ export async function createCommunityPost(post) {
     const { data, error } = await supabase.from("community_posts").insert(payload).select("*").single();
     console.log("[Community PDF] created post result", data, error);
     if (error) throw error;
+    if (!data?.id) {
+      return {
+        post: normalizePost(data ?? payload, authorProfile, [], []),
+        pdfUploadFailed: true,
+        missingPostId: true,
+        uploadErrorMessage: "Post was created, but the PDF could not upload because the post ID was missing.",
+      };
+    }
     let normalizedPost = normalizePost(data, authorProfile, [], []);
     let pdfUploadFailed = false;
     let updateFailed = false;
+    let uploadErrorMessage = "";
+    let updateErrorMessage = "";
 
     if (pdfFile) {
       try {
@@ -394,15 +410,25 @@ export async function createCommunityPost(post) {
         } catch (updateError) {
           console.error("Updating the community post with PDF metadata failed:", updateError);
           updateFailed = true;
+          updateErrorMessage = getErrorMessage(updateError, "The post could not be updated with the attachment.");
         }
       } catch (pdfError) {
         console.error("Uploading the community PDF failed after post creation:", pdfError);
+        console.error("[Community PDF] upload failed", {
+          bucketName: "community-pdfs",
+          storagePath: `community-posts/${data.id}/<timestamp>-<safeFileName>`,
+          fileName: pdfFile?.name,
+          fileType: pdfFile?.type,
+          fileSize: pdfFile?.size,
+          uploadError: pdfError,
+        });
         pdfUploadFailed = true;
+        uploadErrorMessage = getErrorMessage(pdfError, "The PDF upload failed.");
       }
     }
 
     console.log("[Community PDF] final post", normalizedPost);
-    return { post: normalizedPost, pdfUploadFailed, updateFailed };
+    return { post: normalizedPost, pdfUploadFailed, updateFailed, uploadErrorMessage, updateErrorMessage };
   } catch (error) {
     console.error("Creating community post in Supabase failed. Falling back to mock post:", error);
     const createdId = createMockId(getMockCommunityPosts());
