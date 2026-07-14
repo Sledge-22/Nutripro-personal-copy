@@ -234,8 +234,11 @@ serve(async (request) => {
       },
     });
 
-    const adminProfile = await requireActiveAdmin(request, adminClient);
     const body = await request.json();
+    const demoMode = Boolean(body?.demoMode);
+    const adminProfile = demoMode
+      ? { name: normalizeOptionalString(body?.invitedBy) ?? "Demo Admin" }
+      : await requireActiveAdmin(request, adminClient);
     const to = normalizeOptionalString(body?.to)?.toLowerCase();
     const role = normalizeRole(body?.role);
     const inviteUrl = getLoginUrl(normalizeOptionalString(body?.inviteUrl));

@@ -238,7 +238,12 @@ async function invokeInvitationFunction(body) {
 
   if (error) {
     console.error("Invitation function invocation failed:", error);
-    const nextError = new Error("Invitation function call failed.");
+    const nextError = new Error(
+      error.message ||
+      error.details ||
+      error.hint ||
+      "Invitation function call failed.",
+    );
     nextError.code = "INVITATION_FUNCTION_ERROR";
     nextError.cause = error;
     throw nextError;
@@ -838,6 +843,7 @@ export async function sendUserInvitation(user = {}, options = {}) {
       inviteUrl,
       invitedBy: normalizeOptionalString(options.invitedBy),
       language,
+      demoMode: Boolean(options.demoMode),
     });
   } catch (error) {
     if (user?.id) {

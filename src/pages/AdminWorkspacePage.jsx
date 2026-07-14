@@ -990,6 +990,19 @@ function UsersAdminPanel({
     temporaryPassword: "",
   });
 
+  const getErrorMessage = (issue) => {
+    if (!issue) return "Unknown error";
+    if (typeof issue === "string") return issue;
+    if (issue.message) return issue.message;
+    if (issue.details) return issue.details;
+    if (issue.hint) return issue.hint;
+    try {
+      return JSON.stringify(issue);
+    } catch {
+      return "Unknown error";
+    }
+  };
+
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
       !search ||
@@ -1184,21 +1197,20 @@ function UsersAdminPanel({
         invitedBy: currentUser?.name || "",
         temporaryPassword: options.temporaryPassword || "",
         inviteUrl: `${window.location.origin}/`,
+        demoMode: true,
       });
       setMessage(t("auth.invitationSentSuccessfully"));
     } catch (inviteError) {
       console.error("Sending invitation failed:", inviteError);
-      const details = `${inviteError?.message ?? ""}`.toLowerCase();
-      const isFunctionIssue =
-        inviteError?.code === "INVITATION_FUNCTION_ERROR" ||
-        details.includes("function") ||
+      const details = `${getErrorMessage(inviteError)}`.toLowerCase();
+      const functionMissing =
         details.includes("non-2xx") ||
-        details.includes("edge function") ||
-        details.includes("authorization") ||
-        details.includes("supabase function");
-      const failureMessage = isFunctionIssue
-        ? t("auth.productionFunctionNotConfigured")
-        : `${t("auth.unableToSendInvitation")} ${inviteError?.message || ""}`.trim();
+        details.includes("not found") ||
+        details.includes("404") ||
+        details.includes("failed to send a request to the edge function");
+      const failureMessage = functionMissing
+        ? t("auth.invitationFunctionNotDeployed")
+        : `${t("auth.unableToSendInvitation")} ${getErrorMessage(inviteError)}`.trim();
       setError(failureMessage);
     } finally {
       setInvitingUserId(null);
