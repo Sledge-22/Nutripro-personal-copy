@@ -174,12 +174,15 @@ async function sendResendEmail({
     }),
   });
 
+  console.log("[Invitation] Resend response status:", response.status);
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
+    console.error("[Invitation] Resend response body:", payload);
     throw new Error(payload?.message || payload?.error || `Resend request failed with status ${response.status}.`);
   }
 
+  console.log("[Invitation] Resend success body:", payload);
   return payload;
 }
 
@@ -214,6 +217,8 @@ async function updateInvitationStatus(
 }
 
 serve(async (request) => {
+  console.log("[Invitation] request received");
+  console.log("[Invitation] method:", request.method);
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -224,7 +229,8 @@ serve(async (request) => {
 
   try {
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      return jsonResponse({ ok: false, error: "Missing Supabase function environment variables." }, 500);
+      console.error("[Invitation] missing Supabase function environment variables");
+      return jsonResponse({ ok: false, error: "Missing Supabase function environment variables." }, 200);
     }
 
     const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
@@ -235,6 +241,7 @@ serve(async (request) => {
     });
 
     const body = await request.json();
+    console.log("[Invitation] request body parsed successfully");
     const demoMode = Boolean(body?.demoMode);
     const adminProfile = demoMode
       ? { name: normalizeOptionalString(body?.invitedBy) ?? "Demo Admin" }
@@ -247,9 +254,21 @@ serve(async (request) => {
     const invitedBy = normalizeOptionalString(body?.invitedBy) ?? normalizeOptionalString(adminProfile?.name);
     const language = normalizeLanguage(body?.language);
     const userId = normalizeOptionalString(body?.userId);
+    console.log("[Invitation] parsed body:", {
+      to,
+      name,
+      role,
+      inviteUrl,
+      hasTemporaryPassword: Boolean(temporaryPassword),
+      userId,
+      demoMode,
+    });
+    console.log("[Invitation] has RESEND_API_KEY:", Boolean(resendApiKey));
+    console.log("[Invitation] NUTRIPRO_FROM_EMAIL:", fromEmail);
 
     if (!to || !role || !inviteUrl) {
-      return jsonResponse({ ok: false, error: "to, role, and inviteUrl are required." }, 400);
+      console.error("[Invitation] missing required fields");
+      return jsonResponse({ ok: false, error: "to, role, and inviteUrl are required." }, 200);
     }
 
     const email = buildInvitationEmail({
@@ -261,11 +280,21 @@ serve(async (request) => {
       language,
     });
 
-    const resendResult = await sendResendEmail({
-      to,
-      subject: email.subject,
-      html: email.html,
-    });
+    console.log("[Invitation] sending email through Resend");
+    let resendResult;
+    try {
+      resendResult = await sendResendEmail({
+        to,
+        subject: email.subject,
+        html: email.html,
+      });
+    } catch (error) {
+      console.error("[Invitation] resend send failed:", error);
+      return jsonResponse(
+        { ok: false, error: error instanceof Error ? error.message : "Sending the invitation email failed." },
+        200,
+      );
+    }
 
     await updateInvitationStatus(adminClient, userId, {
       invitation_sent_at: nowIso(),
@@ -274,9 +303,11 @@ serve(async (request) => {
       updated_at: nowIso(),
     });
 
+    console.log("[Invitation] final success response:", { ok: true, id: resendResult?.id ?? null });
     return jsonResponse({ ok: true, id: resendResult?.id ?? null });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to send the invitation email.";
-    return jsonResponse({ ok: false, error: message }, 500);
+    console.error("[Invitation] function failure:", error);
+    return jsonResponse({ ok: false, error: message }, 200);
   }
 });
