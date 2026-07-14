@@ -1202,15 +1202,7 @@ function UsersAdminPanel({
       setMessage(t("auth.invitationSentSuccessfully"));
     } catch (inviteError) {
       console.error("Sending invitation failed:", inviteError);
-      const details = `${getErrorMessage(inviteError)}`.toLowerCase();
-      const functionMissing =
-        details.includes("non-2xx") ||
-        details.includes("not found") ||
-        details.includes("404") ||
-        details.includes("failed to send a request to the edge function");
-      const failureMessage = functionMissing
-        ? t("auth.invitationFunctionNotDeployed")
-        : `${t("auth.unableToSendInvitation")} ${getErrorMessage(inviteError)}`.trim();
+      const failureMessage = `${t("auth.unableToSendInvitation")} ${getErrorMessage(inviteError)}`.trim();
       setError(failureMessage);
     } finally {
       setInvitingUserId(null);
