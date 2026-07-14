@@ -8,8 +8,11 @@ const DEMO_STUDENT_ROLE = "student";
 const DEMO_STUDENT_STATUS = "active";
 const DEMO_ADMIN_EMAIL = "admin@nutripro.demo";
 const DEFAULT_ADMIN_USER_FUNCTION = "admin-user-management";
+const DEFAULT_SEND_INVITATION_FUNCTION = "send-invitation-email";
 const ADMIN_USER_FUNCTION =
   import.meta.env.VITE_SUPABASE_ADMIN_FUNCTION_NAME?.trim() || DEFAULT_ADMIN_USER_FUNCTION;
+const SEND_INVITATION_FUNCTION =
+  import.meta.env.VITE_SUPABASE_SEND_INVITATION_FUNCTION_NAME?.trim() || DEFAULT_SEND_INVITATION_FUNCTION;
 
 const OPTIONAL_USER_COLUMNS = [
   "auth_user_id",
@@ -20,6 +23,9 @@ const OPTIONAL_USER_COLUMNS = [
   "must_change_password",
   "password_updated_at",
   "last_login_at",
+  "invitation_sent_at",
+  "invitation_status",
+  "invitation_email_id",
   "updated_at",
 ];
 
@@ -98,6 +104,12 @@ function normalizeUser(row = {}) {
     created_at: row.created_at ?? row.createdAt ?? "",
     updatedAt: row.updated_at ?? row.updatedAt ?? "",
     updated_at: row.updated_at ?? row.updatedAt ?? "",
+    invitationSentAt: row.invitation_sent_at ?? row.invitationSentAt ?? "",
+    invitation_sent_at: row.invitation_sent_at ?? row.invitationSentAt ?? "",
+    invitationStatus: row.invitation_status ?? row.invitationStatus ?? "",
+    invitation_status: row.invitation_status ?? row.invitationStatus ?? "",
+    invitationEmailId: row.invitation_email_id ?? row.invitationEmailId ?? "",
+    invitation_email_id: row.invitation_email_id ?? row.invitationEmailId ?? "",
   };
 }
 
@@ -213,6 +225,32 @@ async function invokeAdminUserFunction(body) {
   }
 
   return data ?? {};
+}
+
+async function invokeInvitationFunction(body) {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data, error } = await supabase.functions.invoke(SEND_INVITATION_FUNCTION, {
+    body,
+  });
+
+  if (error) {
+    console.error("Invitation function invocation failed:", error);
+    const nextError = new Error("Invitation function call failed.");
+    nextError.code = "INVITATION_FUNCTION_ERROR";
+    nextError.cause = error;
+    throw nextError;
+  }
+
+  if (!data?.ok) {
+    const nextError = new Error(data?.error || "Invitation function call failed.");
+    nextError.code = "INVITATION_FUNCTION_ERROR";
+    throw nextError;
+  }
+
+  return data;
 }
 
 export async function resolveLoginEmail(identifier) {
@@ -771,6 +809,77 @@ export async function resetAdminUserPassword(userId, temporaryPassword = "", opt
     user: normalizeUser(data ?? {}),
     temporaryPassword: normalizeOptionalString(temporaryPassword) || createTemporaryPassword(),
     emailSent: false,
+  };
+}
+
+export async function sendUserInvitation(user = {}, options = {}) {
+  const email = normalizeOptionalString(user.email)?.toLowerCase();
+  if (!email) {
+    throw new Error("Email required to send invitation.");
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const language = normalizeOptionalString(options.language) || "es";
+  const inviteUrl =
+    normalizeOptionalString(options.inviteUrl) ||
+    (typeof window !== "undefined" ? `${window.location.origin}/` : "https://nutripro-lms.vercel.app/");
+
+  let response;
+  try {
+    response = await invokeInvitationFunction({
+      userId: user.id ?? null,
+      to: email,
+      name: normalizeOptionalString(user.name),
+      role: normalizeRoleValue(user.roleKey ?? user.role),
+      temporaryPassword: normalizeOptionalString(options.temporaryPassword),
+      inviteUrl,
+      invitedBy: normalizeOptionalString(options.invitedBy),
+      language,
+    });
+  } catch (error) {
+    if (user?.id) {
+      try {
+        await runUserMutationWithOptionalColumnRetry(
+          (payload) =>
+            supabase.from("users").update(payload).eq("id", user.id).select("*").single(),
+          {
+            invitation_status: "failed",
+            updated_at: nowIso(),
+          },
+        );
+      } catch (trackingError) {
+        console.warn("Saving failed invitation status in public.users failed:", trackingError);
+      }
+    }
+    throw error;
+  }
+
+  const invitationPayload = {
+    invitation_sent_at: nowIso(),
+    invitation_status: "sent",
+    invitation_email_id: response?.id ?? null,
+    updated_at: nowIso(),
+  };
+
+  let updatedUser = normalizeUser(user);
+  try {
+    const data = await runUserMutationWithOptionalColumnRetry(
+      (payload) =>
+        supabase.from("users").update(payload).eq("id", user.id).select("*").single(),
+      invitationPayload,
+    );
+    updatedUser = normalizeUser(data);
+  } catch (trackingError) {
+    console.warn("Updating invitation tracking in public.users failed:", trackingError);
+  }
+
+  return {
+    ok: true,
+    id: response?.id ?? "",
+    user: updatedUser,
   };
 }
 

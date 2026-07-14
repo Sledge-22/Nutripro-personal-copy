@@ -690,6 +690,7 @@ export function AdminWorkspacePage({
   onUpdateUser,
   onCreateUser,
   onResetUserPassword,
+  onSendUserInvitation,
   onDeleteUser,
   onSetStudentCourseAssignments,
   onSaveCourse,
@@ -705,11 +706,13 @@ export function AdminWorkspacePage({
     return (
       <UsersAdminPanel
         users={users}
+        currentUser={currentUser}
         showAuthTestTools={showAuthTestTools}
         onUpdateUserStatus={onUpdateUserStatus}
         onUpdateUser={onUpdateUser}
         onCreateUser={onCreateUser}
         onResetUserPassword={onResetUserPassword}
+        onSendUserInvitation={onSendUserInvitation}
         onDeleteUser={onDeleteUser}
         courses={courses}
         onSetStudentCourseAssignments={onSetStudentCourseAssignments}
@@ -948,11 +951,13 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
 function UsersAdminPanel({
   users,
   courses,
+  currentUser,
   showAuthTestTools,
   onUpdateUserStatus,
   onUpdateUser,
   onCreateUser,
   onResetUserPassword,
+  onSendUserInvitation,
   onDeleteUser,
   onSetStudentCourseAssignments,
 }) {
@@ -971,12 +976,19 @@ function UsersAdminPanel({
   const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [resettingUserId, setResettingUserId] = useState(null);
+  const [invitingUserId, setInvitingUserId] = useState(null);
   const [deletingUserId, setDeletingUserId] = useState(null);
   const [statusUpdatingUserId, setStatusUpdatingUserId] = useState(null);
   const [pendingDeleteUser, setPendingDeleteUser] = useState(null);
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [assignmentDraftCourseIds, setAssignmentDraftCourseIds] = useState([]);
   const [savingAssignments, setSavingAssignments] = useState(false);
+  const [testInviteDraft, setTestInviteDraft] = useState({
+    email: "",
+    name: "",
+    role: "student",
+    temporaryPassword: "",
+  });
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
@@ -1154,6 +1166,55 @@ function UsersAdminPanel({
     } finally {
       setResettingUserId(null);
     }
+  };
+
+  const sendInvitation = async (user, options = {}) => {
+    if (!user?.email) {
+      setError(t("auth.emailRequiredToSendInvitation"));
+      return;
+    }
+
+    setInvitingUserId(user.id || "test");
+    setMessage("");
+    setError("");
+
+    try {
+      await onSendUserInvitation(user, {
+        language,
+        invitedBy: currentUser?.name || "",
+        temporaryPassword: options.temporaryPassword || "",
+        inviteUrl: `${window.location.origin}/`,
+      });
+      setMessage(t("auth.invitationSentSuccessfully"));
+    } catch (inviteError) {
+      console.error("Sending invitation failed:", inviteError);
+      const details = `${inviteError?.message ?? ""}`.toLowerCase();
+      const isFunctionIssue =
+        inviteError?.code === "INVITATION_FUNCTION_ERROR" ||
+        details.includes("function") ||
+        details.includes("non-2xx") ||
+        details.includes("edge function") ||
+        details.includes("authorization") ||
+        details.includes("supabase function");
+      const failureMessage = isFunctionIssue
+        ? t("auth.productionFunctionNotConfigured")
+        : `${t("auth.unableToSendInvitation")} ${inviteError?.message || ""}`.trim();
+      setError(failureMessage);
+    } finally {
+      setInvitingUserId(null);
+    }
+  };
+
+  const sendTestInvitation = async () => {
+    await sendInvitation(
+      {
+        id: "test-invitation",
+        name: testInviteDraft.name,
+        email: testInviteDraft.email,
+        roleKey: testInviteDraft.role,
+      },
+      { temporaryPassword: testInviteDraft.temporaryPassword },
+    );
   };
 
   const copyTemporaryPassword = async () => {
@@ -1338,9 +1399,55 @@ function UsersAdminPanel({
           <div className="credential-card">
             <strong>{t("auth.productionOnboardingTools")}</strong>
             <p>{t("auth.productionToolsHelp")}</p>
+            <div className="community-form-grid">
+              <label>
+                {t("auth.email")}
+                <input
+                  type="email"
+                  value={testInviteDraft.email}
+                  onChange={(event) => setTestInviteDraft((current) => ({ ...current, email: event.target.value }))}
+                  placeholder="student@example.com"
+                />
+              </label>
+              <label>
+                {t("auth.name")}
+                <input
+                  value={testInviteDraft.name}
+                  onChange={(event) => setTestInviteDraft((current) => ({ ...current, name: event.target.value }))}
+                />
+              </label>
+              <label>
+                {t("auth.role")}
+                <select
+                  value={testInviteDraft.role}
+                  onChange={(event) => setTestInviteDraft((current) => ({ ...current, role: event.target.value }))}
+                >
+                  <option value="student">{translateRole("student")}</option>
+                  <option value="instructor">{translateRole("instructor")}</option>
+                  <option value="support">{translateRole("support")}</option>
+                  <option value="admin">{translateRole("admin")}</option>
+                </select>
+              </label>
+              <label>
+                {t("auth.temporaryPassword")}
+                <input
+                  value={testInviteDraft.temporaryPassword}
+                  onChange={(event) => setTestInviteDraft((current) => ({ ...current, temporaryPassword: event.target.value }))}
+                />
+              </label>
+            </div>
             <div className="form-actions compact">
               <button type="button" className="secondary-btn" onClick={() => window.open(ROUTES.auth.setupPreview, "_blank", "noopener,noreferrer")}>
                 {t("auth.previewFirstTimeSetup")}
+              </button>
+              <button
+                type="button"
+                className="primary-btn"
+                disabled={!testInviteDraft.email || invitingUserId === "test-invitation"}
+                onClick={() => void sendTestInvitation()}
+                title={!testInviteDraft.email ? t("auth.emailRequiredToSendInvitation") : ""}
+              >
+                {invitingUserId === "test-invitation" ? t("auth.sendingInvitation") : t("auth.sendTestInvitation")}
               </button>
             </div>
           </div>
@@ -1464,6 +1571,13 @@ function UsersAdminPanel({
                                 {t("auth.sendNewTemporaryPassword")}
                               </button>
                             ) : null}
+                            <button
+                              onClick={() => void sendInvitation(user)}
+                              disabled={!user.email || invitingUserId === user.id}
+                              title={!user.email ? t("auth.emailRequiredToSendInvitation") : ""}
+                            >
+                              {invitingUserId === user.id ? t("auth.sendingInvitation") : t("auth.sendInvitation")}
+                            </button>
                             <button onClick={() => void applyStatusChange(user, "active")} disabled={statusUpdatingUserId === user.id}>{t("admin.activate")}</button>
                             <button onClick={() => void applyStatusChange(user, "inactive")} disabled={statusUpdatingUserId === user.id}>{t("admin.deactivate")}</button>
                             <button onClick={() => void applyStatusChange(user, "suspended")} disabled={statusUpdatingUserId === user.id}>{t("auth.suspendUser")}</button>

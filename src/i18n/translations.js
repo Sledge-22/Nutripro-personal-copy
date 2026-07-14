@@ -297,6 +297,11 @@ export const translations = {
       emailSimulationMode: "Modo simulaci\u00f3n de correo",
       testingOnlyTemporaryPassword: "Solo pruebas: esta contrase\u00f1a temporal simulada no se guarda en public.users.",
       previewFirstTimeSetup: "Previsualizar configuraci\u00f3n inicial",
+      emailRequiredToSendInvitation: "Se requiere correo electr\u00f3nico para enviar la invitaci\u00f3n",
+      sendingInvitation: "Enviando invitaci\u00f3n...",
+      invitationSentSuccessfully: "Invitaci\u00f3n enviada correctamente.",
+      unableToSendInvitation: "No se pudo enviar la invitaci\u00f3n:",
+      sendTestInvitation: "Enviar invitaci\u00f3n de prueba",
     },
     login: {
       eyebrow: "BIENVENIDO A NUTRIPRO",
@@ -1020,6 +1025,11 @@ export const translations = {
       emailSimulationMode: "Email simulation mode",
       testingOnlyTemporaryPassword: "Testing only: this simulated temporary password is not stored in public.users.",
       previewFirstTimeSetup: "Preview first-time setup",
+      emailRequiredToSendInvitation: "Email required to send invitation",
+      sendingInvitation: "Sending invitation...",
+      invitationSentSuccessfully: "Invitation sent successfully.",
+      unableToSendInvitation: "Unable to send invitation:",
+      sendTestInvitation: "Send test invitation",
     },
     login: {
       eyebrow: "WELCOME TO NUTRIPRO",
