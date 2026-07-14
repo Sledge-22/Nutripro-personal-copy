@@ -1327,7 +1327,7 @@ function UsersAdminPanel({
             <code>{temporaryPassword}</code>
             {isSimulationMode ? <small className="field-note">{t("auth.testingOnlyTemporaryPassword")}</small> : null}
             <div className="form-actions compact">
-              <button type="button" onClick={() => void copyTemporaryPassword()}>
+              <button type="button" className="secondary-btn" onClick={() => void copyTemporaryPassword()}>
                 {t("auth.copyPassword")}
               </button>
             </div>
@@ -1339,7 +1339,7 @@ function UsersAdminPanel({
             <strong>{t("auth.productionOnboardingTools")}</strong>
             <p>{t("auth.productionToolsHelp")}</p>
             <div className="form-actions compact">
-              <button type="button" onClick={() => window.open(ROUTES.auth.setupPreview, "_blank", "noopener,noreferrer")}>
+              <button type="button" className="secondary-btn" onClick={() => window.open(ROUTES.auth.setupPreview, "_blank", "noopener,noreferrer")}>
                 {t("auth.previewFirstTimeSetup")}
               </button>
             </div>
