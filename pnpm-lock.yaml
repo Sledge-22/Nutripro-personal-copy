@@ -11,6 +11,9 @@ importers:
       '@supabase/supabase-js':
         specifier: 2.53.0
         version: 2.53.0
+      flag-icons:
+        specifier: ^7.5.0
+        version: 7.5.0
       react:
         specifier: 19.1.0
         version: 19.1.0
@@ -491,6 +494,9 @@ packages:
   escalade@3.2.0:
     resolution: {integrity: sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==}
     engines: {node: '>=6'}
+
+  flag-icons@7.5.0:
+    resolution: {integrity: sha512-kd+MNXviFIg5hijH766tt+3x76ele1AXlo4zDdCxIvqWZhKt4T83bOtxUOOMlTx/EcFdUMH5yvQgYlFh1EqqFg==}
 
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
@@ -1053,6 +1059,8 @@ snapshots:
       '@esbuild/win32-x64': 0.21.5
 
   escalade@3.2.0: {}
+
+  flag-icons@7.5.0: {}
 
   fsevents@2.3.3:
     optional: true

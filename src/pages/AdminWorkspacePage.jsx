@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CountryFlag from "../components/CountryFlag.jsx";
 import { Icon, OverviewCard, Stat, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
 import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
@@ -931,8 +932,13 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
                       </select>
                     ) : (
                       user.country ? (
-                        <span className="subtle-badge profile-country-badge">
-                          {(user.country_flag || user.countryFlag) ? <span className="country-flag profile-country-flag" aria-hidden="true">{user.country_flag || user.countryFlag}</span> : null}
+                        <span className="subtle-badge profile-country-badge country-badge">
+                          <CountryFlag
+                            code={user.country_code || user.countryCode}
+                            name={user.country}
+                            fallbackFlag={user.country_flag || user.countryFlag}
+                            className="profile-country-flag"
+                          />
                           <span>{user.country}</span>
                         </span>
                       ) : "—"
@@ -1585,8 +1591,13 @@ function UsersAdminPanel({
                         </select>
                       ) : (
                         user.country ? (
-                          <span className="subtle-badge profile-country-badge">
-                            {(user.country_flag || user.countryFlag) ? <span className="country-flag profile-country-flag" aria-hidden="true">{user.country_flag || user.countryFlag}</span> : null}
+                          <span className="subtle-badge profile-country-badge country-badge">
+                            <CountryFlag
+                              code={user.country_code || user.countryCode}
+                              name={user.country}
+                              fallbackFlag={user.country_flag || user.countryFlag}
+                              className="profile-country-flag"
+                            />
                             <span>{user.country}</span>
                           </span>
                         ) : "—"

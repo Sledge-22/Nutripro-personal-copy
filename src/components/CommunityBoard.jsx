@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import CountryFlag from "./CountryFlag.jsx";
 import { Icon } from "./ui.jsx";
 import { isModeratorRole } from "../services/communityService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
@@ -129,13 +130,14 @@ function CommunityMetaBadges({ post, courseTitle, canModerate, t }) {
 }
 
 function CommunityCountryBadge({ post }) {
+  const code = post.authorCountryCode || post.author_country_code || post.countryCode || post.country_code;
   const flag = post.authorCountryFlag || post.author_country_flag || post.countryFlag || post.country_flag;
   const name = post.authorCountryName || post.author_country_name || post.countryName || post.country_name || post.country;
   if (!flag && !name) return null;
 
   return (
-    <span className="community-country-badge" aria-label={name || "Country"}>
-      {flag ? <span className="country-flag community-country-flag" aria-hidden="true">{flag}</span> : null}
+    <span className="community-country-badge country-badge" aria-label={name || "Country"}>
+      <CountryFlag code={code} name={name} fallbackFlag={flag} className="community-country-flag" />
       {name ? <span>{name}</span> : null}
     </span>
   );

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { CertificateModal, Icon, Progress, Stat, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
+import CountryFlag from "../components/CountryFlag.jsx";
 import { ROUTES } from "../routes/appRoutes.js";
 import { getStudentSubmission, submitAssignment } from "../services/assignmentService.js";
 import { getStudentCourseAccess } from "../services/courseService.js";
@@ -472,8 +473,13 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
             <h2>{form.name || profile?.name || "Maya Laurent"}</h2>
             <p>{form.email || profile?.email || "maya@nutripro.demo"}</p>
             {selectedCountry.country ? (
-              <span className="subtle-badge profile-country-badge">
-                {selectedCountry.countryFlag ? <span className="country-flag profile-country-flag" aria-hidden="true">{selectedCountry.countryFlag}</span> : null}
+              <span className="subtle-badge profile-country-badge country-badge">
+                <CountryFlag
+                  code={selectedCountry.countryCode}
+                  name={selectedCountry.country}
+                  fallbackFlag={selectedCountry.countryFlag}
+                  className="profile-country-flag"
+                />
                 <span>{selectedCountry.country}</span>
               </span>
             ) : null}

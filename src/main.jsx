@@ -1,5 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import "flag-icons/css/flag-icons.min.css";
 import "../styles.css";
 import { App } from "./App.jsx";
 import { LanguageProvider } from "./i18n/LanguageContext.jsx";

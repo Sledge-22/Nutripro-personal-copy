@@ -525,12 +525,31 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
 .profile-country-flag,
 .community-country-flag,
 .country-option-flag {
+  display: inline-flex;
+  align-items: center;
+}
+.country-flag-icon {
+  width: 1.25em;
+  height: 0.9em;
+  display: inline-block;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+  flex: 0 0 auto;
+}
+.country-flag-emoji {
+  width: auto;
+  height: auto;
+  box-shadow: none;
+  border-radius: 0;
   font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif;
   font-style: normal;
   font-weight: 400;
   line-height: 1;
+}
+.country-badge {
   display: inline-flex;
   align-items: center;
+  gap: 0.45rem;
 }
 .community-country-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,248,231,.12); background: rgba(255,255,255,.05); color: var(--color-text); font-size: .8rem; font-weight: 600; line-height: 1; }
 .community-country-badge span { color: inherit; font-size: inherit; }
