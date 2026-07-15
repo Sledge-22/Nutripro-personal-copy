@@ -78,6 +78,7 @@ export const translations = {
       student: "Estudiante",
       course: "Curso",
       country: "País",
+      selectCountry: "Selecciona tu pa�s",
       bio: "Biografía",
       profilePicture: "Foto de perfil",
       changePicture: "Cambiar foto",
@@ -555,7 +556,7 @@ export const translations = {
       profilePictureReady: "La foto de perfil está lista para guardarse.",
       profilePictureUploadFailed: "No se pudo subir la foto de perfil.",
       uploadingProfilePicture: "Subiendo foto de perfil...",
-      countryPlaceholder: "Tu país",
+      countryPlaceholder: "Selecciona tu país",
       bioPlaceholder: "Cuéntale a la comunidad un poco sobre ti.",
       loadingCourse: "Cargando curso...",
       checkingEnrollment: "Comprobando la inscripción de Maya Laurent y el registro del curso seleccionado.",
@@ -824,6 +825,7 @@ export const translations = {
       student: "Student",
       course: "Course",
       country: "Country",
+      selectCountry: "Select your country",
       bio: "Bio",
       profilePicture: "Profile picture",
       changePicture: "Change picture",
@@ -1301,7 +1303,7 @@ export const translations = {
       profilePictureReady: "The profile picture is ready to save.",
       profilePictureUploadFailed: "Uploading the profile picture failed.",
       uploadingProfilePicture: "Uploading profile picture...",
-      countryPlaceholder: "Your country",
+      countryPlaceholder: "Select your country",
       bioPlaceholder: "Tell the community a little about yourself.",
       loadingCourse: "Loading course...",
       checkingEnrollment: "Checking Maya Laurent's enrollment and the selected course record.",
@@ -1492,6 +1494,7 @@ export const translations = {
     },
   },
 };
+
 
 
 

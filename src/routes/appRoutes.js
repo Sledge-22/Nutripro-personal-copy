@@ -1,5 +1,6 @@
 export const ROUTES = {
-  login: "/",
+  home: "/",
+  login: "/login",
   auth: {
     changePassword: "/auth/change-password",
     setupPreview: "/auth/change-password-preview",
@@ -12,6 +13,7 @@ export const ROUTES = {
     community: "/admin/community",
     assignmentReviews: "/admin/assignment-reviews",
     certificates: "/admin/certificates",
+    settings: "/admin/settings",
   },
   student: {
     dashboard: "/student",

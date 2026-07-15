@@ -5,6 +5,7 @@ import CountryFlag from "../components/CountryFlag.jsx";
 import CountrySelect from "../components/CountrySelect.jsx";
 import { ROUTES } from "../routes/appRoutes.js";
 import { getStudentSubmission, submitAssignment } from "../services/assignmentService.js";
+import { changePassword } from "../services/authService.js";
 import { getStudentCourseAccess } from "../services/courseService.js";
 import { uploadAssignmentFile, uploadProfilePicture } from "../services/storageService.js";
 import { normalizeCountrySelection } from "../data/countries.js";
@@ -166,6 +167,7 @@ export function StudentWorkspacePage({
   certificates,
   posts,
   progressState,
+  authMode = "demo",
   onCreatePost,
   onCreateComment,
   onUpdatePost,
@@ -300,7 +302,7 @@ export function StudentWorkspacePage({
   }
 
   if (pathname === ROUTES.student.profile) {
-    return <StudentProfilePage profile={studentProfile} onUpdateProfile={onUpdateProfile} />;
+    return <StudentProfilePage profile={studentProfile} authMode={authMode} onUpdateProfile={onUpdateProfile} />;
   }
 
   if (pathname === ROUTES.student.certificates) {
@@ -374,7 +376,7 @@ function StudentDashboardPage({ courses, certificates, progressFor }) {
   );
 }
 
-function StudentProfilePage({ profile, onUpdateProfile }) {
+function StudentProfilePage({ profile, authMode = "demo", onUpdateProfile }) {
   const { t, language } = useLanguage();
   const countryOptions = getProfileCountryOptions();
   const translatedSelectCountry = t("common.selectCountry");
@@ -399,6 +401,20 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ nextPassword: "", confirmPassword: "" });
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const passwordStrengthText = t("auth.passwordStrengthRequirement") !== "auth.passwordStrengthRequirement"
+    ? t("auth.passwordStrengthRequirement")
+    : language === "es"
+      ? "La contraseña debe incluir al menos 10 caracteres, letras mayúsculas y minúsculas, un número y un símbolo."
+      : "Password must include at least 10 characters, uppercase and lowercase letters, a number, and a symbol.";
+  const demoPasswordUnavailableText = t("auth.demoPasswordChangeUnavailable") !== "auth.demoPasswordChangeUnavailable"
+    ? t("auth.demoPasswordChangeUnavailable")
+    : language === "es"
+      ? "Los cambios de contraseña están disponibles solo para cuentas de producción."
+      : "Password changes are available for production accounts only.";
 
   useEffect(() => {
     const nextCountry = normalizeCountrySelection(
@@ -461,6 +477,46 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
       setError(uploadError.message || t("student.profilePictureUploadFailed"));
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handlePasswordChange = async (event) => {
+    event.preventDefault();
+    setPasswordMessage("");
+    setPasswordError("");
+
+    if (authMode !== "production") {
+      setPasswordError(demoPasswordUnavailableText);
+      return;
+    }
+
+    const { nextPassword, confirmPassword } = passwordForm;
+    if (
+      nextPassword.length < 10 ||
+      !/[A-Z]/.test(nextPassword) ||
+      !/[a-z]/.test(nextPassword) ||
+      !/\d/.test(nextPassword) ||
+      !/[^A-Za-z0-9]/.test(nextPassword)
+    ) {
+      setPasswordError(passwordStrengthText);
+      return;
+    }
+
+    if (nextPassword !== confirmPassword) {
+      setPasswordError(t("auth.passwordsDoNotMatch"));
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      await changePassword(profile?.id, nextPassword);
+      setPasswordForm({ nextPassword: "", confirmPassword: "" });
+      setPasswordMessage(t("auth.passwordUpdated"));
+    } catch (changeError) {
+      console.error("Changing the profile password failed:", changeError);
+      setPasswordError(changeError.message || t("auth.passwordChangeFailed"));
+    } finally {
+      setPasswordSaving(false);
     }
   };
 
@@ -535,6 +591,50 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
             <button className="primary-btn" type="submit" disabled={saving || uploading}>
               <Icon name="check" />
               {saving ? t("common.saving") : t("common.saveChanges")}
+            </button>
+          </div>
+        </form>
+
+        <form onSubmit={handlePasswordChange} className="profile-password-form">
+          <div className="profile-password-header">
+            <span className="eyebrow">{t("auth.changePassword")}</span>
+            <h3>{t("auth.changePassword")}</h3>
+          </div>
+
+          {authMode === "production" ? (
+            <>
+              <label>
+                {t("auth.newPassword")}
+                <input
+                  type="password"
+                  value={passwordForm.nextPassword}
+                  onChange={(event) => setPasswordForm((current) => ({ ...current, nextPassword: event.target.value }))}
+                  autoComplete="new-password"
+                />
+              </label>
+
+              <label>
+                {t("auth.confirmPassword")}
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+                  autoComplete="new-password"
+                />
+              </label>
+
+              <small className="field-note">{passwordStrengthText}</small>
+            </>
+          ) : (
+            <small className="field-note">{demoPasswordUnavailableText}</small>
+          )}
+
+          {passwordMessage ? <small className="field-note">{passwordMessage}</small> : null}
+          {passwordError ? <small className="field-note danger-text">{passwordError}</small> : null}
+
+          <div className="form-actions">
+            <button className="secondary-btn" type="submit" disabled={passwordSaving || authMode !== "production"}>
+              {passwordSaving ? t("common.saving") : t("auth.changePassword")}
             </button>
           </div>
         </form>

@@ -3,26 +3,38 @@ import { Brand } from "../components/ui.jsx";
 import { LanguageDropdown } from "../components/LanguageDropdown.jsx";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 
-export function ForcedPasswordPage({ onSubmit, loading = false }) {
-  const { t } = useLanguage();
-  const [username, setUsername] = useState("");
+export function ForcedPasswordPage({ onSubmit, loading = false, currentUsername = "" }) {
+  const { t, language } = useLanguage();
+  const [username, setUsername] = useState(currentUsername || "");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const needsUsername = !`${currentUsername ?? ""}`.trim();
+  const passwordStrengthText = t("auth.passwordStrengthRequirement") !== "auth.passwordStrengthRequirement"
+    ? t("auth.passwordStrengthRequirement")
+    : language === "es"
+      ? "La contraseña debe incluir al menos 10 caracteres, letras mayúsculas y minúsculas, un número y un símbolo."
+      : "Password must include at least 10 characters, uppercase and lowercase letters, a number, and a symbol.";
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
     setMessage("");
 
-    if (!username.trim()) {
+    if (needsUsername && !username.trim()) {
       setError(t("auth.chooseUsername"));
       return;
     }
 
-    if (newPassword.length < 8) {
-      setError(t("auth.passwordMinLength"));
+    if (
+      newPassword.length < 10 ||
+      !/[A-Z]/.test(newPassword) ||
+      !/[a-z]/.test(newPassword) ||
+      !/\d/.test(newPassword) ||
+      !/[^A-Za-z0-9]/.test(newPassword)
+    ) {
+      setError(passwordStrengthText);
       return;
     }
 
@@ -61,16 +73,18 @@ export function ForcedPasswordPage({ onSubmit, loading = false }) {
         </div>
 
         <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
-          <label>
-            {t("auth.chooseUsername")}
-            <input
-              type="text"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              autoComplete="username"
-              required
-            />
-          </label>
+          {needsUsername ? (
+            <label>
+              {t("auth.chooseUsername")}
+              <input
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoComplete="username"
+                required
+              />
+            </label>
+          ) : null}
 
           <label>
             {t("auth.newPassword")}
@@ -82,6 +96,8 @@ export function ForcedPasswordPage({ onSubmit, loading = false }) {
               required
             />
           </label>
+
+          <small className="field-note">{passwordStrengthText}</small>
 
           <label>
             {t("auth.confirmPassword")}

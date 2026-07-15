@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import {
+  markPasswordChanged,
   finalizeUserOnboarding,
   getUserProfileForAuthUser,
   recordUserLogin,
@@ -9,6 +10,17 @@ import {
 
 function normalizeIdentifier(identifier) {
   return `${identifier ?? ""}`.trim();
+}
+
+export function validatePasswordStrength(password) {
+  const value = `${password ?? ""}`;
+  return (
+    value.length >= 10 &&
+    /[A-Z]/.test(value) &&
+    /[a-z]/.test(value) &&
+    /\d/.test(value) &&
+    /[^A-Za-z0-9]/.test(value)
+  );
 }
 
 export function isAuthConfigured() {
@@ -88,8 +100,8 @@ export async function changePassword(userId, nextPassword) {
   }
 
   const normalizedPassword = `${nextPassword ?? ""}`;
-  if (normalizedPassword.length < 8) {
-    throw new Error("Password must be at least 8 characters.");
+  if (!validatePasswordStrength(normalizedPassword)) {
+    throw new Error("Password must include at least 10 characters, uppercase and lowercase letters, a number, and a symbol.");
   }
 
   const { data, error } = await supabase.auth.updateUser({ password: normalizedPassword });
@@ -106,25 +118,25 @@ export async function changePassword(userId, nextPassword) {
   };
 }
 
-export async function completeFirstTimeSetup(userId, username, nextPassword) {
+export async function completeFirstTimeSetup(userId, username, nextPassword, currentUsername = "") {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase Auth is not configured.");
   }
 
   const normalizedUsername = `${username ?? ""}`.trim().toLowerCase();
+  const normalizedCurrentUsername = `${currentUsername ?? ""}`.trim().toLowerCase();
   const normalizedPassword = `${nextPassword ?? ""}`;
 
-  if (!normalizedUsername) {
-    throw new Error("Username is required.");
+  if (!validatePasswordStrength(normalizedPassword)) {
+    throw new Error("Password must include at least 10 characters, uppercase and lowercase letters, a number, and a symbol.");
   }
 
-  if (normalizedPassword.length < 8) {
-    throw new Error("Password must be at least 8 characters.");
-  }
-
-  const available = await isUsernameAvailable(normalizedUsername, userId);
-  if (!available) {
-    throw new Error("Username is not available.");
+  const nextUsername = normalizedUsername || normalizedCurrentUsername;
+  if (normalizedUsername) {
+    const available = await isUsernameAvailable(normalizedUsername, userId);
+    if (!available) {
+      throw new Error("Username is not available.");
+    }
   }
 
   const { data, error } = await supabase.auth.updateUser({ password: normalizedPassword });
@@ -132,7 +144,9 @@ export async function completeFirstTimeSetup(userId, username, nextPassword) {
 
   let profile = null;
   if (userId) {
-    profile = await finalizeUserOnboarding(userId, normalizedUsername);
+    profile = nextUsername
+      ? await finalizeUserOnboarding(userId, nextUsername)
+      : await markPasswordChanged(userId);
   } else if (data.user) {
     profile = await getUserProfileForAuthUser(data.user);
   }

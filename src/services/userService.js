@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
+import { normalizeCountrySelection } from "../data/countries.js";
 import { createMockId, getMockUsers, setMockUsers } from "./mockStore.js";
 
 export const DEMO_STUDENT_NAME = "Maya Laurent";
@@ -19,6 +20,9 @@ const OPTIONAL_USER_COLUMNS = [
   "username",
   "profile_picture_url",
   "country",
+  "country_code",
+  "country_name",
+  "country_flag",
   "bio",
   "must_change_password",
   "password_updated_at",
@@ -78,6 +82,9 @@ function normalizeUser(row = {}) {
   const mustChangePassword = Boolean(row.must_change_password ?? row.mustChangePassword ?? false);
   const profilePictureUrl = row.profile_picture_url ?? row.profilePictureUrl ?? "";
   const authUserId = row.auth_user_id ?? row.authUserId ?? "";
+  const normalizedCountry = normalizeCountrySelection(
+    row.country_code ?? row.countryCode ?? row.country_name ?? row.countryName ?? row.country,
+  );
 
   return {
     id: row.id,
@@ -90,7 +97,13 @@ function normalizeUser(row = {}) {
     roleKey: role,
     status: toDisplayStatus(status),
     statusKey: status,
-    country: normalizeOptionalString(row.country),
+    country: normalizedCountry.country || normalizeOptionalString(row.country),
+    countryCode: normalizedCountry.countryCode || normalizeOptionalString(row.country_code ?? row.countryCode),
+    country_code: normalizedCountry.countryCode || normalizeOptionalString(row.country_code ?? row.countryCode),
+    countryName: normalizedCountry.countryName || normalizeOptionalString(row.country_name ?? row.countryName ?? row.country),
+    country_name: normalizedCountry.countryName || normalizeOptionalString(row.country_name ?? row.countryName ?? row.country),
+    countryFlag: normalizedCountry.countryFlag || normalizeOptionalString(row.country_flag ?? row.countryFlag),
+    country_flag: normalizedCountry.countryFlag || normalizeOptionalString(row.country_flag ?? row.countryFlag),
     bio: normalizeOptionalString(row.bio),
     profilePictureUrl,
     profile_picture_url: profilePictureUrl,
@@ -115,13 +128,35 @@ function normalizeUser(row = {}) {
 
 function normalizeUserUpdate(updates = {}) {
   const payload = {};
+  const hasCountryUpdate =
+    "country" in updates ||
+    "country_code" in updates ||
+    "countryCode" in updates ||
+    "country_name" in updates ||
+    "countryName" in updates ||
+    "country_flag" in updates ||
+    "countryFlag" in updates;
 
   if ("name" in updates) payload.name = normalizeOptionalString(updates.name) || null;
   if ("email" in updates) payload.email = normalizeOptionalString(updates.email).toLowerCase() || null;
   if ("username" in updates) payload.username = normalizeOptionalString(updates.username).toLowerCase() || null;
   if ("role" in updates) payload.role = normalizeRoleValue(updates.role);
   if ("status" in updates) payload.status = normalizeStatusValue(updates.status);
-  if ("country" in updates) payload.country = normalizeOptionalString(updates.country) || null;
+  if (hasCountryUpdate) {
+    const normalizedCountry = normalizeCountrySelection(
+      updates.country_code ??
+        updates.countryCode ??
+        updates.country_name ??
+        updates.countryName ??
+        updates.country ??
+        updates.country_flag ??
+        updates.countryFlag,
+    );
+    payload.country = normalizedCountry.country || null;
+    payload.country_code = normalizedCountry.countryCode || null;
+    payload.country_name = normalizedCountry.countryName || null;
+    payload.country_flag = normalizedCountry.countryFlag || null;
+  }
   if ("bio" in updates) payload.bio = normalizeOptionalString(updates.bio) || null;
   if ("must_change_password" in updates || "mustChangePassword" in updates) {
     payload.must_change_password = Boolean(updates.must_change_password ?? updates.mustChangePassword);
@@ -180,6 +215,9 @@ async function runUserMutationWithOptionalColumnRetry(operation, payload, attemp
 function buildMockUser(payload, existingId = null) {
   const users = getMockUsers();
   const id = existingId ?? createMockId(users);
+  const normalizedCountry = normalizeCountrySelection(
+    payload.country_code ?? payload.countryCode ?? payload.country_name ?? payload.countryName ?? payload.country,
+  );
   return {
     id,
     auth_user_id: payload.auth_user_id ?? "",
@@ -188,7 +226,10 @@ function buildMockUser(payload, existingId = null) {
     username: payload.username ?? "",
     role: toDisplayRole(payload.role),
     status: toDisplayStatus(payload.status),
-    country: payload.country ?? "",
+    country: normalizedCountry.country || payload.country || "",
+    country_code: normalizedCountry.countryCode || payload.country_code || "",
+    country_name: normalizedCountry.countryName || payload.country_name || payload.country || "",
+    country_flag: normalizedCountry.countryFlag || payload.country_flag || "",
     bio: payload.bio ?? "",
     profile_picture_url: payload.profile_picture_url ?? "",
     must_change_password: Boolean(payload.must_change_password),
@@ -580,13 +621,19 @@ export async function finalizeUserOnboarding(userId, username) {
 }
 
 async function createUserProfileOnly(payload = {}) {
+  const normalizedCountry = normalizeCountrySelection(
+    payload.country_code ?? payload.countryCode ?? payload.country_name ?? payload.countryName ?? payload.country,
+  );
   const normalizedPayload = {
     name: normalizeOptionalString(payload.name),
     email: normalizeOptionalString(payload.email).toLowerCase(),
     username: normalizeOptionalString(payload.username).toLowerCase(),
     role: normalizeRoleValue(payload.role),
     status: normalizeStatusValue(payload.status),
-    country: normalizeOptionalString(payload.country) || null,
+    country: normalizedCountry.country || null,
+    country_code: normalizedCountry.countryCode || null,
+    country_name: normalizedCountry.countryName || null,
+    country_flag: normalizedCountry.countryFlag || null,
     bio: normalizeOptionalString(payload.bio) || null,
     profile_picture_url: normalizeOptionalString(payload.profile_picture_url ?? payload.profilePictureUrl) || null,
     must_change_password: false,
@@ -638,7 +685,10 @@ export async function createAdminUser(payload = {}, options = {}) {
     username: normalizeOptionalString(payload.username).toLowerCase(),
     role: normalizeRoleValue(payload.role),
     status: normalizeStatusValue(payload.status),
-    country: normalizeOptionalString(payload.country) || null,
+    ...normalizeCountrySelection(
+      payload.country_code ?? payload.countryCode ?? payload.country_name ?? payload.countryName ?? payload.country,
+      payload.language || "es",
+    ),
     bio: normalizeOptionalString(payload.bio) || null,
     profile_picture_url: normalizeOptionalString(payload.profile_picture_url ?? payload.profilePictureUrl) || null,
     must_change_password: true,
@@ -677,6 +727,9 @@ export async function createAdminUser(payload = {}, options = {}) {
       role: normalizedPayload.role,
       status: normalizedPayload.status,
       country: normalizedPayload.country,
+      country_code: normalizedPayload.countryCode,
+      country_name: normalizedPayload.countryName,
+      country_flag: normalizedPayload.countryFlag,
       bio: normalizedPayload.bio,
       profile_picture_url: normalizedPayload.profile_picture_url,
       must_change_password: true,
