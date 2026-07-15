@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
+import { normalizeCountrySelection } from "../data/countries.js";
 import { createMockId, getMockCommunityPosts, getMockUsers, setMockCommunityPosts } from "./mockStore.js";
 import { DEMO_STUDENT_EMAIL, DEMO_STUDENT_NAME } from "./userService.js";
 import { uploadCommunityPdf } from "./storageService.js";
@@ -36,7 +37,28 @@ function normalizeAuthorInfo(row = {}, fallback = {}) {
   const name = row.name ?? row.author_name ?? row.author ?? fallback.name ?? fallback.author ?? "Student";
   const email = row.email ?? fallback.email ?? "";
   const role = normalizeRole(row.role ?? row.author_role ?? fallback.role ?? fallback.authorRole ?? "student");
-  const country = row.country ?? fallback.country ?? "";
+  const normalizedCountry = normalizeCountrySelection(
+    row.author_country_code ??
+      row.authorCountryCode ??
+      row.country_code ??
+      row.countryCode ??
+      row.author_country_name ??
+      row.authorCountryName ??
+      row.country_name ??
+      row.countryName ??
+      row.author_country_flag ??
+      row.authorCountryFlag ??
+      row.country_flag ??
+      row.countryFlag ??
+      row.country ??
+      fallback.country_code ??
+      fallback.countryCode ??
+      fallback.country_name ??
+      fallback.countryName ??
+      fallback.country_flag ??
+      fallback.countryFlag ??
+      fallback.country,
+  );
   const profilePictureUrl =
     row.profile_picture_url ?? row.profilePictureUrl ?? fallback.profilePictureUrl ?? fallback.profile_picture_url ?? "";
 
@@ -44,7 +66,19 @@ function normalizeAuthorInfo(row = {}, fallback = {}) {
     author: name,
     authorEmail: email,
     authorRole: role,
-    country,
+    country: normalizedCountry.country,
+    authorCountryCode: normalizedCountry.countryCode,
+    author_country_code: normalizedCountry.countryCode,
+    countryCode: normalizedCountry.countryCode,
+    country_code: normalizedCountry.countryCode,
+    authorCountryName: normalizedCountry.countryName,
+    author_country_name: normalizedCountry.countryName,
+    countryName: normalizedCountry.countryName,
+    country_name: normalizedCountry.countryName,
+    authorCountryFlag: normalizedCountry.countryFlag,
+    author_country_flag: normalizedCountry.countryFlag,
+    countryFlag: normalizedCountry.countryFlag,
+    country_flag: normalizedCountry.countryFlag,
     profilePictureUrl,
     profile_picture_url: profilePictureUrl,
     initials: row.initials ?? fallback.initials ?? initialsFromName(name),
@@ -211,6 +245,8 @@ function resolveDemoProfile(studentProfile) {
     name: fallbackUser?.name ?? DEMO_STUDENT_NAME,
     email: fallbackUser?.email ?? DEMO_STUDENT_EMAIL,
     country: fallbackUser?.country ?? "",
+    countryCode: fallbackUser?.countryCode ?? fallbackUser?.country_code ?? "",
+    countryFlag: fallbackUser?.countryFlag ?? fallbackUser?.country_flag ?? "",
     role: normalizeRole(fallbackUser?.roleKey ?? fallbackUser?.role ?? "student"),
     profilePictureUrl: fallbackUser?.profilePictureUrl ?? fallbackUser?.profile_picture_url ?? "",
     initials: initialsFromName(fallbackUser?.name ?? DEMO_STUDENT_NAME),
@@ -265,12 +301,24 @@ function createCommunityPdfDebug(overrides = {}) {
 function buildPostPayload(post) {
   const authorProfile = resolveDemoProfile(post.studentProfile);
   const normalizedCategory = `${post.category ?? "discussion"}`.trim().toLowerCase() || "discussion";
+  const normalizedCountry = normalizeCountrySelection(
+    authorProfile.countryCode ??
+      authorProfile.country_code ??
+      authorProfile.countryName ??
+      authorProfile.country_name ??
+      authorProfile.countryFlag ??
+      authorProfile.country_flag ??
+      authorProfile.country,
+  );
 
   return {
     student_id: post.studentId ?? authorProfile.id ?? null,
     author_id: post.studentId ?? authorProfile.id ?? null,
     author_name: post.author ?? authorProfile.name ?? DEMO_STUDENT_NAME,
     author_role: normalizeRole(post.authorRole ?? authorProfile.role ?? "student"),
+    author_country_code: normalizedCountry.countryCode || null,
+    author_country_name: normalizedCountry.countryName || null,
+    author_country_flag: normalizedCountry.countryFlag || null,
     title: `${post.title ?? ""}`.trim(),
     body: `${post.body ?? ""}`.trim(),
     category: normalizedCategory,

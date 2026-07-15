@@ -128,6 +128,19 @@ function CommunityMetaBadges({ post, courseTitle, canModerate, t }) {
   );
 }
 
+function CommunityCountryBadge({ post }) {
+  const flag = post.authorCountryFlag || post.author_country_flag || post.countryFlag || post.country_flag;
+  const name = post.authorCountryName || post.author_country_name || post.countryName || post.country_name || post.country;
+  if (!flag && !name) return null;
+
+  return (
+    <span className="community-country-badge" aria-label={name || "Country"}>
+      {flag ? <span aria-hidden="true">{flag}</span> : null}
+      {name ? <span>{name}</span> : null}
+    </span>
+  );
+}
+
 function ModeratorRemovePanel({ value, onChange, onConfirm, onCancel, t }) {
   return (
     <div className="community-remove-panel">
@@ -572,7 +585,8 @@ export function CommunityBoard({
                         <div className="community-author-block">
                           <div className="post-meta">
                             <strong>{post.author}</strong>
-                                      <span className={`community-role-badge role-${post.authorRole}`}>{getRoleLabel(t, post.authorRole)}</span>
+                            <span className={`community-role-badge role-${post.authorRole}`}>{getRoleLabel(t, post.authorRole)}</span>
+                            <CommunityCountryBadge post={post} />
                             <span>{formatDate(post.createdAt || post.time, language)}</span>
                           </div>
                           <CommunityMetaBadges post={post} courseTitle={courseTitle} canModerate={canModerate} t={t} />
@@ -856,6 +870,7 @@ export function CommunityBoard({
                           <div className="post-meta">
                             <strong>{post.author}</strong>
                             <span className={`community-role-badge role-${post.authorRole}`}>{getRoleLabel(t, post.authorRole)}</span>
+                            <CommunityCountryBadge post={post} />
                             <span>{formatDate(post.createdAt || post.time, language)}</span>
                           </div>
                           <div className="community-badges">
