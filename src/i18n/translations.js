@@ -236,8 +236,8 @@ export const translations = {
       loadingSession: "Comprobando tu sesi\u00f3n...",
       loadingSessionFailed: "No se pudo cargar la sesi\u00f3n.",
       loadingProfileFailed: "No se pudo cargar el perfil del usuario.",
-      emailOrUsername: "Usuario o correo electr\u00f3nico",
-      emailOrUsernamePlaceholder: "usuario o tu-correo@ejemplo.com",
+      emailOrUsername: "Correo o nombre de usuario",
+      emailOrUsernamePlaceholder: "Ingresa tu correo o nombre de usuario",
       password: "Contrase\u00f1a",
       passwordPlaceholder: "Ingresa tu contrase\u00f1a",
       forcePasswordEyebrow: "SEGURIDAD DE ACCESO",
@@ -983,8 +983,8 @@ export const translations = {
       loadingSession: "Checking your session...",
       loadingSessionFailed: "Loading the session failed.",
       loadingProfileFailed: "Loading the user profile failed.",
-      emailOrUsername: "Username or email",
-      emailOrUsernamePlaceholder: "username or your-email@example.com",
+      emailOrUsername: "Email or username",
+      emailOrUsernamePlaceholder: "Enter your email or username",
       password: "Password",
       passwordPlaceholder: "Enter your password",
       forcePasswordEyebrow: "ACCESS SECURITY",
@@ -1494,6 +1494,9 @@ export const translations = {
     },
   },
 };
+
+
+
 
 
 

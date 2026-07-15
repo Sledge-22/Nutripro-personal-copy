@@ -310,23 +310,33 @@ export async function resolveLoginEmail(identifier) {
   if (!isSupabaseConfigured || !supabase) {
     const user = getMockUsers().find((entry) => entry.username?.toLowerCase() === normalizedIdentifier);
     if (!user?.email) throw new Error("No user found with that username.");
+    if (normalizeStatusValue(user.status, "active") !== "active") {
+      throw new Error("Your account is not active. Please contact an administrator.");
+    }
     return user.email.toLowerCase();
   }
 
-  const { data, error } = await supabase.rpc("resolve_login_email", {
-    login_identifier: normalizedIdentifier,
-  });
+  const { data, error } = await supabase
+    .from("users")
+    .select("email, username, role, status")
+    .ilike("username", normalizedIdentifier)
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
     console.error("Resolving the login email by username failed:", error);
     throw error;
   }
 
-  if (!data) {
-    throw new Error("No user found with that email or username.");
+  if (!data?.email) {
+    throw new Error("No account found for that username.");
   }
 
-  return `${data}`.trim().toLowerCase();
+  if (data.status && normalizeStatusValue(data.status, "active") !== "active") {
+    throw new Error("Your account is not active. Please contact an administrator.");
+  }
+
+  return `${data.email}`.trim().toLowerCase();
 }
 
 export async function getUsers() {

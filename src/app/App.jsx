@@ -550,7 +550,18 @@ export function App() {
       setAuthSession(session);
     } catch (error) {
       console.error("Signing in with Supabase Auth failed:", error);
-      setLoginError(formatSupabaseError(error, t("auth.signInFailed")));
+      const rawMessage = `${error?.message ?? ""}`.trim();
+      const translatedError =
+        rawMessage === "No account found for that username."
+          ? (t("auth.noAccountForUsername") !== "auth.noAccountForUsername"
+              ? t("auth.noAccountForUsername")
+              : language === "es"
+                ? "No se encontró una cuenta con ese nombre de usuario."
+                : "No account found for that username.")
+          : rawMessage === "Your account is not active. Please contact an administrator."
+            ? t("auth.inactiveAccountMessage")
+            : formatSupabaseError(error, t("auth.signInFailed"));
+      setLoginError(translatedError);
     } finally {
       setAuthLoading(false);
     }
