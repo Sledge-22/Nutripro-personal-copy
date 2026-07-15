@@ -204,12 +204,9 @@ export function CommunityBoard({
     () => new Set(accessibleCourses.map((course) => String(course.id))),
     [accessibleCourses],
   );
-  const categoryOptions = useMemo(() => getCategoryOptions(t, canModerate), [t, canModerate]);
   const [composer, setComposer] = useState({
     title: "",
     body: "",
-    category: canModerate ? "announcement" : "question",
-    courseId: "",
     tags: "",
     pdfFile: null,
   });
@@ -288,7 +285,7 @@ export function CommunityBoard({
     const title = composer.title.trim();
     const body = composer.body.trim();
     const pdfFile = composer.pdfFile;
-    if (!title || !body || !composer.category) {
+    if (!body) {
       setValidation(t("community.validation.required"));
       return;
     }
@@ -314,12 +311,12 @@ export function CommunityBoard({
         studentProfile: currentUser,
         author: currentUser?.name,
         authorRole: normalizedRole,
-        title,
+        title: title || body.slice(0, TITLE_LIMIT).trim(),
         body,
-        category: composer.category,
-        courseId: composer.courseId || null,
+        category: "discussion",
+        courseId: null,
         tags: composer.tags,
-        isPinned: canModerate && composer.category === "announcement",
+        isPinned: false,
         pdfFile,
       });
       setCommunityPdfDebug(result?.communityPdfDebug ?? null);
@@ -328,8 +325,6 @@ export function CommunityBoard({
         setComposer({
           title: "",
           body: "",
-          category: canModerate ? "announcement" : "question",
-          courseId: "",
           tags: "",
           pdfFile: null,
         });
@@ -433,17 +428,6 @@ export function CommunityBoard({
               />
             </label>
 
-            <label>
-              <span>{t("community.category")}</span>
-              <select value={composer.category} onChange={(event) => setComposerValue("category", event.target.value)}>
-                {categoryOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
             <label className="full-span">
               <span>{t("community.sharePrompt")}</span>
               <textarea
@@ -452,18 +436,6 @@ export function CommunityBoard({
                 onChange={(event) => setComposerValue("body", event.target.value)}
                 placeholder={t("community.sharePrompt")}
               />
-            </label>
-
-            <label>
-              <span>{t("community.relatedCourse")}</span>
-              <select value={composer.courseId} onChange={(event) => setComposerValue("courseId", event.target.value)}>
-                <option value="">{t("community.noRelatedCourse")}</option>
-                {accessibleCourses.map((course) => (
-                  <option key={course.id} value={course.id}>
-                    {course.title}
-                  </option>
-                ))}
-              </select>
             </label>
 
             <label>
@@ -510,8 +482,6 @@ export function CommunityBoard({
                 setComposer({
                   title: "",
                   body: "",
-                  category: canModerate ? "announcement" : "question",
-                  courseId: "",
                   tags: "",
                   pdfFile: null,
                 });
