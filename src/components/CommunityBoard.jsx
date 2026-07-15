@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./ui.jsx";
 import { isModeratorRole } from "../services/communityService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
@@ -222,6 +222,14 @@ export function CommunityBoard({
   const [removeDrafts, setRemoveDrafts] = useState({});
   const [communityPdfDebug, setCommunityPdfDebug] = useState(null);
   const [pendingDeletePostId, setPendingDeletePostId] = useState(null);
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const composerBodyRef = useRef(null);
+
+  useEffect(() => {
+    if (isComposerOpen) {
+      composerBodyRef.current?.focus();
+    }
+  }, [isComposerOpen]);
 
   const visiblePosts = useMemo(() => {
     const safePosts = Array.isArray(posts) ? posts : [];
@@ -262,11 +270,6 @@ export function CommunityBoard({
     });
   }, [accessibleCourseIds, canModerate, courseMap, currentUser?.id, filter, posts, search, sort]);
 
-  const pinnedPosts = useMemo(
-    () => visiblePosts.filter((post) => post.isPinned && (!post.isRemoved || canModerate)).slice(0, 5),
-    [canModerate, visiblePosts],
-  );
-
   const moderationPosts = useMemo(() => {
     if (!canModerate) return [];
     return (Array.isArray(posts) ? posts : [])
@@ -274,16 +277,20 @@ export function CommunityBoard({
       .sort((left, right) => new Date(right.removedAt || right.createdAt || 0).getTime() - new Date(left.removedAt || left.createdAt || 0).getTime());
   }, [canModerate, posts]);
 
-  const categoriesInView = useMemo(() => {
-    const nextCategories = new Set();
-    visiblePosts.forEach((post) => {
-      if (post?.category) nextCategories.add(post.category);
-    });
-    return Array.from(nextCategories);
-  }, [visiblePosts]);
-
   const setComposerValue = (field, value) => {
     setComposer((current) => ({ ...current, [field]: value }));
+  };
+
+  const resetComposer = () => {
+    setComposer({
+      title: "",
+      body: "",
+      tags: "",
+      pdfFile: null,
+    });
+    setValidation("");
+    setWarning("");
+    setCommunityPdfDebug(null);
   };
 
   const handleSubmitPost = async (event) => {
@@ -332,12 +339,8 @@ export function CommunityBoard({
       setCommunityPdfDebug(result?.communityPdfDebug ?? null);
       const hasPdfFailure = result?.pdfUploadFailed || result?.updateFailed || result?.missingPostId;
       if (!hasPdfFailure) {
-        setComposer({
-          title: "",
-          body: "",
-          tags: "",
-          pdfFile: null,
-        });
+        resetComposer();
+        setIsComposerOpen(false);
       }
       setMessage({
         type: hasPdfFailure ? "warning" : "success",
@@ -423,109 +426,115 @@ export function CommunityBoard({
   return (
     <div className="community-forum-layout">
       <section className="community-main">
-        <form className="section-card community-composer" onSubmit={handleSubmitPost}>
-          <div className="community-composer-head">
-            <div className="community-composer-title">
-              <span className="community-composer-icon">
-                <Icon name="plus" size={20} />
-              </span>
-              <div>
-                <h3>{t("community.createPost")}</h3>
-                <p>{t("community.intro")}</p>
-              </div>
-            </div>
-
-            <div className="community-inline-actions">
-              <button className="primary-btn" type="submit">
-                <Icon name="plus" />
-                {t("community.publish")}
-              </button>
-              <button
-                className="ghost-btn"
-                type="button"
-                onClick={() => {
-                  setComposer({
-                    title: "",
-                    body: "",
-                    tags: "",
-                    pdfFile: null,
-                  });
-                  setValidation("");
-                  setWarning("");
-                  setCommunityPdfDebug(null);
-                }}
-              >
-                {t("common.cancel")}
-              </button>
-            </div>
-          </div>
-
-          <div className="community-composer-body">
-            <label className="full-span">
-              <span>{t("community.sharePrompt")}</span>
-              <textarea
-                rows="3"
-                value={composer.body}
-                onChange={(event) => setComposerValue("body", event.target.value)}
-                placeholder={t("community.sharePrompt")}
-              />
-            </label>
-
-            <div className="community-composer-controls">
-              <label>
-                <span>{t("community.postTitle")}</span>
-                <input
-                  value={composer.title}
-                  maxLength={TITLE_LIMIT}
-                  onChange={(event) => setComposerValue("title", event.target.value)}
-                  placeholder={t("community.postTitle")}
-                />
-              </label>
-
-              <label>
-                <span>{t("community.tags")}</span>
-                <input
-                  value={composer.tags}
-                  onChange={(event) => setComposerValue("tags", event.target.value)}
-                  placeholder={t("community.tagsPlaceholder")}
-                />
-              </label>
-
-              <div className="community-file-control">
-                <span>{t("community.attachPdf")}</span>
-                <input
-                  id={pdfInputId}
-                  className="community-file-input"
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={(event) => setComposerValue("pdfFile", event.target.files?.[0] ?? null)}
-                />
-                <label htmlFor={pdfInputId} className="ghost-btn community-file-trigger">
-                  {composer.pdfFile ? t("community.replacePdf") : t("community.attachPdf")}
-                </label>
-              </div>
-            </div>
-
-            <div className="community-composer-meta">
-              <span className="community-field-helper">{t("community.attachPdfHelp")}</span>
-              {composer.pdfFile ? (
-                <div className="community-attachment-chip">
-                  <span>{composer.pdfFile.name}</span>
-                  <button type="button" className="ghost-btn" onClick={() => setComposerValue("pdfFile", null)}>
-                    {t("community.removePdf")}
-                  </button>
+        {isComposerOpen ? (
+          <form className="section-card community-composer" onSubmit={handleSubmitPost}>
+            <div className="community-composer-head">
+              <div className="community-composer-title">
+                <span className="community-composer-icon">
+                  <Icon name="plus" size={20} />
+                </span>
+                <div>
+                  <h3>{t("community.createPost")}</h3>
+                  <p>{t("community.intro")}</p>
                 </div>
-              ) : (
-                <span className="community-field-helper">{t("community.attachPdfLimit")}</span>
-              )}
+              </div>
+
+              <div className="community-inline-actions">
+                <button className="primary-btn" type="submit">
+                  <Icon name="plus" />
+                  {t("community.publish")}
+                </button>
+                <button
+                  className="ghost-btn"
+                  type="button"
+                  onClick={() => {
+                    resetComposer();
+                    setIsComposerOpen(false);
+                  }}
+                >
+                  {t("common.cancel")}
+                </button>
+              </div>
             </div>
-          </div>
 
-          {validation ? <div className="community-alert error">{validation}</div> : null}
-          {warning ? <div className="community-alert warning">{warning}</div> : null}
-          {message.text ? <div className={`community-alert ${message.type}`}>{message.text}</div> : null}
+            <div className="community-composer-body">
+              <label className="full-span">
+                <span>{t("community.sharePrompt")}</span>
+                <textarea
+                  ref={composerBodyRef}
+                  rows="3"
+                  value={composer.body}
+                  onChange={(event) => setComposerValue("body", event.target.value)}
+                  placeholder={t("community.sharePrompt")}
+                />
+              </label>
 
-        </form>
+              <div className="community-composer-controls">
+                <label>
+                  <span>{t("community.postTitle")}</span>
+                  <input
+                    value={composer.title}
+                    maxLength={TITLE_LIMIT}
+                    onChange={(event) => setComposerValue("title", event.target.value)}
+                    placeholder={t("community.postTitle")}
+                  />
+                </label>
+
+                <label>
+                  <span>{t("community.tags")}</span>
+                  <input
+                    value={composer.tags}
+                    onChange={(event) => setComposerValue("tags", event.target.value)}
+                    placeholder={t("community.tagsPlaceholder")}
+                  />
+                </label>
+
+                <div className="community-file-control">
+                  <span>{t("community.attachPdf")}</span>
+                  <input
+                    id={pdfInputId}
+                    className="community-file-input"
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    onChange={(event) => setComposerValue("pdfFile", event.target.files?.[0] ?? null)}
+                  />
+                  <label htmlFor={pdfInputId} className="ghost-btn community-file-trigger">
+                    {composer.pdfFile ? t("community.replacePdf") : t("community.attachPdf")}
+                  </label>
+                </div>
+              </div>
+
+              <div className="community-composer-meta">
+                <span className="community-field-helper">{t("community.attachPdfHelp")}</span>
+                {composer.pdfFile ? (
+                  <div className="community-attachment-chip">
+                    <span>{composer.pdfFile.name}</span>
+                    <button type="button" className="ghost-btn" onClick={() => setComposerValue("pdfFile", null)}>
+                      {t("community.removePdf")}
+                    </button>
+                  </div>
+                ) : (
+                  <span className="community-field-helper">{t("community.attachPdfLimit")}</span>
+                )}
+              </div>
+            </div>
+
+            {validation ? <div className="community-alert error">{validation}</div> : null}
+            {warning ? <div className="community-alert warning">{warning}</div> : null}
+          </form>
+        ) : (
+          <button type="button" className="section-card community-compose-trigger" onClick={() => setIsComposerOpen(true)}>
+            <span className="community-composer-icon">
+              <Icon name="plus" size={20} />
+            </span>
+            <span className="community-compose-trigger-copy">
+              <strong>{t("community.createPost")}</strong>
+              <small>{t("community.intro")}</small>
+            </span>
+          </button>
+        )}
+
+        {message.text ? <div className={`community-alert ${message.type}`}>{message.text}</div> : null}
 
         {(import.meta.env.DEV || canModerate) && communityPdfDebug ? (
           <div className="community-alert warning">
@@ -975,48 +984,6 @@ export function CommunityBoard({
         ) : null}
       </section>
 
-      <aside className="community-sidebar">
-        <section className="section-card">
-          <span className="eyebrow">{t("community.guidelinesTitle")}</span>
-          <ul className="community-guidelines">
-            {["one", "two", "three", "four", "five"].map((key) => (
-              <li key={key}>{t(`community.guidelines.${key}`)}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="section-card">
-          <span className="eyebrow">{t("community.pinnedPosts")}</span>
-          <div className="community-sidebar-list">
-            {pinnedPosts.length ? (
-              pinnedPosts.map((post) => (
-                <button type="button" className="community-sidebar-link" key={`pinned-${post.id}`} onClick={() => setExpandedPostId(post.id)}>
-                  <strong>{post.title}</strong>
-                  <span>{post.author}</span>
-                </button>
-              ))
-            ) : (
-              <p>{t("community.noPinnedPosts")}</p>
-            )}
-          </div>
-        </section>
-
-        <section className="section-card">
-          <span className="eyebrow">{t("community.categoriesTitle")}</span>
-          <div className="community-sidebar-list category-list">
-            {(categoriesInView.length ? categoriesInView : categoryKeys).map((key) => (
-              <button key={key} type="button" className="community-sidebar-link" onClick={() => setFilter(key)}>
-                {t(`community.categories.${key}`)}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="section-card">
-          <span className="eyebrow">{t("community.moderatedByTitle")}</span>
-          <p>{t("community.moderatedBy")}</p>
-        </section>
-      </aside>
     </div>
   );
 }

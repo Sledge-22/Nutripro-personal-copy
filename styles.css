@@ -509,27 +509,31 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
 .post-list h3 { margin: 14px 0 7px; font-size: 16px; }
 .post-list p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .post-form .primary-btn { width: 100%; }
-.community-forum-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, .75fr); gap: 22px; align-items: start; }
+.community-forum-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-items: start; }
 .community-main, .community-sidebar, .community-feed { display: grid; gap: 18px; }
 .community-composer, .community-toolbar, .community-post-card, .community-sidebar .section-card { background: var(--color-surface); border: 1px solid var(--color-border); }
+.community-compose-trigger { width: 100%; display: flex; align-items: center; gap: 14px; padding: 14px 18px; text-align: left; color: var(--color-text); cursor: pointer; background: var(--color-surface); border: 1px solid var(--color-border); }
+.community-compose-trigger-copy { display: grid; gap: 4px; min-width: 0; }
+.community-compose-trigger-copy strong { font-family: var(--font-heading); font-size: 1rem; }
+.community-compose-trigger-copy small { color: var(--color-muted); font-size: .9rem; }
 .community-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .community-form-grid .full-span { grid-column: 1 / -1; }
 .community-form-grid label, .community-remove-panel label { display: grid; gap: 8px; color: var(--color-muted); font-size: .92rem; }
 .community-field-helper { color: var(--color-muted); font-size: .85rem; }
-.community-composer { display: grid; gap: 14px; padding: 18px 20px; }
+.community-composer { display: grid; gap: 12px; padding: 16px 18px; }
 .community-composer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .community-composer-title { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
 .community-composer-title h3 { margin: 0 0 4px; }
 .community-composer-title p { margin: 0; color: var(--color-muted); }
-.community-composer-icon { width: 48px; height: 48px; border-radius: 18px; display: inline-flex; align-items: center; justify-content: center; background: rgba(79,202,214,.12); border: 1px solid rgba(79,202,214,.24); color: var(--color-accent); flex-shrink: 0; }
-.community-composer-body { display: grid; gap: 12px; }
-.community-composer-body textarea { min-height: 120px; resize: vertical; }
-.community-composer-controls { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(220px, 1fr) auto; gap: 12px; align-items: end; }
+.community-composer-icon { width: 44px; height: 44px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; background: rgba(79,202,214,.12); border: 1px solid rgba(79,202,214,.24); color: var(--color-accent); flex-shrink: 0; }
+.community-composer-body { display: grid; gap: 10px; }
+.community-composer-body textarea { min-height: 88px; resize: vertical; }
+.community-composer-controls { display: grid; grid-template-columns: minmax(160px, .8fr) minmax(200px, 1fr) auto; gap: 10px; align-items: end; }
 .community-composer-controls label, .community-file-control { display: grid; gap: 8px; color: var(--color-muted); font-size: .92rem; }
 .community-file-control { min-width: 0; }
 .community-file-input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
 .community-file-trigger { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }
-.community-composer-meta { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+.community-composer-meta { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
 .community-toolbar { display: grid; gap: 14px; }
 .community-search { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; padding: 0 14px; border-radius: 16px; border: 1px solid var(--color-border); background: rgba(255,255,255,.03); }
 .community-search input { border: 0; background: transparent; padding: 14px 0; }
