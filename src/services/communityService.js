@@ -720,6 +720,28 @@ export async function updateCommunityPost(postId, updates) {
   return data;
 }
 
+export async function deleteCommunityPost(postId) {
+  if (!postId) {
+    throw new Error("A valid post id is required.");
+  }
+
+  if (!isSupabaseConfigured) {
+    updateMockPosts((posts) => posts.filter((post) => String(post.id) !== String(postId)));
+    return { ok: true };
+  }
+
+  const { error: commentsError } = await supabase.from("community_comments").delete().eq("post_id", postId);
+  if (commentsError) throw commentsError;
+
+  const { error: votesError } = await supabase.from("community_votes").delete().eq("post_id", postId);
+  if (votesError) throw votesError;
+
+  const { error: postError } = await supabase.from("community_posts").delete().eq("id", postId);
+  if (postError) throw postError;
+
+  return { ok: true };
+}
+
 export async function updateCommunityComment(commentId, updates) {
   const payload = {
     ...updates,

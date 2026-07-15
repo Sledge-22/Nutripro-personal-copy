@@ -190,6 +190,7 @@ export function CommunityBoard({
   onCreateComment,
   onTogglePostVote,
   onUpdatePost,
+  onDeletePost,
   onUpdateComment,
 }) {
   const { t, language } = useLanguage();
@@ -220,11 +221,13 @@ export function CommunityBoard({
   const [warning, setWarning] = useState("");
   const [removeDrafts, setRemoveDrafts] = useState({});
   const [communityPdfDebug, setCommunityPdfDebug] = useState(null);
+  const [pendingDeletePostId, setPendingDeletePostId] = useState(null);
 
   const visiblePosts = useMemo(() => {
     const safePosts = Array.isArray(posts) ? posts : [];
     const filteredPosts = safePosts.filter((post) => {
       if (!canViewPost(post, canModerate, accessibleCourseIds)) return false;
+      if (post.isRemoved) return false;
 
       const courseTitle = getPostCourseTitle(post, courseMap);
       const searchValue = search.trim().toLowerCase();
@@ -263,6 +266,13 @@ export function CommunityBoard({
     () => visiblePosts.filter((post) => post.isPinned && (!post.isRemoved || canModerate)).slice(0, 5),
     [canModerate, visiblePosts],
   );
+
+  const moderationPosts = useMemo(() => {
+    if (!canModerate) return [];
+    return (Array.isArray(posts) ? posts : [])
+      .filter((post) => Boolean(post?.isRemoved))
+      .sort((left, right) => new Date(right.removedAt || right.createdAt || 0).getTime() - new Date(left.removedAt || left.createdAt || 0).getTime());
+  }, [canModerate, posts]);
 
   const categoriesInView = useMemo(() => {
     const nextCategories = new Set();
@@ -391,6 +401,17 @@ export function CommunityBoard({
       if (successKey) setMessage({ type: "success", text: t(successKey) });
     } catch (error) {
       console.error("Updating a community comment failed:", error);
+      setMessage({ type: "error", text: t("community.moderationFailed") });
+    }
+  };
+
+  const handleDeletePost = async (postId) => {
+    try {
+      await onDeletePost?.(postId);
+      setPendingDeletePostId(null);
+      setMessage({ type: "success", text: t("community.postPermanentlyDeleted") });
+    } catch (error) {
+      console.error("Deleting a community post permanently failed:", error);
       setMessage({ type: "error", text: t("community.moderationFailed") });
     }
   };
@@ -701,7 +722,7 @@ export function CommunityBoard({
                               removed_at: new Date().toISOString(),
                               removed_by: currentUser?.id ?? null,
                               removal_reason: removeState.reason,
-                            }, "community.postRemoved");
+                            }, "community.postMovedToModeration");
                             setRemoveDrafts((current) => {
                               const next = { ...current };
                               delete next[removeKey];
@@ -858,6 +879,100 @@ export function CommunityBoard({
             })
           )}
         </div>
+
+        {canModerate ? (
+          <section className="section-card community-moderation">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">{t("community.moderation")}</span>
+                <h3>{t("community.removedPosts")}</h3>
+                <p>{t("community.moderationIntro")}</p>
+              </div>
+            </div>
+
+            {moderationPosts.length ? (
+              <div className="community-feed">
+                {moderationPosts.map((post) => (
+                  <article key={`moderation-${post.id}`} className="section-card community-post-card is-removed">
+                    <div className="community-post-content">
+                      <div className="community-post-topline">
+                        {(post.profilePictureUrl || post.profile_picture_url) ? (
+                          <img className="post-avatar avatar-image" src={post.profilePictureUrl || post.profile_picture_url} alt={post.author} />
+                        ) : (
+                          <div className="post-avatar">{post.initials || initialsFromName(post.author)}</div>
+                        )}
+
+                        <div className="community-author-block">
+                          <div className="post-meta">
+                            <strong>{post.author}</strong>
+                            <span className={`community-role-badge role-${post.authorRole}`}>{getRoleLabel(t, post.authorRole)}</span>
+                            <span>{formatDate(post.createdAt || post.time, language)}</span>
+                          </div>
+                          <div className="community-badges">
+                            <span className="community-badge removed">{t("community.removed")}</span>
+                            {post.removalReason ? <span className="community-badge neutral">{t("community.reason")}: {t(`community.removalReasons.${post.removalReason}`)}</span> : null}
+                            {post.removedAt ? <span className="community-badge neutral">{t("community.removedAt")}: {formatDate(post.removedAt, language)}</span> : null}
+                            {post.removedBy ? <span className="community-badge neutral">{t("community.removedBy")}: {post.removedBy}</span> : null}
+                            {post.pdfPublicUrl || post.pdfFileName ? <span className="community-badge neutral">{t("community.pdfAttached")}</span> : null}
+                          </div>
+                        </div>
+                      </div>
+
+                      <h3>{post.title}</h3>
+                      <p className="community-post-body">{post.body}</p>
+
+                      <div className="community-tags">
+                        <span className="community-tag">{post.voteScore ?? 0} {t("community.votes")}</span>
+                        <span className="community-tag">{getCommentCount(post, true)} {t("community.comments")}</span>
+                      </div>
+
+                      <div className="community-inline-actions">
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          onClick={() => void handleUpdatePostAction(post.id, { is_removed: false, removed_at: null, removed_by: null, removal_reason: null }, "community.postRestored")}
+                        >
+                          {t("community.restorePost")}
+                        </button>
+                        <button
+                          type="button"
+                          className="danger-btn"
+                          onClick={() => setPendingDeletePostId((current) => current === post.id ? null : post.id)}
+                        >
+                          {t("community.permanentlyDelete")}
+                        </button>
+                        {post.pdfPublicUrl ? (
+                          <a className="ghost-btn" href={post.pdfPublicUrl} target="_blank" rel="noreferrer">
+                            {t("community.openPdf")}
+                          </a>
+                        ) : null}
+                      </div>
+
+                      {pendingDeletePostId === post.id ? (
+                        <div className="community-alert warning">
+                          <strong>{t("community.permanentDeleteWarning")}</strong>
+                          <div className="community-inline-actions">
+                            <button type="button" className="ghost-btn" onClick={() => setPendingDeletePostId(null)}>
+                              {t("common.cancel")}
+                            </button>
+                            <button type="button" className="danger-btn" onClick={() => void handleDeletePost(post.id)}>
+                              {t("community.permanentlyDelete")}
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="community-alert info">
+                <strong>{t("community.noPostsInModeration")}</strong>
+                <div>{t("community.noPostsInModerationHelp")}</div>
+              </div>
+            )}
+          </section>
+        ) : null}
       </section>
 
       <aside className="community-sidebar">

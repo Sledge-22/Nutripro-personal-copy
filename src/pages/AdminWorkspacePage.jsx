@@ -700,6 +700,7 @@ export function AdminWorkspacePage({
   onCreateComment,
   onTogglePostVote,
   onUpdatePost,
+  onDeletePost,
   onUpdateComment,
 }) {
   if (pathname === "/admin/users") {
@@ -741,6 +742,7 @@ export function AdminWorkspacePage({
         onCreateComment={onCreateComment}
         onTogglePostVote={onTogglePostVote}
         onUpdatePost={onUpdatePost}
+        onDeletePost={onDeletePost}
         onUpdateComment={onUpdateComment}
       />
     );
