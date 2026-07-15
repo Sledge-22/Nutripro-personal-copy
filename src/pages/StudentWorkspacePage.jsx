@@ -377,6 +377,13 @@ function StudentDashboardPage({ courses, certificates, progressFor }) {
 function StudentProfilePage({ profile, onUpdateProfile }) {
   const { t, language } = useLanguage();
   const countryOptions = getProfileCountryOptions();
+  const translatedSelectCountry = t("common.selectCountry");
+  const selectCountryLabel =
+    translatedSelectCountry && translatedSelectCountry !== "common.selectCountry"
+      ? translatedSelectCountry
+      : language === "es"
+        ? "Selecciona tu país"
+        : "Select your country";
   const initialCountry = normalizeCountrySelection(
     profile?.countryCode ?? profile?.country_code ?? profile?.countryName ?? profile?.country_name ?? profile?.country,
     language,
@@ -503,8 +510,9 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
             <CountrySelect
               value={form.countryCode}
               options={countryOptions}
-              placeholder={t("common.selectCountry")}
+              placeholder={selectCountryLabel}
               ariaLabel={t("common.country")}
+              menuClassName="profile-country-menu"
               onChange={(countryCode) => setForm((current) => ({ ...current, countryCode }))}
             />
           </label>

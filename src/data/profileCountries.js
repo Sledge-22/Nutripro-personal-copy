@@ -1,11 +1,16 @@
 export const PROFILE_COUNTRIES = [
+  { code: "AR", name: "Argentina", flag: "🇦🇷" },
   { code: "AT", name: "Austria", flag: "🇦🇹" },
   { code: "BE", name: "Belgium", flag: "🇧🇪" },
+  { code: "BR", name: "Brazil", flag: "🇧🇷" },
   { code: "BG", name: "Bulgaria", flag: "🇧🇬" },
   { code: "CA", name: "Canada", flag: "🇨🇦" },
+  { code: "CL", name: "Chile", flag: "🇨🇱" },
+  { code: "CO", name: "Colombia", flag: "🇨🇴" },
   { code: "CU", name: "Cuba", flag: "🇨🇺" },
   { code: "DK", name: "Denmark", flag: "🇩🇰" },
   { code: "DO", name: "Dominican Republic", flag: "🇩🇴" },
+  { code: "EC", name: "Ecuador", flag: "🇪🇨" },
   { code: "SV", name: "El Salvador", flag: "🇸🇻" },
   { code: "FI", name: "Finland", flag: "🇫🇮" },
   { code: "FR", name: "France", flag: "🇫🇷" },
@@ -22,6 +27,7 @@ export const PROFILE_COUNTRIES = [
   { code: "NL", name: "Netherlands", flag: "🇳🇱" },
   { code: "NO", name: "Norway", flag: "🇳🇴" },
   { code: "PA", name: "Panama", flag: "🇵🇦" },
+  { code: "PY", name: "Paraguay", flag: "🇵🇾" },
   { code: "PE", name: "Peru", flag: "🇵🇪" },
   { code: "PT", name: "Portugal", flag: "🇵🇹" },
   { code: "RO", name: "Romania", flag: "🇷🇴" },
@@ -31,6 +37,7 @@ export const PROFILE_COUNTRIES = [
   { code: "UA", name: "Ukraine", flag: "🇺🇦" },
   { code: "GB", name: "United Kingdom", flag: "🇬🇧" },
   { code: "US", name: "United States", flag: "🇺🇸" },
+  { code: "UY", name: "Uruguay", flag: "🇺🇾" },
 ];
 
 export function getProfileCountryOptions() {

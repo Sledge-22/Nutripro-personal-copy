@@ -809,7 +809,15 @@ td,
   left: 0;
 }
 
+.profile-country-dropdown {
+  position: relative;
+}
+
 .profile-country-menu {
+  top: calc(100% + 0.5rem);
+  display: block;
+  gap: 0;
+  padding: 6px;
   max-height: 280px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -845,6 +853,14 @@ td,
   color: var(--color-text);
   background: transparent;
   cursor: pointer;
+}
+
+.profile-country-option {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.65rem;
+  text-align: left;
 }
 
 .custom-select-option.active,

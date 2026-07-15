@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import CountryFlag from "./CountryFlag.jsx";
 import { Icon } from "./ui.jsx";
 
-export function CountrySelect({ value, options, placeholder, onChange, ariaLabel }) {
+export function CountrySelect({ value, options, placeholder, onChange, ariaLabel, menuClassName = "" }) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
 
@@ -31,7 +31,7 @@ export function CountrySelect({ value, options, placeholder, onChange, ariaLabel
   const selectedOption = options.find((option) => option.code === value) ?? null;
 
   return (
-    <div className="custom-select" ref={wrapperRef}>
+    <div className={`custom-select ${menuClassName ? "profile-country-dropdown" : ""}`.trim()} ref={wrapperRef}>
       <button
         type="button"
         className="custom-select-trigger country-select-trigger"
@@ -57,10 +57,10 @@ export function CountrySelect({ value, options, placeholder, onChange, ariaLabel
       </button>
 
       {open ? (
-        <div className="custom-select-menu" role="listbox">
+        <div className={`custom-select-menu ${menuClassName}`.trim()} role="listbox">
           <button
             type="button"
-            className={`custom-select-option ${!selectedOption ? "active" : ""}`}
+            className={`custom-select-option profile-country-option ${!selectedOption ? "active" : ""}`}
             role="option"
             aria-selected={!selectedOption}
             onClick={() => {
@@ -74,7 +74,7 @@ export function CountrySelect({ value, options, placeholder, onChange, ariaLabel
             <button
               key={option.code}
               type="button"
-              className={`custom-select-option ${selectedOption?.code === option.code ? "active" : ""}`}
+              className={`custom-select-option profile-country-option ${selectedOption?.code === option.code ? "active" : ""}`}
               role="option"
               aria-selected={selectedOption?.code === option.code}
               onClick={() => {
