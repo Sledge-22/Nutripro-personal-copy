@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { CertificateModal, Icon, Progress, Stat, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
 import CountryFlag from "../components/CountryFlag.jsx";
+import CountrySelect from "../components/CountrySelect.jsx";
 import { ROUTES } from "../routes/appRoutes.js";
 import { getStudentSubmission, submitAssignment } from "../services/assignmentService.js";
 import { getStudentCourseAccess } from "../services/courseService.js";
@@ -499,14 +500,13 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
 
           <label>
             {t("common.country")}
-            <select value={form.countryCode} onChange={(event) => setForm((current) => ({ ...current, countryCode: event.target.value }))}>
-              <option value="">{t("common.selectCountry")}</option>
-              {countryOptions.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.flag} {option.name}
-                </option>
-              ))}
-            </select>
+            <CountrySelect
+              value={form.countryCode}
+              options={countryOptions}
+              placeholder={t("common.selectCountry")}
+              ariaLabel={t("common.country")}
+              onChange={(countryCode) => setForm((current) => ({ ...current, countryCode }))}
+            />
           </label>
 
           <label>
