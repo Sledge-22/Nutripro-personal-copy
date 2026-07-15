@@ -397,64 +397,96 @@ export function CommunityBoard({
 
   const feedEmpty = !visiblePosts.length;
   const hasSearch = Boolean(search.trim());
+  const pdfInputId = "community-post-pdf";
 
   return (
     <div className="community-forum-layout">
       <section className="community-main">
-        <div className="page-intro">
-          <div>
-            <span className="eyebrow">{t("community.eyebrow")}</span>
-            <h2>{t("common.community")}</h2>
-            <p>{t("community.intro")}</p>
-          </div>
-        </div>
-
         <form className="section-card community-composer" onSubmit={handleSubmitPost}>
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">{t("community.createPost")}</span>
-              <h3>{t("community.createPost")}</h3>
+          <div className="community-composer-head">
+            <div className="community-composer-title">
+              <span className="community-composer-icon">
+                <Icon name="plus" size={20} />
+              </span>
+              <div>
+                <h3>{t("community.createPost")}</h3>
+                <p>{t("community.intro")}</p>
+              </div>
+            </div>
+
+            <div className="community-inline-actions">
+              <button className="primary-btn" type="submit">
+                <Icon name="plus" />
+                {t("community.publish")}
+              </button>
+              <button
+                className="ghost-btn"
+                type="button"
+                onClick={() => {
+                  setComposer({
+                    title: "",
+                    body: "",
+                    tags: "",
+                    pdfFile: null,
+                  });
+                  setValidation("");
+                  setWarning("");
+                  setCommunityPdfDebug(null);
+                }}
+              >
+                {t("common.cancel")}
+              </button>
             </div>
           </div>
 
-          <div className="community-form-grid">
-            <label>
-              <span>{t("community.postTitle")}</span>
-              <input
-                value={composer.title}
-                maxLength={TITLE_LIMIT}
-                onChange={(event) => setComposerValue("title", event.target.value)}
-                placeholder={t("community.postTitle")}
-              />
-            </label>
-
+          <div className="community-composer-body">
             <label className="full-span">
               <span>{t("community.sharePrompt")}</span>
               <textarea
-                rows="5"
+                rows="3"
                 value={composer.body}
                 onChange={(event) => setComposerValue("body", event.target.value)}
                 placeholder={t("community.sharePrompt")}
               />
             </label>
 
-            <label>
-              <span>{t("community.tags")}</span>
-              <input
-                value={composer.tags}
-                onChange={(event) => setComposerValue("tags", event.target.value)}
-                placeholder={t("community.tagsPlaceholder")}
-              />
-            </label>
+            <div className="community-composer-controls">
+              <label>
+                <span>{t("community.postTitle")}</span>
+                <input
+                  value={composer.title}
+                  maxLength={TITLE_LIMIT}
+                  onChange={(event) => setComposerValue("title", event.target.value)}
+                  placeholder={t("community.postTitle")}
+                />
+              </label>
 
-            <label className="full-span">
-              <span>{t("community.attachPdf")}</span>
+              <label>
+                <span>{t("community.tags")}</span>
+                <input
+                  value={composer.tags}
+                  onChange={(event) => setComposerValue("tags", event.target.value)}
+                  placeholder={t("community.tagsPlaceholder")}
+                />
+              </label>
+
+              <div className="community-file-control">
+                <span>{t("community.attachPdf")}</span>
+                <input
+                  id={pdfInputId}
+                  className="community-file-input"
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={(event) => setComposerValue("pdfFile", event.target.files?.[0] ?? null)}
+                />
+                <label htmlFor={pdfInputId} className="ghost-btn community-file-trigger">
+                  {composer.pdfFile ? t("community.replacePdf") : t("community.attachPdf")}
+                </label>
+              </div>
+            </div>
+
+            <div className="community-composer-meta">
               <span className="community-field-helper">{t("community.attachPdfHelp")}</span>
-              <input
-                type="file"
-                accept=".pdf,application/pdf"
-                onChange={(event) => setComposerValue("pdfFile", event.target.files?.[0] ?? null)}
-              />
               {composer.pdfFile ? (
                 <div className="community-attachment-chip">
                   <span>{composer.pdfFile.name}</span>
@@ -462,37 +494,16 @@ export function CommunityBoard({
                     {t("community.removePdf")}
                   </button>
                 </div>
-              ) : null}
-            </label>
+              ) : (
+                <span className="community-field-helper">{t("community.attachPdfLimit")}</span>
+              )}
+            </div>
           </div>
 
           {validation ? <div className="community-alert error">{validation}</div> : null}
           {warning ? <div className="community-alert warning">{warning}</div> : null}
           {message.text ? <div className={`community-alert ${message.type}`}>{message.text}</div> : null}
 
-          <div className="community-inline-actions">
-            <button className="primary-btn" type="submit">
-              <Icon name="plus" />
-              {t("community.publish")}
-            </button>
-            <button
-              className="ghost-btn"
-              type="button"
-              onClick={() => {
-                setComposer({
-                  title: "",
-                  body: "",
-                  tags: "",
-                  pdfFile: null,
-                });
-                setValidation("");
-                setWarning("");
-                setCommunityPdfDebug(null);
-              }}
-            >
-              {t("common.cancel")}
-            </button>
-          </div>
         </form>
 
         {(import.meta.env.DEV || canModerate) && communityPdfDebug ? (
