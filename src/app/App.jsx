@@ -98,6 +98,11 @@ function formatSupabaseError(error, fallbackMessage) {
   return parts.length ? parts.join(" ") : fallbackMessage;
 }
 
+function isValidUuid(value) {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function upsertCourseList(courses, nextCourse) {
   const existingIndex = courses.findIndex((course) => String(course.id) === String(nextCourse.id));
   if (existingIndex === -1) return [...courses, nextCourse];
@@ -728,6 +733,58 @@ export function App() {
   async function handleUpdateStudentProfile(updates) {
     if (!activeStudentId) return { ok: false, error: t("student.demoStudentMissing") };
 
+    if (!isProductionExperience && !isValidUuid(String(activeStudentId))) {
+      const nextProfile = {
+        ...studentProfile,
+        ...updates,
+        id: activeStudentId,
+      };
+      const studentEmail = `${studentProfile?.email ?? ""}`.trim().toLowerCase();
+
+      setStudentProfile(nextProfile);
+      setUsers((currentUsers) =>
+        currentUsers.map((user) =>
+          String(user.id) === String(activeStudentId) || user.email?.toLowerCase() === studentEmail
+            ? { ...user, ...nextProfile }
+            : user,
+        ),
+      );
+      setPosts((currentPosts) =>
+        currentPosts.map((post) =>
+          post.authorEmail?.toLowerCase() === studentEmail
+            ? {
+              ...post,
+              author: nextProfile.name ?? post.author,
+              country: nextProfile.country ?? post.country,
+              countryCode: nextProfile.country_code ?? post.countryCode,
+              country_code: nextProfile.country_code ?? post.country_code,
+              authorCountryCode: nextProfile.country_code ?? post.authorCountryCode,
+              author_country_code: nextProfile.country_code ?? post.author_country_code,
+              countryName: nextProfile.country_name ?? post.countryName,
+              country_name: nextProfile.country_name ?? post.country_name,
+              authorCountryName: nextProfile.country_name ?? post.authorCountryName,
+              author_country_name: nextProfile.country_name ?? post.author_country_name,
+              countryFlag: nextProfile.country_flag ?? post.countryFlag,
+              country_flag: nextProfile.country_flag ?? post.country_flag,
+              authorCountryFlag: nextProfile.country_flag ?? post.authorCountryFlag,
+              author_country_flag: nextProfile.country_flag ?? post.author_country_flag,
+              profilePictureUrl: nextProfile.profile_picture_url ?? post.profilePictureUrl,
+              profile_picture_url: nextProfile.profile_picture_url ?? post.profile_picture_url,
+            }
+            : post,
+        ),
+      );
+
+      return {
+        ok: true,
+        profile: nextProfile,
+        message:
+          t("student.demoProfileSessionOnly") !== "student.demoProfileSessionOnly"
+            ? t("student.demoProfileSessionOnly")
+            : "Los cambios del perfil demo se guardan solo para esta sesión.",
+      };
+    }
+
     try {
       const savedProfile = await updateStudentProfile(activeStudentId, updates);
       const nextUsers = await getUsers();
@@ -784,9 +841,12 @@ export function App() {
   }
 
   async function handleUpdateSiteAccessMode(nextMode) {
-    const normalizedMode = await updateSiteAccessMode(nextMode, currentUser?.id ?? null);
-    setSiteAccessMode(normalizedMode);
-    return normalizedMode;
+    const isProductionAdmin = Boolean(isProductionExperience && currentUser?.roleKey === "admin");
+    const result = await updateSiteAccessMode(nextMode, currentUser?.id ?? null, {
+      localOnly: !isProductionAdmin,
+    });
+    setSiteAccessMode(result?.mode ?? "demo");
+    return result;
   }
 
   if (pathname === ROUTES.auth.setupPreview) {
@@ -867,5 +927,5 @@ export function App() {
         DEMO_ACCOUNTS.admin
       : studentProfile ?? demoSession ?? DEMO_ACCOUNTS.student;
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={isProductionExperience ? currentUser : demoHeaderProfile} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} posts={posts} currentUser={isProductionExperience ? currentUser : demoHeaderProfile} siteAccessMode={siteAccessMode} showAuthTestTools={showAuthTestTools} onUpdateSiteAccessMode={handleUpdateSiteAccessMode} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} authMode={isProductionExperience ? "production" : "demo"} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={isProductionExperience ? currentUser : demoHeaderProfile} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} posts={posts} currentUser={isProductionExperience ? currentUser : demoHeaderProfile} siteAccessMode={siteAccessMode} siteAccessModeStorage={isProductionExperience && currentUser?.roleKey === "admin" ? "supabase" : "local"} showAuthTestTools={showAuthTestTools} onUpdateSiteAccessMode={handleUpdateSiteAccessMode} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} authMode={isProductionExperience ? "production" : "demo"} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }

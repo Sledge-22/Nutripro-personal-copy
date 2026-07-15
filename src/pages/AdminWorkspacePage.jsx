@@ -689,6 +689,7 @@ export function AdminWorkspacePage({
   posts,
   currentUser,
   siteAccessMode = "demo",
+  siteAccessModeStorage = "local",
   showAuthTestTools = true,
   onUpdateSiteAccessMode,
   onUpdateUserStatus,
@@ -767,7 +768,7 @@ export function AdminWorkspacePage({
   }
 
   if (pathname === "/admin/settings") {
-    return <AdminSettingsPage siteAccessMode={siteAccessMode} onUpdateSiteAccessMode={onUpdateSiteAccessMode} />;
+    return <AdminSettingsPage siteAccessMode={siteAccessMode} siteAccessModeStorage={siteAccessModeStorage} onUpdateSiteAccessMode={onUpdateSiteAccessMode} />;
   }
 
   return <AdminDashboardPage users={users} courses={courses} certificates={certificates} currentUser={currentUser} />;
@@ -807,7 +808,7 @@ function AdminDashboardPage({ users, courses, certificates, currentUser }) {
   );
 }
 
-function AdminSettingsPage({ siteAccessMode = "demo", onUpdateSiteAccessMode }) {
+function AdminSettingsPage({ siteAccessMode = "demo", siteAccessModeStorage = "local", onUpdateSiteAccessMode }) {
   const { language } = useLanguage();
   const [settingsMessage, setSettingsMessage] = useState("");
   const [settingsError, setSettingsError] = useState("");
@@ -829,9 +830,13 @@ function AdminSettingsPage({ siteAccessMode = "demo", onUpdateSiteAccessMode }) 
     ? "El inicio de sesión de producción solo debe activarse después de probar las cuentas, contraseñas e invitaciones."
     : "Production Login should only be enabled after user accounts, passwords, and invitation flow are tested.";
   const successText = language === "es" ? "Modo de acceso del sitio actualizado." : "Site access mode updated.";
+  const localSuccessText = language === "es" ? "Modo de acceso del sitio actualizado para este navegador." : "Site access mode updated for this browser.";
   const failurePrefix = language === "es" ? "No se pudo actualizar el modo de acceso del sitio:" : "Unable to update site access mode:";
   const comingSoon = language === "es" ? "Próximamente" : "Coming soon";
   const comingSoonText = language === "es" ? "Próximamente en esta sección." : "Coming soon in this section.";
+  const demoAdminHelper = language === "es"
+    ? "Los cambios del admin demo se guardan localmente para pruebas. La configuración de producción requiere un inicio de sesión real de administrador."
+    : "Demo admin changes are stored locally for testing. Production site settings require a real admin login.";
 
   const handleModeChange = async (nextMode) => {
     if (!onUpdateSiteAccessMode || nextMode === siteAccessMode) return;
@@ -839,8 +844,8 @@ function AdminSettingsPage({ siteAccessMode = "demo", onUpdateSiteAccessMode }) 
     setSettingsMessage("");
     setSettingsError("");
     try {
-      await onUpdateSiteAccessMode(nextMode);
-      setSettingsMessage(successText);
+      const result = await onUpdateSiteAccessMode(nextMode);
+      setSettingsMessage(result?.storage === "local" ? localSuccessText : successText);
     } catch (error) {
       console.error("Updating the admin-controlled site access mode failed:", error);
       setSettingsError(`${failurePrefix} ${error?.message || "Unknown error"}`);
@@ -877,6 +882,7 @@ function AdminSettingsPage({ siteAccessMode = "demo", onUpdateSiteAccessMode }) 
           </button>
         </div>
         <small className="field-note">{helperText}</small>
+        {siteAccessModeStorage === "local" ? <small className="field-note">{demoAdminHelper}</small> : null}
         {siteAccessMode === "production" ? <small className="field-note warning-badge">{warningText}</small> : null}
         {settingsMessage ? <small className="field-note">{settingsMessage}</small> : null}
         {settingsError ? <small className="field-note danger-text">{settingsError}</small> : null}
@@ -4425,6 +4431,8 @@ function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCer
     </div>
   );
 }
+
+
 
 
 

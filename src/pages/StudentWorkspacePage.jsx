@@ -449,7 +449,7 @@ function StudentProfilePage({ profile, authMode = "demo", onUpdateProfile }) {
       });
 
       if (!result?.ok) throw new Error(result?.error || t("student.savingProfileFailed"));
-      setMessage(t("student.profileSaved"));
+      setMessage(result?.message || t("student.profileSaved"));
     } catch (saveError) {
       console.error("Saving student profile failed:", saveError);
       setError(saveError.message || t("student.savingProfileFailed"));
