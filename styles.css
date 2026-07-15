@@ -116,6 +116,45 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .role-icon.admin { color: var(--green-800); background: var(--green-100); }
 .role-icon.student { color: #706323; background: #fff4bd; }
 .demo-note { margin: 20px 0 0; color: #8a9893; font-size: 12px; text-align: center; }
+.auth-mode-toggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: min(100%, 360px);
+  margin-bottom: 12px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.auth-mode-option {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease, box-shadow .2s ease;
+}
+
+.auth-mode-option.active {
+  color: #06292b;
+  background: var(--color-primary);
+  box-shadow: var(--shadow-glow);
+}
+
+.auth-mode-option:not(.active):hover {
+  color: var(--color-text);
+}
+
+.auth-mode-option:disabled {
+  cursor: wait;
+  opacity: .72;
+}
 .login-visual { position: relative; overflow: hidden; display: grid; place-items: center; margin: 18px 18px 18px 0; border-radius: 28px; background: radial-gradient(circle at 70% 15%, #bfe3cd 0, transparent 28%), linear-gradient(145deg, #255c49, #4f9671); }
 .hero-visual { position: relative; min-height: 680px; align-self: stretch; border-radius: 28px; overflow: hidden; }
 .login-visual::before, .login-visual::after { content: ""; position: absolute; border-radius: 50%; background: rgba(255,255,255,.07); }
@@ -1088,10 +1127,32 @@ td,
 .stat-icon,
 .cert-ribbon,
 .role-icon.admin,
-.role-icon.student {
+.role-icon.student,
+.role-icon.production {
   color: #06292b;
   background: var(--color-primary);
   box-shadow: var(--shadow-glow);
+}
+
+.text-link-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-password-form {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+}
+
+.profile-password-header h3 {
+  margin: 6px 0 14px;
 }
 
 .brand small,

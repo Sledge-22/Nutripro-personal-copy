@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Sidebar, Header } from "../components/ui.jsx";
-import { AUTH_MODE, ENABLE_AUTH_TEST_TOOLS, isProductionAuthMode } from "../config/authMode.js";
+import { ENABLE_AUTH_TEST_TOOLS, isProductionAuthMode } from "../config/authMode.js";
 import {
   initialCertificates,
   initialCommunityPosts,
@@ -60,8 +60,10 @@ import {
   updateCommunityComment,
 } from "../services/communityService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+import { getSiteAccessMode, updateSiteAccessMode } from "../services/siteSettingsService.js";
 
 const DEMO_SESSION_STORAGE_KEY = "nutripro-demo-session";
+const APP_SESSION_MODE_STORAGE_KEY = "nutripro-app-session-mode";
 const DEMO_ACCOUNTS = {
   admin: {
     role: "Admin",
@@ -78,7 +80,7 @@ const DEMO_ACCOUNTS = {
 };
 
 function getPathname() {
-  return window.location.pathname || ROUTES.login;
+  return window.location.pathname || ROUTES.home;
 }
 
 function navigateTo(pathname, replace = false) {
@@ -170,6 +172,24 @@ function clearDemoSession() {
   }
 }
 
+function readAppSessionMode() {
+  try {
+    const value = window.localStorage.getItem(APP_SESSION_MODE_STORAGE_KEY);
+    return value === "production" ? "production" : "demo";
+  } catch (error) {
+    console.error("Reading the app session mode failed:", error);
+    return "demo";
+  }
+}
+
+function persistAppSessionMode(mode) {
+  try {
+    window.localStorage.setItem(APP_SESSION_MODE_STORAGE_KEY, mode === "production" ? "production" : "demo");
+  } catch (error) {
+    console.error("Saving the app session mode failed:", error);
+  }
+}
+
 function getDemoRoleKeyFromPath(pathname) {
   if (isAdminRoute(pathname)) return "admin";
   if (isStudentRoute(pathname)) return "student";
@@ -177,15 +197,14 @@ function getDemoRoleKeyFromPath(pathname) {
 }
 
 export function App() {
-  const { t } = useLanguage();
-  // Demo mode is the default live behavior. Production auth stays parked behind VITE_AUTH_MODE=production.
-  const isDemoAuthMode = AUTH_MODE === "demo";
-  const authConfigured = isProductionAuthMode && isAuthConfigured();
+  const { t, language } = useLanguage();
+  // Demo mode stays live by default, but production auth is now available separately on /login.
+  const productionAuthAvailable = isAuthConfigured();
   const initialDemoStudent = initialUsers.find((user) => user.email?.toLowerCase() === DEMO_STUDENT_EMAIL) ?? initialUsers[0] ?? null;
   const showAuthTestTools = ENABLE_AUTH_TEST_TOOLS;
 
   const [pathname, setPathname] = useState(getPathname());
-  const [authLoading, setAuthLoading] = useState(authConfigured);
+  const [authLoading, setAuthLoading] = useState(productionAuthAvailable);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loginInfo, setLoginInfo] = useState("");
@@ -203,9 +222,16 @@ export function App() {
   );
   const [posts, setPosts] = useState(initialCommunityPosts);
   const [progressState, setProgressState] = useState(initialStudentProgress);
-  const [demoSession, setDemoSession] = useState(() => (isProductionAuthMode ? null : readDemoSession()));
+  const [demoSession, setDemoSession] = useState(() => readDemoSession());
+  const [appSessionMode, setAppSessionMode] = useState(() => readAppSessionMode());
+  const [siteAccessMode, setSiteAccessMode] = useState("demo");
 
-  const activeStudentId = authConfigured
+  const isProductionAuthRoute = pathname === ROUTES.login || isAuthUtilityRoute(pathname);
+  const isProductionExperience =
+    productionAuthAvailable &&
+    (isProductionAuthMode || appSessionMode === "production" || isProductionAuthRoute || Boolean(authSession?.user) || Boolean(currentUser));
+
+  const activeStudentId = isProductionExperience
     ? currentUser?.roleKey === "student"
       ? currentUser?.id ?? null
       : null
@@ -218,7 +244,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!authConfigured) {
+    if (!productionAuthAvailable) {
       setAuthLoading(false);
       void loadDemoWorkspace();
       return;
@@ -248,29 +274,45 @@ export function App() {
       active = false;
       subscription.unsubscribe();
     };
-  }, [authConfigured, t]);
+  }, [productionAuthAvailable, t]);
 
   useEffect(() => {
-    if (!authConfigured) return;
+    let active = true;
+
+    void (async () => {
+      const nextMode = await getSiteAccessMode();
+      if (!active) return;
+      setSiteAccessMode(nextMode);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!productionAuthAvailable) return;
 
     if (!authSession?.user) {
       setCurrentUser(null);
+      setAppSessionMode("demo");
+      persistAppSessionMode("demo");
       setLoginInfo("");
       setWorkspaceLoading(false);
-      if (pathname !== ROUTES.login) navigateTo(ROUTES.login, true);
+      if (isProductionExperience && pathname !== ROUTES.login) navigateTo(ROUTES.login, true);
       return;
     }
 
     void loadAuthenticatedWorkspace(authSession.user);
-  }, [authConfigured, authSession]);
+  }, [productionAuthAvailable, authSession, isProductionExperience, pathname]);
 
   useEffect(() => {
-    if (isProductionAuthMode) return;
+    if (isProductionExperience) return;
 
     const inferredRoleKey = demoSession?.roleKey ?? getDemoRoleKeyFromPath(pathname);
 
     if (!inferredRoleKey) {
-      if (pathname !== ROUTES.login) navigateTo(ROUTES.login, true);
+      if (pathname !== ROUTES.home) navigateTo(ROUTES.home, true);
       return;
     }
 
@@ -281,10 +323,10 @@ export function App() {
       return;
     }
 
-    if (pathname === ROUTES.login) {
+    if (pathname === ROUTES.home) {
       return;
     }
-  }, [demoSession, pathname]);
+  }, [demoSession, isProductionExperience, pathname]);
 
   async function loadDemoWorkspace() {
     const resolvedDemoStudent = await ensureDemoStudent();
@@ -335,6 +377,8 @@ export function App() {
 
     try {
       const profile = await getUserProfileForAuthUser(authUser);
+      setAppSessionMode("production");
+      persistAppSessionMode("production");
       setCurrentUser(profile);
 
       const roleKey = profile?.roleKey ?? `${profile?.role ?? ""}`.toLowerCase();
@@ -419,11 +463,11 @@ export function App() {
   }
 
   const role = useMemo(() => {
-    if (authConfigured) return toRoleLabel(currentUser?.roleKey ?? currentUser?.role);
+    if (isProductionExperience) return toRoleLabel(currentUser?.roleKey ?? currentUser?.role);
     const demoRoleKey = demoSession?.roleKey ?? getDemoRoleKeyFromPath(pathname);
     if (demoRoleKey) return toRoleLabel(demoRoleKey);
     return null;
-  }, [authConfigured, currentUser, demoSession, pathname]);
+  }, [isProductionExperience, currentUser, demoSession, pathname]);
 
   const adminNav = useMemo(() => ([
     { path: ROUTES.admin.dashboard, label: t("common.dashboard"), icon: "dashboard" },
@@ -432,7 +476,8 @@ export function App() {
     { path: ROUTES.admin.community, label: t("common.community"), icon: "community" },
     { path: ROUTES.admin.assignmentReviews, label: t("common.assignmentReviews"), icon: "certificate" },
     { path: ROUTES.admin.certificates, label: t("common.certificatesGenerator"), icon: "certificate" },
-  ]), [t]);
+    { path: ROUTES.admin.settings, label: language === "es" ? "Configuración" : "Settings", icon: "dashboard" },
+  ]), [language, t]);
 
   const studentNav = useMemo(() => ([
     { path: ROUTES.student.dashboard, label: t("common.dashboard"), icon: "dashboard" },
@@ -450,6 +495,7 @@ export function App() {
       [ROUTES.admin.community]: t("common.community"),
       [ROUTES.admin.assignmentReviews]: t("common.assignmentReviews"),
       [ROUTES.admin.certificates]: t("common.certificatesGenerator"),
+      [ROUTES.admin.settings]: language === "es" ? "Configuración" : "Settings",
       [ROUTES.student.dashboard]: t("common.dashboard"),
       [ROUTES.student.profile]: t("common.myProfile"),
       [ROUTES.student.certificates]: t("common.certificates"),
@@ -468,15 +514,23 @@ export function App() {
     }
 
     return map[pathname] || "Nutripro";
-  }, [courses, pathname, studentCourses, t]);
+  }, [courses, language, pathname, studentCourses, t]);
 
   function handleDemoAccess(nextRole) {
     const nextDemoAccount = nextRole === "Admin" ? DEMO_ACCOUNTS.admin : DEMO_ACCOUNTS.student;
     setLoginError("");
     setLoginInfo("");
+    setAppSessionMode("demo");
+    persistAppSessionMode("demo");
     persistDemoSession(nextDemoAccount);
     setDemoSession(nextDemoAccount);
     navigateTo(dashboardPathForRole(nextDemoAccount.roleKey), true);
+  }
+
+  function handleOpenProductionLogin() {
+    setLoginError("");
+    setLoginInfo("");
+    navigateTo(ROUTES.login, true);
   }
 
   async function handleAuthLogin({ identifier, password }) {
@@ -486,6 +540,8 @@ export function App() {
 
     try {
       const { session } = await signInWithCredentials(identifier, password);
+      setAppSessionMode("production");
+      persistAppSessionMode("production");
       setAuthSession(session);
     } catch (error) {
       console.error("Signing in with Supabase Auth failed:", error);
@@ -496,7 +552,7 @@ export function App() {
   }
 
   async function handleLogout() {
-    if (authConfigured) {
+    if (isProductionExperience) {
       try {
         await signOut();
       } catch (error) {
@@ -504,19 +560,23 @@ export function App() {
       }
       setCurrentUser(null);
       setAuthSession(null);
+      setAppSessionMode("demo");
+      persistAppSessionMode("demo");
     } else {
       clearDemoSession();
       setDemoSession(null);
       setLoginError("");
       setLoginInfo("");
+      setAppSessionMode("demo");
+      persistAppSessionMode("demo");
     }
 
-    navigateTo(ROUTES.login, true);
+    navigateTo(isProductionExperience ? ROUTES.login : ROUTES.home, true);
   }
 
   async function handleForcedPasswordChange(nextPassword) {
     try {
-      const result = await completeFirstTimeSetup(currentUser?.id, nextPassword.username, nextPassword.password);
+      const result = await completeFirstTimeSetup(currentUser?.id, nextPassword.username, nextPassword.password, currentUser?.username);
       setCurrentUser(result.profile ?? currentUser);
       navigateTo(dashboardPathForRole(result.profile?.roleKey ?? currentUser?.roleKey), true);
       return { ok: true };
@@ -673,7 +733,7 @@ export function App() {
       const nextUsers = await getUsers();
       setUsers(nextUsers);
       setStudentProfile(savedProfile ?? nextUsers.find((user) => String(user.id) === String(activeStudentId)) ?? studentProfile);
-      if (authConfigured && String(currentUser?.id) === String(activeStudentId)) {
+      if (isProductionExperience && String(currentUser?.id) === String(activeStudentId)) {
         setCurrentUser(savedProfile ?? currentUser);
       }
       setPosts(await getCommunityPosts());
@@ -723,15 +783,22 @@ export function App() {
     }
   }
 
+  async function handleUpdateSiteAccessMode(nextMode) {
+    const normalizedMode = await updateSiteAccessMode(nextMode, currentUser?.id ?? null);
+    setSiteAccessMode(normalizedMode);
+    return normalizedMode;
+  }
+
   if (pathname === ROUTES.auth.setupPreview) {
     return <ForcedPasswordPage onSubmit={async () => ({ ok: true })} loading={false} />;
   }
 
-  if (isProductionAuthMode && !authConfigured) {
+  if (pathname === ROUTES.login && !productionAuthAvailable) {
     return (
       <LoginPage
         authMode="production"
         onLogin={handleAuthLogin}
+        onBackToHome={() => navigateTo(ROUTES.home, true)}
         loading={false}
         error={t("auth.loadingSessionFailed")}
         info={t("auth.productionConfigMissing")}
@@ -739,13 +806,13 @@ export function App() {
     );
   }
 
-  if (authConfigured) {
+  if (isProductionExperience) {
     if (authLoading) {
-      return <LoginPage authMode="production" loading error={loginError} info={t("auth.loadingSession")} onLogin={handleAuthLogin} />;
+      return <LoginPage authMode="production" loading error={loginError} info={t("auth.loadingSession")} onLogin={handleAuthLogin} onBackToHome={() => navigateTo(ROUTES.home, true)} />;
     }
 
     if (!authSession?.user || !currentUser) {
-      return <LoginPage authMode="production" onLogin={handleAuthLogin} loading={authLoading} error={loginError} info={loginInfo} />;
+      return <LoginPage authMode="production" onLogin={handleAuthLogin} onBackToHome={() => navigateTo(ROUTES.home, true)} loading={authLoading} error={loginError} info={loginInfo} />;
     }
 
     const blockedReason = getAccessBlockReason(currentUser);
@@ -783,14 +850,14 @@ export function App() {
     }
 
     if (currentUser?.mustChangePassword || currentUser?.must_change_password) {
-      return <ForcedPasswordPage onSubmit={handleForcedPasswordChange} loading={workspaceLoading} />;
+      return <ForcedPasswordPage onSubmit={handleForcedPasswordChange} loading={workspaceLoading} currentUsername={currentUser?.username || ""} />;
     }
 
     if (workspaceLoading && role === "Student" && pathname.startsWith("/student/courses/")) {
       return <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />;
     }
   } else if (!role) {
-    return <LoginPage authMode={isDemoAuthMode ? "demo" : "production"} onChoose={handleDemoAccess} onLogin={handleAuthLogin} loading={false} error={loginError} info={loginInfo} />;
+    return <LoginPage authMode="demo" siteAccessMode={siteAccessMode} canShowProductionEntry={productionAuthAvailable} onChoose={handleDemoAccess} onOpenProductionLogin={handleOpenProductionLogin} onLogin={handleAuthLogin} loading={false} error={loginError} info={loginInfo} />;
   }
 
   const demoHeaderProfile =
@@ -800,5 +867,5 @@ export function App() {
         DEMO_ACCOUNTS.admin
       : studentProfile ?? demoSession ?? DEMO_ACCOUNTS.student;
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={authConfigured ? currentUser : demoHeaderProfile} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} posts={posts} currentUser={authConfigured ? currentUser : demoHeaderProfile} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={isProductionExperience ? currentUser : demoHeaderProfile} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} posts={posts} currentUser={isProductionExperience ? currentUser : demoHeaderProfile} siteAccessMode={siteAccessMode} showAuthTestTools={showAuthTestTools} onUpdateSiteAccessMode={handleUpdateSiteAccessMode} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} authMode={isProductionExperience ? "production" : "demo"} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }

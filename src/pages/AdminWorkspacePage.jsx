@@ -688,7 +688,9 @@ export function AdminWorkspacePage({
   certificates,
   posts,
   currentUser,
+  siteAccessMode = "demo",
   showAuthTestTools = true,
+  onUpdateSiteAccessMode,
   onUpdateUserStatus,
   onUpdateUser,
   onCreateUser,
@@ -764,10 +766,13 @@ export function AdminWorkspacePage({
     );
   }
 
-  return <AdminDashboardPage users={users} courses={courses} certificates={certificates} />;
-}
+  if (pathname === "/admin/settings") {
+    return <AdminSettingsPage siteAccessMode={siteAccessMode} onUpdateSiteAccessMode={onUpdateSiteAccessMode} />;
+  }
 
-function AdminDashboardPage({ users, courses, certificates }) {
+  return <AdminDashboardPage users={users} courses={courses} certificates={certificates} currentUser={currentUser} />;
+}
+function AdminDashboardPage({ users, courses, certificates, currentUser }) {
   const { t } = useLanguage();
   const students = users.filter((user) => user.role === "Student");
 
@@ -796,6 +801,98 @@ function AdminDashboardPage({ users, courses, certificates }) {
           <OverviewCard icon="courses" title={t("common.postCourses")} text={t("dashboard.postCoursesText")} />
           <OverviewCard icon="certificate" title={t("common.assignmentReviews")} text={t("dashboard.assignmentReviewsText")} />
           <OverviewCard icon="certificate" title={t("common.certificatesGenerator")} text={t("dashboard.certificatesGeneratorText")} />
+        </div>
+      </section>
+    </>
+  );
+}
+
+function AdminSettingsPage({ siteAccessMode = "demo", onUpdateSiteAccessMode }) {
+  const { language } = useLanguage();
+  const [settingsMessage, setSettingsMessage] = useState("");
+  const [settingsError, setSettingsError] = useState("");
+  const [updatingMode, setUpdatingMode] = useState(false);
+  const pageTitle = language === "es" ? "Configuración" : "Settings";
+  const pageText = language === "es"
+    ? "Administra los controles generales del sitio y las preferencias administrativas."
+    : "Manage site-wide controls and administrative preferences.";
+  const modeHeading = language === "es" ? "Modo de acceso del sitio" : "Site Access Mode";
+  const modeDescription = language === "es"
+    ? "Controla si Nutripro se abre en modo demo o en modo de inicio de sesión de producción."
+    : "Control whether Nutripro opens in demo mode or production login mode.";
+  const demoModeLabel = language === "es" ? "Modo demo" : "Demo Mode";
+  const productionModeLabel = language === "es" ? "Modo inicio de sesión" : "Login Mode";
+  const helperText = language === "es"
+    ? "Este control es para pruebas y preparación del lanzamiento. Puede eliminarse más adelante cuando el inicio de sesión de producción esté finalizado."
+    : "This control is for testing and launch preparation. It can be removed later once production login is finalized.";
+  const warningText = language === "es"
+    ? "El inicio de sesión de producción solo debe activarse después de probar las cuentas, contraseñas e invitaciones."
+    : "Production Login should only be enabled after user accounts, passwords, and invitation flow are tested.";
+  const successText = language === "es" ? "Modo de acceso del sitio actualizado." : "Site access mode updated.";
+  const failurePrefix = language === "es" ? "No se pudo actualizar el modo de acceso del sitio:" : "Unable to update site access mode:";
+  const comingSoon = language === "es" ? "Próximamente" : "Coming soon";
+  const comingSoonText = language === "es" ? "Próximamente en esta sección." : "Coming soon in this section.";
+
+  const handleModeChange = async (nextMode) => {
+    if (!onUpdateSiteAccessMode || nextMode === siteAccessMode) return;
+    setUpdatingMode(true);
+    setSettingsMessage("");
+    setSettingsError("");
+    try {
+      await onUpdateSiteAccessMode(nextMode);
+      setSettingsMessage(successText);
+    } catch (error) {
+      console.error("Updating the admin-controlled site access mode failed:", error);
+      setSettingsError(`${failurePrefix} ${error?.message || "Unknown error"}`);
+    } finally {
+      setUpdatingMode(false);
+    }
+  };
+
+  return (
+    <>
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{language === "es" ? "ADMINISTRACIÓN" : "ADMINISTRATION"}</span>
+            <h2>{pageTitle}</h2>
+            <p>{pageText}</p>
+          </div>
+        </div>
+      </section>
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{language === "es" ? "CONFIGURACIÓN DEL SITIO" : "SITE SETTINGS"}</span>
+            <h2>{modeHeading}</h2>
+            <p>{modeDescription}</p>
+          </div>
+        </div>
+        <div className="auth-mode-toggle" role="tablist" aria-label={modeHeading}>
+          <button type="button" className={`auth-mode-option ${siteAccessMode === "demo" ? "active" : ""}`} onClick={() => void handleModeChange("demo")} disabled={updatingMode}>
+            {demoModeLabel}
+          </button>
+          <button type="button" className={`auth-mode-option ${siteAccessMode === "production" ? "active" : ""}`} onClick={() => void handleModeChange("production")} disabled={updatingMode}>
+            {productionModeLabel}
+          </button>
+        </div>
+        <small className="field-note">{helperText}</small>
+        {siteAccessMode === "production" ? <small className="field-note warning-badge">{warningText}</small> : null}
+        {settingsMessage ? <small className="field-note">{settingsMessage}</small> : null}
+        {settingsError ? <small className="field-note danger-text">{settingsError}</small> : null}
+      </section>
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{comingSoon.toUpperCase()}</span>
+            <h2>{language === "es" ? "Más controles administrativos" : "More admin controls"}</h2>
+          </div>
+        </div>
+        <div className="overview-grid">
+          <OverviewCard icon="community" title={`${language === "es" ? "Correo e invitaciones" : "Email & Invitations"} · ${comingSoon}`} text={comingSoonText} />
+          <OverviewCard icon="courses" title={`${language === "es" ? "Marca" : "Branding"} · ${comingSoon}`} text={comingSoonText} />
+          <OverviewCard icon="certificate" title={`${language === "es" ? "Certificados" : "Certificates"} · ${comingSoon}`} text={comingSoonText} />
+          <OverviewCard icon="users" title={`${language === "es" ? "Moderación de comunidad" : "Community Moderation"} · ${comingSoon}`} text={comingSoonText} />
         </div>
       </section>
     </>
