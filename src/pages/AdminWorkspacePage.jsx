@@ -698,7 +698,6 @@ export function AdminWorkspacePage({
   onGenerateCertificate,
   onCreatePost,
   onCreateComment,
-  onTogglePostVote,
   onUpdatePost,
   onDeletePost,
   onUpdateComment,
@@ -740,7 +739,6 @@ export function AdminWorkspacePage({
         courses={courses}
         onCreatePost={onCreatePost}
         onCreateComment={onCreateComment}
-        onTogglePostVote={onTogglePostVote}
         onUpdatePost={onUpdatePost}
         onDeletePost={onDeletePost}
         onUpdateComment={onUpdateComment}

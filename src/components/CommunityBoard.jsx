@@ -12,7 +12,7 @@ const REPEATED_CHAR_PATTERN = /(.)\1{7,}/;
 const ABUSIVE_PATTERN = /\b(?:idiot|stupid|moron|hate)\b/i;
 
 const categoryKeys = ["question", "discussion", "announcement", "resource", "support"];
-const sortKeys = ["new", "top", "commented", "pinned"];
+const sortKeys = ["new", "commented", "pinned"];
 const filterKeys = ["all", "question", "discussion", "announcement", "resource", "support", "resolved", "unresolved", "mine"];
 const removalReasons = ["spam", "harassment", "inappropriate", "off_topic", "private_information", "other"];
 
@@ -75,17 +75,6 @@ function getCommentCount(post, canModerate) {
   return getVisibleComments(post, canModerate).length;
 }
 
-function getPostVoteCount(post) {
-  if (Number.isFinite(Number(post?.voteScore))) return Number(post.voteScore);
-  const upvotes = Number.isFinite(Number(post?.upvoteCount))
-    ? Number(post.upvoteCount)
-    : (Array.isArray(post?.upvoterIds) ? post.upvoterIds.length : 0);
-  const downvotes = Number.isFinite(Number(post?.downvoteCount))
-    ? Number(post.downvoteCount)
-    : (Array.isArray(post?.downvoterIds) ? post.downvoterIds.length : 0);
-  return upvotes - downvotes;
-}
-
 function getPostCourseTitle(post, courseMap) {
   if (post?.courseTitle) return post.courseTitle;
   return courseMap.get(String(post?.courseId ?? ""))?.title ?? "";
@@ -123,24 +112,6 @@ function getReadableErrorMessage(error) {
     return String(error);
   } catch {}
   return "Unknown error: no readable error details were returned";
-}
-
-function VoteButton({ active, direction, onClick, label }) {
-  return (
-    <button
-      type="button"
-      className={`community-vote ${active ? "is-active" : ""} ${direction === "downvote" ? "is-downvote" : "is-upvote"}`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      aria-label={label}
-      title={label}
-    >
-      <span className="community-vote-icon" aria-hidden="true">{direction === "downvote" ? "▼" : "▲"}</span>
-      <small>{label}</small>
-    </button>
-  );
 }
 
 function CommunityMetaBadges({ post, courseTitle, canModerate, t }) {
@@ -188,7 +159,6 @@ export function CommunityBoard({
   courses,
   onCreatePost,
   onCreateComment,
-  onTogglePostVote,
   onUpdatePost,
   onDeletePost,
   onUpdateComment,
@@ -264,7 +234,6 @@ export function CommunityBoard({
     return filteredPosts.sort((left, right) => {
       if (left.isPinned !== right.isPinned) return left.isPinned ? -1 : 1;
       if (sort === "pinned") return left.isPinned === right.isPinned ? 0 : left.isPinned ? -1 : 1;
-      if (sort === "top") return getPostVoteCount(right) - getPostVoteCount(left);
       if (sort === "commented") return getCommentCount(right, canModerate) - getCommentCount(left, canModerate);
       return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime();
     });
@@ -376,15 +345,6 @@ export function CommunityBoard({
     } catch (error) {
       console.error("Creating a community comment failed:", error);
       setMessage({ type: "error", text: t("community.errorLoad") });
-    }
-  };
-
-  const handleToggleVote = async (post, voteType) => {
-    try {
-      await onTogglePostVote(post.id, currentUser?.id, voteType);
-    } catch (error) {
-      console.error("Toggling a community post vote failed:", error);
-      setMessage({ type: "error", text: t("community.voteFailed") });
     }
   };
 
@@ -594,8 +554,6 @@ export function CommunityBoard({
               const comments = getVisibleComments(post, canModerate);
               const hasPdfMetadata = Boolean(post.pdfFileName || post.pdfStoragePath || post.pdfPublicUrl);
               const canShowPdf = Boolean(post.pdfPublicUrl);
-              const viewerHasUpvoted = Array.isArray(post.upvoterIds) && post.upvoterIds.map(String).includes(String(currentUser?.id ?? ""));
-              const viewerHasDownvoted = Array.isArray(post.downvoterIds) && post.downvoterIds.map(String).includes(String(currentUser?.id ?? ""));
               const canResolvePost = canModerate || String(post.studentId ?? "") === String(currentUser?.id ?? "");
               const removeKey = `post-${post.id}`;
               const removeState = removeDrafts[removeKey];
@@ -603,23 +561,6 @@ export function CommunityBoard({
               return (
                 <article key={post.id} className={`section-card community-post-card ${post.isAnnouncement ? "is-announcement" : ""} ${post.isRemoved ? "is-removed" : ""}`}>
                   <div className="community-post-shell">
-                    <div className="community-vote-stack">
-                      <VoteButton
-                        active={viewerHasUpvoted}
-                        direction="upvote"
-                        onClick={() => void handleToggleVote(post, "upvote")}
-                        label={t("community.upvote")}
-                      />
-                      <span className="community-vote-score">{getPostVoteCount(post)}</span>
-                      <VoteButton
-                        active={viewerHasDownvoted}
-                        direction="downvote"
-                        onClick={() => void handleToggleVote(post, "downvote")}
-                        label={t("community.downvote")}
-                      />
-                      <small className="community-vote-caption">{t("community.votes")}</small>
-                    </div>
-
                     <div className="community-post-content">
                       <div className="community-post-topline">
                         {(post.profilePictureUrl || post.profile_picture_url) ? (
@@ -931,7 +872,6 @@ export function CommunityBoard({
                       <p className="community-post-body">{post.body}</p>
 
                       <div className="community-tags">
-                        <span className="community-tag">{post.voteScore ?? 0} {t("community.votes")}</span>
                         <span className="community-tag">{getCommentCount(post, true)} {t("community.comments")}</span>
                       </div>
 
