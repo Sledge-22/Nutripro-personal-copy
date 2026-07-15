@@ -135,7 +135,7 @@ function CommunityCountryBadge({ post }) {
 
   return (
     <span className="community-country-badge" aria-label={name || "Country"}>
-      {flag ? <span aria-hidden="true">{flag}</span> : null}
+      {flag ? <span className="country-flag community-country-flag" aria-hidden="true">{flag}</span> : null}
       {name ? <span>{name}</span> : null}
     </span>
   );

@@ -521,8 +521,20 @@ dd { margin: 6px 0 0; font-size: 12px; font-weight: 700; }
 .post-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .post-meta strong { font-size: 12px; }
 .post-meta span { color: var(--muted); font-size: 11px; }
+.country-flag,
+.profile-country-flag,
+.community-country-flag,
+.country-option-flag {
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
 .community-country-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,248,231,.12); background: rgba(255,255,255,.05); color: var(--color-text); font-size: .8rem; font-weight: 600; line-height: 1; }
 .community-country-badge span { color: inherit; font-size: inherit; }
+.profile-country-badge { gap: 8px; align-items: center; }
 .post-list h3 { margin: 14px 0 7px; font-size: 16px; }
 .post-list p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .post-form .primary-btn { width: 100%; }

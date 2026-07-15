@@ -5,6 +5,8 @@ import { ROUTES } from "../routes/appRoutes.js";
 import { getStudentSubmission, submitAssignment } from "../services/assignmentService.js";
 import { getStudentCourseAccess } from "../services/courseService.js";
 import { uploadAssignmentFile, uploadProfilePicture } from "../services/storageService.js";
+import { normalizeCountrySelection } from "../data/countries.js";
+import { getProfileCountryOptions } from "../data/profileCountries.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 import {
   getEmbeddablePdfUrl,
@@ -371,11 +373,16 @@ function StudentDashboardPage({ courses, certificates, progressFor }) {
 }
 
 function StudentProfilePage({ profile, onUpdateProfile }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const countryOptions = getProfileCountryOptions();
+  const initialCountry = normalizeCountrySelection(
+    profile?.countryCode ?? profile?.country_code ?? profile?.countryName ?? profile?.country_name ?? profile?.country,
+    language,
+  );
   const [form, setForm] = useState({
     name: profile?.name || "",
     email: profile?.email || "",
-    country: profile?.country || "",
+    countryCode: initialCountry.countryCode || "",
     bio: profile?.bio || "",
     profilePictureUrl: profile?.profilePictureUrl || profile?.profile_picture_url || "",
   });
@@ -385,14 +392,18 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
+    const nextCountry = normalizeCountrySelection(
+      profile?.countryCode ?? profile?.country_code ?? profile?.countryName ?? profile?.country_name ?? profile?.country,
+      language,
+    );
     setForm({
       name: profile?.name || "",
       email: profile?.email || "",
-      country: profile?.country || "",
+      countryCode: nextCountry.countryCode || "",
       bio: profile?.bio || "",
       profilePictureUrl: profile?.profilePictureUrl || profile?.profile_picture_url || "",
     });
-  }, [profile]);
+  }, [profile, language]);
 
   const saveProfile = async (event) => {
     event.preventDefault();
@@ -401,9 +412,13 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
     setError("");
 
     try {
+      const selectedCountry = normalizeCountrySelection(form.countryCode, language);
       const result = await onUpdateProfile({
         name: form.name,
-        country: form.country,
+        country: selectedCountry.country,
+        country_code: selectedCountry.countryCode,
+        country_name: selectedCountry.countryName,
+        country_flag: selectedCountry.countryFlag,
         bio: form.bio,
         profile_picture_url: form.profilePictureUrl,
       });
@@ -441,6 +456,7 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
   };
 
   const avatarLabel = initialsFromName(form.name || profile?.name || "Maya Laurent");
+  const selectedCountry = normalizeCountrySelection(form.countryCode, language);
 
   return (
     <div className="profile-layout">
@@ -455,7 +471,12 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
             <span className="eyebrow">{t("common.myProfile")}</span>
             <h2>{form.name || profile?.name || "Maya Laurent"}</h2>
             <p>{form.email || profile?.email || "maya@nutripro.demo"}</p>
-            {form.country ? <span className="subtle-badge">{form.country}</span> : null}
+            {selectedCountry.country ? (
+              <span className="subtle-badge profile-country-badge">
+                {selectedCountry.countryFlag ? <span className="country-flag profile-country-flag" aria-hidden="true">{selectedCountry.countryFlag}</span> : null}
+                <span>{selectedCountry.country}</span>
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -472,7 +493,14 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
 
           <label>
             {t("common.country")}
-            <input value={form.country} onChange={(event) => setForm((current) => ({ ...current, country: event.target.value }))} placeholder={t("student.countryPlaceholder")} />
+            <select value={form.countryCode} onChange={(event) => setForm((current) => ({ ...current, countryCode: event.target.value }))}>
+              <option value="">{t("common.selectCountry")}</option>
+              {countryOptions.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.flag} {option.name}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label>

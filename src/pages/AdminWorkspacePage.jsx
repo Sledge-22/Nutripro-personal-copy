@@ -5,6 +5,8 @@ import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
 import { getSubmissionsForAdmin, reviewSubmission } from "../services/assignmentService.js";
 import { deleteCourseDraft, getCourseDrafts, markCourseDraftPublished, saveCourseDraft } from "../services/courseDraftService.js";
 import { uploadCourseImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
+import { normalizeCountrySelection } from "../data/countries.js";
+import { getProfileCountryOptions } from "../data/profileCountries.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 import { ROUTES } from "../routes/appRoutes.js";
 import {
@@ -801,6 +803,7 @@ function AdminDashboardPage({ users, courses, certificates }) {
 
 function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser }) {
   const { t, language } = useLanguage();
+  const countryOptions = getProfileCountryOptions();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -825,7 +828,7 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
       name: user.name || "",
       role: user.role?.toLowerCase() || "student",
       status: user.status?.toLowerCase() || "active",
-      country: user.country || "",
+      country: user.countryCode || user.country_code || normalizeCountrySelection(user.country, language).countryCode || "",
     });
     setMessage("");
     setError("");
@@ -917,7 +920,23 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
                     )}
                   </td>
                   <td>
-                    {isEditing ? <input value={draft.country} onChange={(event) => setDraft((current) => ({ ...current, country: event.target.value }))} placeholder={t("common.country")} /> : user.country || "—"}
+                    {isEditing ? (
+                      <select value={draft.country} onChange={(event) => setDraft((current) => ({ ...current, country: event.target.value }))}>
+                        <option value="">{t("common.selectCountry")}</option>
+                        {countryOptions.map((option) => (
+                          <option key={option.code} value={option.code}>
+                            {option.flag} {option.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      user.country ? (
+                        <span className="subtle-badge profile-country-badge">
+                          {(user.country_flag || user.countryFlag) ? <span className="country-flag profile-country-flag" aria-hidden="true">{user.country_flag || user.countryFlag}</span> : null}
+                          <span>{user.country}</span>
+                        </span>
+                      ) : "—"
+                    )}
                   </td>
                   <td>{user.created_at || user.createdAt ? formatDisplayDate(user.created_at || user.createdAt, language) : "—"}</td>
                   <td>
@@ -962,6 +981,7 @@ function UsersAdminPanel({
   onSetStudentCourseAssignments,
 }) {
   const { t, language, translateRole } = useLanguage();
+  const countryOptions = getProfileCountryOptions();
   const safeCourses = Array.isArray(courses) ? courses : [];
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -1067,7 +1087,7 @@ function UsersAdminPanel({
       username: user.username || "",
       role: user.roleKey || user.role?.toLowerCase() || "student",
       status: user.statusKey || user.status?.toLowerCase() || "active",
-      country: user.country || "",
+      country: user.countryCode || user.country_code || normalizeCountrySelection(user.country, language).countryCode || "",
       bio: user.bio || "",
       profile_picture_url: user.profile_picture_url || user.profilePictureUrl || "",
     });
@@ -1359,7 +1379,14 @@ function UsersAdminPanel({
           </label>
           <label>
             {t("auth.country")}
-            <input value={createDraftState.country} onChange={(event) => setCreateDraftState((current) => ({ ...current, country: event.target.value }))} />
+            <select value={createDraftState.country} onChange={(event) => setCreateDraftState((current) => ({ ...current, country: event.target.value }))}>
+              <option value="">{t("common.selectCountry")}</option>
+              {countryOptions.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.flag} {option.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="wide-field">
             {t("auth.bio")}
@@ -1548,9 +1575,21 @@ function UsersAdminPanel({
                     </td>
                     <td>
                       {isEditing ? (
-                        <input value={draft.country} onChange={(event) => setDraft((current) => ({ ...current, country: event.target.value }))} placeholder={t("common.country")} />
+                        <select value={draft.country} onChange={(event) => setDraft((current) => ({ ...current, country: event.target.value }))}>
+                          <option value="">{t("common.selectCountry")}</option>
+                          {countryOptions.map((option) => (
+                            <option key={option.code} value={option.code}>
+                              {option.flag} {option.name}
+                            </option>
+                          ))}
+                        </select>
                       ) : (
-                        user.country || "—"
+                        user.country ? (
+                          <span className="subtle-badge profile-country-badge">
+                            {(user.country_flag || user.countryFlag) ? <span className="country-flag profile-country-flag" aria-hidden="true">{user.country_flag || user.countryFlag}</span> : null}
+                            <span>{user.country}</span>
+                          </span>
+                        ) : "—"
                       )}
                     </td>
                     <td>
@@ -4278,3 +4317,6 @@ function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCer
     </div>
   );
 }
+
+
+
