@@ -618,6 +618,10 @@ td,
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
   flex: 0 0 auto;
 }
+.country-flag-image {
+  object-fit: cover;
+  vertical-align: middle;
+}
 .country-flag-emoji {
   width: auto;
   height: auto;
