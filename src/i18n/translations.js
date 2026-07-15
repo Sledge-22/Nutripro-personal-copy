@@ -322,6 +322,8 @@ export const translations = {
       coursesCourseDetail: "Cursos / Detalle del curso",
       AlexMorgan: "Alex Morgan",
       MayaLaurent: "Maya Laurent",
+      openNavigationMenu: "Abrir menú de navegación",
+      closeNavigationMenu: "Cerrar menú de navegación",
     },
     dashboard: {
       atAGlance: "NUTRIPRO EN RESUMEN",
@@ -1066,6 +1068,8 @@ export const translations = {
       coursesCourseDetail: "Courses / Course detail",
       AlexMorgan: "Alex Morgan",
       MayaLaurent: "Maya Laurent",
+      openNavigationMenu: "Open navigation menu",
+      closeNavigationMenu: "Close navigation menu",
     },
     dashboard: {
       atAGlance: "NUTRIPRO AT A GLANCE",

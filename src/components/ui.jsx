@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 import { LanguageDropdown } from "./LanguageDropdown.jsx";
 
@@ -16,6 +16,8 @@ const icons = {
   play: <path d="m9 7 8 5-8 5V7Z" />,
   check: <path d="m5 12 4 4L19 6" />,
   chevron: <path d="m9 18 6-6-6-6" />,
+  menu: <><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></>,
+  close: <><path d="M6 6l12 12" /><path d="M18 6 6 18" /></>,
 };
 
 export function Icon({ name, size = 20 }) {
@@ -60,8 +62,10 @@ export function OverviewCard({ icon, title, text }) {
   return <article className="overview-card"><span><Icon name={icon} /></span><h3>{title}</h3><p>{text}</p></article>;
 }
 
-export function Header({ role, title, detailTitle, profile }) {
+export function Header({ role, title, detailTitle, profile, navItems = [], currentPath = "", onNavigate, onLogout }) {
   const { t, translateRole } = useLanguage();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef(null);
   const profileName = profile?.name || (role === "Admin" ? t("header.AlexMorgan") : t("header.MayaLaurent"));
   const initials = (profileName || "")
     .split(" ")
@@ -70,7 +74,111 @@ export function Header({ role, title, detailTitle, profile }) {
     .map((part) => part[0]?.toUpperCase() || "")
     .join("") || (role === "Admin" ? "AM" : "ML");
 
-  return <header className="topbar"><div>{detailTitle ? <><button className="back-label">{t("header.coursesCourseDetail")}</button><h1>{detailTitle}</h1></> : <><span className="eyebrow">{role === "Admin" ? t("common.adminArea") : t("common.studentArea")}</span><h1>{title}</h1></>}</div><div className="topbar-actions"><LanguageDropdown /><div className="profile">{profile?.profilePictureUrl || profile?.profile_picture_url ? <img className="avatar avatar-image" src={profile.profilePictureUrl || profile.profile_picture_url} alt={profileName} /> : <div className="avatar">{initials}</div>}<div><strong>{profileName}</strong><small>{translateRole(role)}</small></div></div></div></header>;
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+
+    const handlePointerDown = (event) => {
+      if (!mobileMenuRef.current?.contains(event.target)) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("mousedown", handlePointerDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [mobileMenuOpen]);
+
+  const handleMobileNavigate = (path) => {
+    setMobileMenuOpen(false);
+    onNavigate?.(path);
+  };
+
+  const handleMobileLogout = () => {
+    setMobileMenuOpen(false);
+    onLogout?.();
+  };
+
+  return (
+    <header className="topbar">
+      <div className="topbar-heading">
+        <div className="topbar-brand-mobile">
+          <Brand />
+        </div>
+        <div>
+          {detailTitle ? (
+            <>
+              <button className="back-label">{t("header.coursesCourseDetail")}</button>
+              <h1>{detailTitle}</h1>
+            </>
+          ) : (
+            <>
+              <span className="eyebrow">{role === "Admin" ? t("common.adminArea") : t("common.studentArea")}</span>
+              <h1>{title}</h1>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="topbar-actions">
+        <LanguageDropdown />
+        <div className="profile">
+          {profile?.profilePictureUrl || profile?.profile_picture_url ? <img className="avatar avatar-image" src={profile.profilePictureUrl || profile.profile_picture_url} alt={profileName} /> : <div className="avatar">{initials}</div>}
+          <div><strong>{profileName}</strong><small>{translateRole(role)}</small></div>
+        </div>
+      </div>
+
+      <div className="mobile-nav-wrap" ref={mobileMenuRef}>
+        <button
+          type="button"
+          className="mobile-menu-toggle"
+          aria-label={mobileMenuOpen ? t("header.closeNavigationMenu") : t("header.openNavigationMenu")}
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen((current) => !current)}
+        >
+          <Icon name={mobileMenuOpen ? "close" : "menu"} size={20} />
+        </button>
+
+        {mobileMenuOpen ? (
+          <div className="mobile-nav-panel" role="navigation" aria-label={`${translateRole(role)} navigation`}>
+            <div className="mobile-nav-head">
+              <div className="profile">
+                {profile?.profilePictureUrl || profile?.profile_picture_url ? <img className="avatar avatar-image" src={profile.profilePictureUrl || profile.profile_picture_url} alt={profileName} /> : <div className="avatar">{initials}</div>}
+                <div><strong>{profileName}</strong><small>{translateRole(role)}</small></div>
+              </div>
+              <LanguageDropdown />
+            </div>
+
+            <nav className="mobile-nav-list" aria-label={`${translateRole(role)} navigation`}>
+              {navItems.map((item) => (
+                <button
+                  key={item.path}
+                  className={`nav-item ${currentPath === item.path ? "active" : ""}`}
+                  aria-current={currentPath === item.path ? "page" : undefined}
+                  onClick={() => handleMobileNavigate(item.path)}
+                >
+                  <Icon name={item.icon} />
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+
+            <button className="logout mobile-logout" onClick={handleMobileLogout}>
+              <Icon name="logout" />
+              {t("common.signOut")}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </header>
+  );
 }
 
 export function Sidebar({ role, navItems, currentPath, onNavigate, onLogout }) {
