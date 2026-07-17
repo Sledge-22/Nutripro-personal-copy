@@ -2,15 +2,24 @@ import React, { useState } from "react";
 import { Brand } from "../components/ui.jsx";
 import { LanguageDropdown } from "../components/LanguageDropdown.jsx";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+import { ROUTES } from "../routes/appRoutes.js";
 
-export function ForcedPasswordPage({ onSubmit, loading = false, currentUsername = "" }) {
+export function ForcedPasswordPage({
+  onSubmit,
+  loading = false,
+  currentUsername = "",
+  requirePasswordChange = true,
+  requirePrivacyConsent = false,
+}) {
   const { t, language } = useLanguage();
   const [username, setUsername] = useState(currentUsername || "");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const needsUsername = !`${currentUsername ?? ""}`.trim();
+  const needsUsername = requirePasswordChange && !`${currentUsername ?? ""}`.trim();
+  const policyVersion = "2026-07-draft";
   const passwordStrengthText = t("auth.passwordStrengthRequirement") !== "auth.passwordStrengthRequirement"
     ? t("auth.passwordStrengthRequirement")
     : language === "es"
@@ -27,18 +36,27 @@ export function ForcedPasswordPage({ onSubmit, loading = false, currentUsername 
       return;
     }
 
-    if (
+    if (requirePrivacyConsent && !privacyAccepted) {
+      setError(
+        language === "es"
+          ? "Debes aceptar la Política de privacidad y los términos de uso de datos para continuar."
+          : "You must accept the Privacy Policy and Data Use terms to continue.",
+      );
+      return;
+    }
+
+    if (requirePasswordChange && (
       newPassword.length < 10 ||
       !/[A-Z]/.test(newPassword) ||
       !/[a-z]/.test(newPassword) ||
       !/\d/.test(newPassword) ||
       !/[^A-Za-z0-9]/.test(newPassword)
-    ) {
+    )) {
       setError(passwordStrengthText);
       return;
     }
 
-    if (newPassword !== confirmPassword) {
+    if (requirePasswordChange && newPassword !== confirmPassword) {
       setError(t("auth.passwordsDoNotMatch"));
       return;
     }
@@ -46,6 +64,8 @@ export function ForcedPasswordPage({ onSubmit, loading = false, currentUsername 
     const result = await onSubmit({
       username: username.trim(),
       password: newPassword,
+      privacyPolicyAccepted: privacyAccepted,
+      privacyPolicyVersion: policyVersion,
     });
     if (!result?.ok) {
       setError(result?.error || t("auth.passwordChangeFailed"));
@@ -68,8 +88,20 @@ export function ForcedPasswordPage({ onSubmit, loading = false, currentUsername 
 
         <div className="login-copy">
           <span className="eyebrow">{t("auth.forcePasswordEyebrow")}</span>
-          <h1>{t("auth.setUpAccount")}</h1>
-          <p>{t("auth.forcePasswordDescription")}</p>
+          <h1>
+            {requirePasswordChange
+              ? t("auth.setUpAccount")
+              : language === "es"
+                ? "Confirma privacidad y uso de datos"
+                : "Confirm privacy and data use"}
+          </h1>
+          <p>
+            {requirePasswordChange
+              ? t("auth.forcePasswordDescription")
+              : language === "es"
+                ? "Antes de entrar al panel, confirma que leíste y aceptaste la política de privacidad y el uso de datos de Nutripro."
+                : "Before entering the dashboard, confirm that you read and accepted Nutripro's privacy policy and data use notice."}
+          </p>
         </div>
 
         <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
@@ -86,36 +118,66 @@ export function ForcedPasswordPage({ onSubmit, loading = false, currentUsername 
             </label>
           ) : null}
 
-          <label>
-            {t("auth.newPassword")}
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          </label>
+          {requirePasswordChange ? (
+            <>
+              <label>
+                {t("auth.newPassword")}
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
 
-          <small className="field-note">{passwordStrengthText}</small>
+              <small className="field-note">{passwordStrengthText}</small>
 
-          <label>
-            {t("auth.confirmPassword")}
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          </label>
+              <label>
+                {t("auth.confirmPassword")}
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+            </>
+          ) : null}
+
+          {requirePrivacyConsent ? (
+            <label className="privacy-consent-card">
+              <span className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={privacyAccepted}
+                  onChange={(event) => setPrivacyAccepted(event.target.checked)}
+                />
+                <span>
+                  {language === "es"
+                    ? "He leído y acepto la Política de privacidad y los términos de uso de datos."
+                    : "I have read and agree to the Privacy Policy and Data Use terms."}
+                </span>
+              </span>
+              <a className="text-link" href={ROUTES.privacy}>
+                {language === "es" ? "Leer política de privacidad" : "Read privacy policy"}
+              </a>
+            </label>
+          ) : null}
 
           {message ? <small className="field-note">{message}</small> : null}
           {error ? <small className="field-note danger-text">{error}</small> : null}
 
           <div className="form-actions">
             <button type="submit" className="primary-btn" disabled={loading}>
-              {loading ? t("common.saving") : t("auth.changePassword")}
+              {loading
+                ? t("common.saving")
+                : requirePasswordChange
+                  ? t("auth.changePassword")
+                  : language === "es"
+                    ? "Continuar"
+                    : "Continue"}
             </button>
           </div>
         </form>

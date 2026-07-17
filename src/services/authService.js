@@ -1,6 +1,7 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import {
   markPasswordChanged,
+  recordPrivacyPolicyConsent,
   finalizeUserOnboarding,
   getUserProfileForAuthUser,
   recordUserLogin,
@@ -118,7 +119,13 @@ export async function changePassword(userId, nextPassword) {
   };
 }
 
-export async function completeFirstTimeSetup(userId, username, nextPassword, currentUsername = "") {
+export async function completeFirstTimeSetup(
+  userId,
+  username,
+  nextPassword,
+  currentUsername = "",
+  options = {},
+) {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase Auth is not configured.");
   }
@@ -126,6 +133,8 @@ export async function completeFirstTimeSetup(userId, username, nextPassword, cur
   const normalizedUsername = `${username ?? ""}`.trim().toLowerCase();
   const normalizedCurrentUsername = `${currentUsername ?? ""}`.trim().toLowerCase();
   const normalizedPassword = `${nextPassword ?? ""}`;
+  const shouldRecordPrivacyConsent = Boolean(options.privacyPolicyAccepted);
+  const privacyPolicyVersion = `${options.privacyPolicyVersion ?? "2026-07-draft"}`.trim() || "2026-07-draft";
 
   if (!validatePasswordStrength(normalizedPassword)) {
     throw new Error("Password must include at least 10 characters, uppercase and lowercase letters, a number, and a symbol.");
@@ -147,6 +156,9 @@ export async function completeFirstTimeSetup(userId, username, nextPassword, cur
     profile = nextUsername
       ? await finalizeUserOnboarding(userId, nextUsername)
       : await markPasswordChanged(userId);
+    if (shouldRecordPrivacyConsent) {
+      profile = await recordPrivacyPolicyConsent(userId, privacyPolicyVersion);
+    }
   } else if (data.user) {
     profile = await getUserProfileForAuthUser(data.user);
   }
@@ -155,4 +167,12 @@ export async function completeFirstTimeSetup(userId, username, nextPassword, cur
     user: data.user ?? null,
     profile,
   };
+}
+
+export async function completePrivacyConsent(userId, version = "2026-07-draft") {
+  if (!userId) {
+    throw new Error("A valid user id is required.");
+  }
+
+  return recordPrivacyPolicyConsent(userId, version);
 }

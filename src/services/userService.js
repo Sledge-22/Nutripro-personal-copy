@@ -82,6 +82,9 @@ function normalizeUser(row = {}) {
   const mustChangePassword = Boolean(row.must_change_password ?? row.mustChangePassword ?? false);
   const profilePictureUrl = row.profile_picture_url ?? row.profilePictureUrl ?? "";
   const authUserId = row.auth_user_id ?? row.authUserId ?? "";
+  const privacyPolicyAccepted = Boolean(row.privacy_policy_accepted ?? row.privacyPolicyAccepted ?? false);
+  const privacyPolicyAcceptedAt = row.privacy_policy_accepted_at ?? row.privacyPolicyAcceptedAt ?? "";
+  const privacyPolicyVersion = row.privacy_policy_version ?? row.privacyPolicyVersion ?? "";
   const normalizedCountry = normalizeCountrySelection(
     row.country_code ?? row.countryCode ?? row.country_name ?? row.countryName ?? row.country,
   );
@@ -123,6 +126,12 @@ function normalizeUser(row = {}) {
     invitation_status: row.invitation_status ?? row.invitationStatus ?? "",
     invitationEmailId: row.invitation_email_id ?? row.invitationEmailId ?? "",
     invitation_email_id: row.invitation_email_id ?? row.invitationEmailId ?? "",
+    privacyPolicyAccepted,
+    privacy_policy_accepted: privacyPolicyAccepted,
+    privacyPolicyAcceptedAt,
+    privacy_policy_accepted_at: privacyPolicyAcceptedAt,
+    privacyPolicyVersion,
+    privacy_policy_version: privacyPolicyVersion,
   };
 }
 
@@ -583,6 +592,37 @@ export async function markPasswordChanged(userId) {
       must_change_password: false,
       password_updated_at: nowIso(),
       updated_at: nowIso(),
+    },
+  );
+
+  return normalizeUser(data);
+}
+
+export async function recordPrivacyPolicyConsent(userId, version = "2026-07-draft") {
+  if (!userId) return null;
+
+  const timestamp = nowIso();
+
+  if (!isSupabaseConfigured || !supabase) {
+    return normalizeUser(
+      updateMockUsers(userId, (user) => ({
+        ...user,
+        privacy_policy_accepted: true,
+        privacy_policy_accepted_at: timestamp,
+        privacy_policy_version: version,
+        updated_at: timestamp,
+      })),
+    );
+  }
+
+  const data = await runUserMutationWithOptionalColumnRetry(
+    (payload) =>
+      supabase.from("users").update(payload).eq("id", userId).select("*").single(),
+    {
+      privacy_policy_accepted: true,
+      privacy_policy_accepted_at: timestamp,
+      privacy_policy_version: version,
+      updated_at: timestamp,
     },
   );
 

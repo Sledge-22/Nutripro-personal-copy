@@ -12,6 +12,7 @@ import { ROUTES, isAdminRoute, isAuthUtilityRoute, isStudentRoute } from "../rou
 import { LoginPage } from "../pages/LoginPage.jsx";
 import { ForcedPasswordPage } from "../pages/ForcedPasswordPage.jsx";
 import { AccessNoticePage } from "../pages/AccessNoticePage.jsx";
+import { PrivacyPage } from "../pages/PrivacyPage.jsx";
 import { AdminWorkspacePage } from "../pages/AdminWorkspacePage.jsx";
 import { StudentWorkspacePage } from "../pages/StudentWorkspacePage.jsx";
 import {
@@ -28,6 +29,7 @@ import {
   updateUserStatus,
 } from "../services/userService.js";
 import {
+  completePrivacyConsent,
   completeFirstTimeSetup,
   getCurrentSession,
   isAuthConfigured,
@@ -137,6 +139,10 @@ function getAccessBlockReason(profile) {
   if (statusKey === "inactive") return "inactive";
   if (statusKey === "suspended" || statusKey === "paused") return "suspended";
   return null;
+}
+
+function needsPrivacyConsent(profile) {
+  return !Boolean(profile?.privacyPolicyAccepted ?? profile?.privacy_policy_accepted);
 }
 
 function readDemoSession() {
@@ -304,7 +310,9 @@ export function App() {
       persistAppSessionMode("demo");
       setLoginInfo("");
       setWorkspaceLoading(false);
-      if (isProductionExperience && pathname !== ROUTES.login) navigateTo(ROUTES.login, true);
+      if (isProductionExperience && pathname !== ROUTES.login && pathname !== ROUTES.privacy) {
+        navigateTo(ROUTES.login, true);
+      }
       return;
     }
 
@@ -317,7 +325,7 @@ export function App() {
     const inferredRoleKey = demoSession?.roleKey ?? getDemoRoleKeyFromPath(pathname);
 
     if (!inferredRoleKey) {
-      if (pathname !== ROUTES.home) navigateTo(ROUTES.home, true);
+      if (pathname !== ROUTES.home && pathname !== ROUTES.privacy) navigateTo(ROUTES.home, true);
       return;
     }
 
@@ -419,7 +427,7 @@ export function App() {
       const blockedReason = getAccessBlockReason(profile);
       if (blockedReason || !["admin", "student"].includes(roleKey)) {
         if (pathname !== ROUTES.auth.access) navigateTo(ROUTES.auth.access, true);
-      } else if (profile?.mustChangePassword || profile?.must_change_password) {
+      } else if (profile?.mustChangePassword || profile?.must_change_password || needsPrivacyConsent(profile)) {
         if (pathname !== ROUTES.auth.changePassword) navigateTo(ROUTES.auth.changePassword, true);
       } else if (!pathMatchesRole(pathname, roleKey)) {
         navigateTo(dashboardPathForRole(roleKey), true);
@@ -592,7 +600,27 @@ export function App() {
 
   async function handleForcedPasswordChange(nextPassword) {
     try {
-      const result = await completeFirstTimeSetup(currentUser?.id, nextPassword.username, nextPassword.password, currentUser?.username);
+      const requiresPasswordChange = Boolean(currentUser?.mustChangePassword || currentUser?.must_change_password);
+      const requiresConsent = needsPrivacyConsent(currentUser);
+
+      const result = requiresPasswordChange
+        ? await completeFirstTimeSetup(
+            currentUser?.id,
+            nextPassword.username,
+            nextPassword.password,
+            currentUser?.username,
+            {
+              privacyPolicyAccepted: requiresConsent ? nextPassword.privacyPolicyAccepted : false,
+              privacyPolicyVersion: nextPassword.privacyPolicyVersion,
+            },
+          )
+        : {
+            profile: await completePrivacyConsent(
+              currentUser?.id,
+              nextPassword.privacyPolicyVersion || "2026-07-draft",
+            ),
+          };
+
       setCurrentUser(result.profile ?? currentUser);
       navigateTo(dashboardPathForRole(result.profile?.roleKey ?? currentUser?.roleKey), true);
       return { ok: true };
@@ -864,6 +892,10 @@ export function App() {
     return <ForcedPasswordPage onSubmit={async () => ({ ok: true })} loading={false} />;
   }
 
+  if (pathname === ROUTES.privacy) {
+    return <PrivacyPage onBack={() => navigateTo(isProductionExperience ? ROUTES.login : ROUTES.home, true)} />;
+  }
+
   if (pathname === ROUTES.login && !productionAuthAvailable) {
     return (
       <LoginPage
@@ -920,8 +952,16 @@ export function App() {
       );
     }
 
-    if (currentUser?.mustChangePassword || currentUser?.must_change_password) {
-      return <ForcedPasswordPage onSubmit={handleForcedPasswordChange} loading={workspaceLoading} currentUsername={currentUser?.username || ""} />;
+    if (currentUser?.mustChangePassword || currentUser?.must_change_password || needsPrivacyConsent(currentUser)) {
+      return (
+        <ForcedPasswordPage
+          onSubmit={handleForcedPasswordChange}
+          loading={workspaceLoading}
+          currentUsername={currentUser?.username || ""}
+          requirePasswordChange={Boolean(currentUser?.mustChangePassword || currentUser?.must_change_password)}
+          requirePrivacyConsent={needsPrivacyConsent(currentUser)}
+        />
+      );
     }
 
     if (workspaceLoading && role === "Student" && pathname.startsWith("/student/courses/")) {

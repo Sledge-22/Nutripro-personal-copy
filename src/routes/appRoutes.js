@@ -1,6 +1,7 @@
 export const ROUTES = {
   home: "/",
   login: "/login",
+  privacy: "/privacy",
   auth: {
     changePassword: "/auth/change-password",
     setupPreview: "/auth/change-password-preview",

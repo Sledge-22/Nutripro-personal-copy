@@ -1118,6 +1118,11 @@ function UsersAdminPanel({
     role: "student",
     temporaryPassword: "",
   });
+  const privacyAcceptedLabel = language === "es" ? "Privacidad aceptada" : "Privacy accepted";
+  const privacyAcceptedAtLabel = language === "es" ? "Fecha de aceptación" : "Accepted date";
+  const privacyPolicyVersionLabel = language === "es" ? "Versión de política" : "Policy version";
+  const acceptedText = language === "es" ? "Aceptado" : "Accepted";
+  const notAcceptedText = language === "es" ? "No aceptado" : "Not accepted";
 
   const getErrorMessage = (issue) => {
     if (!issue) return "Unknown error";
@@ -1624,6 +1629,9 @@ function UsersAdminPanel({
                 <th>{t("auth.status")}</th>
                 <th>{t("auth.country")}</th>
                 <th>{t("auth.mustChangePassword")}</th>
+                <th>{privacyAcceptedLabel}</th>
+                <th>{privacyAcceptedAtLabel}</th>
+                <th>{privacyPolicyVersionLabel}</th>
                 <th>{t("auth.lastLoginAt")}</th>
                 <th>{t("admin.actions")}</th>
               </tr>
@@ -1711,6 +1719,13 @@ function UsersAdminPanel({
                         {user.mustChangePassword ? t("common.yes") : t("common.no")}
                       </span>
                     </td>
+                    <td>
+                      <span className={`subtle-badge ${user.privacyPolicyAccepted ? "" : "warning-badge"}`}>
+                        {user.privacyPolicyAccepted ? acceptedText : notAcceptedText}
+                      </span>
+                    </td>
+                    <td>{user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at ? formatDisplayDate(user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at, language) : "â€”"}</td>
+                    <td>{user.privacyPolicyVersion || user.privacy_policy_version || "â€”"}</td>
                     <td>{user.last_login_at || user.lastLoginAt ? formatDisplayDate(user.last_login_at || user.lastLoginAt, language) : "â€”"}</td>
                     <td>
                       <div className="table-actions">
@@ -4431,6 +4446,7 @@ function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCer
     </div>
   );
 }
+
 
 
 
