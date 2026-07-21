@@ -525,12 +525,18 @@ export async function getUserProfileForAuthUser(authUser) {
 export async function updateUserStatus(userOrId, status) {
   const nextStatus = normalizeStatusValue(status);
   const existingUser = await getUserByIdentifier(userOrId);
+  const isProtectedSampleUser = isProtectedDemoEmail(existingUser?.email);
+
+  console.log("[UserStatus] protected check", {
+    email: existingUser?.email || "",
+    protected: isProtectedSampleUser,
+  });
 
   if (!existingUser?.id && !existingUser?.email) {
     throw new Error("Unable to update user: missing user identifier.");
   }
 
-  if (existingUser && isProtectedDemoEmail(existingUser.email) && nextStatus !== "active") {
+  if (existingUser && isProtectedSampleUser && nextStatus !== "active") {
     console.log("[UserStatus] Blocked by protected user guard", {
       email: existingUser.email,
       id: existingUser.id,
