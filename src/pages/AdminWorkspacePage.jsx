@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import CountryFlag from "../components/CountryFlag.jsx";
 import { Icon, OverviewCard, Stat, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
@@ -144,7 +144,7 @@ function clampModuleCount(value) {
 }
 
 function getDefaultModuleTitle(index, language = "es") {
-  return language === "es" ? `Módulo ${index + 1}` : `Module ${index + 1}`;
+  return language === "es" ? `MÃ³dulo ${index + 1}` : `Module ${index + 1}`;
 }
 
 function getModuleDisplayTitle(module, index, language = "es") {
@@ -632,7 +632,7 @@ function buildCoursePayload(form, editingId, existingCourse) {
 }
 
 function formatDisplayDate(value, language = "es") {
-  if (!value) return "—";
+  if (!value) return "â€”";
 
   try {
     return new Date(value).toLocaleDateString(language === "es" ? "es-ES" : "en-US", {
@@ -807,13 +807,13 @@ function AdminDashboardPage({ users, courses, certificates, currentUser }) {
 
 function AdminSettingsPage() {
   const { language } = useLanguage();
-  const pageTitle = language === "es" ? "Configuraci�n" : "Settings";
+  const pageTitle = language === "es" ? "Configuración" : "Settings";
   const pageText = language === "es"
     ? "Administra los controles generales del sitio y las preferencias administrativas."
     : "Manage site-wide controls and administrative preferences.";
-  const comingSoon = language === "es" ? "Pr�ximamente" : "Coming soon";
+  const comingSoon = language === "es" ? "Próximamente" : "Coming soon";
   const comingSoonText = language === "es"
-    ? "Pr�ximamente en esta secci�n."
+    ? "Próximamente en esta sección."
     : "Coming soon in this section.";
 
   return (
@@ -821,7 +821,7 @@ function AdminSettingsPage() {
       <section className="section-card">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">{language === "es" ? "ADMINISTRACI�N" : "ADMINISTRATION"}</span>
+            <span className="eyebrow">{language === "es" ? "ADMINISTRACIÓN" : "ADMINISTRATION"}</span>
             <h2>{pageTitle}</h2>
             <p>{pageText}</p>
           </div>
@@ -830,18 +830,18 @@ function AdminSettingsPage() {
       <section className="section-card">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">{language === "es" ? "CONFIGURACI�N DEL SITIO" : "SITE SETTINGS"}</span>
+            <span className="eyebrow">{language === "es" ? "CONFIGURACIÓN DEL SITIO" : "SITE SETTINGS"}</span>
             <h2>{language === "es" ? "Controles administrativos" : "Administrative controls"}</h2>
             <p>{pageText}</p>
           </div>
         </div>
         <div className="overview-grid">
-          <OverviewCard icon="community" title={(language === "es" ? "Correo e invitaciones" : "Email & Invitations") + " � " + comingSoon} text={comingSoonText} />
-          <OverviewCard icon="courses" title={(language === "es" ? "Marca" : "Branding") + " � " + comingSoon} text={comingSoonText} />
-          <OverviewCard icon="certificate" title={(language === "es" ? "Certificados" : "Certificates") + " � " + comingSoon} text={comingSoonText} />
-          <OverviewCard icon="users" title={(language === "es" ? "Moderaci�n de comunidad" : "Community Moderation") + " � " + comingSoon} text={comingSoonText} />
-          <OverviewCard icon="dashboard" title={(language === "es" ? "Privacidad y uso de datos" : "Privacy & Data Use") + " � " + comingSoon} text={comingSoonText} />
-          <OverviewCard icon="dashboard" title={(language === "es" ? "Seguridad" : "Security") + " � " + comingSoon} text={comingSoonText} />
+          <OverviewCard icon="community" title={(language === "es" ? "Correo e invitaciones" : "Email & Invitations") + " · " + comingSoon} text={comingSoonText} />
+          <OverviewCard icon="courses" title={(language === "es" ? "Marca" : "Branding") + " · " + comingSoon} text={comingSoonText} />
+          <OverviewCard icon="certificate" title={(language === "es" ? "Certificados" : "Certificates") + " · " + comingSoon} text={comingSoonText} />
+          <OverviewCard icon="users" title={(language === "es" ? "Moderación de comunidad" : "Community Moderation") + " · " + comingSoon} text={comingSoonText} />
+          <OverviewCard icon="dashboard" title={(language === "es" ? "Privacidad y uso de datos" : "Privacy & Data Use") + " · " + comingSoon} text={comingSoonText} />
+          <OverviewCard icon="dashboard" title={(language === "es" ? "Seguridad" : "Security") + " · " + comingSoon} text={comingSoonText} />
         </div>
       </section>
     </>
@@ -923,6 +923,7 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
 
       {message ? <small className="field-note">{message}</small> : null}
       {error ? <small className="field-note danger-text">{error}</small> : null}
+        <small className="field-note">{t("admin.authDeletionHelperNote")}</small>
 
       <div className="table-wrap">
         <table>
@@ -986,10 +987,10 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
                           />
                           <span>{user.country}</span>
                         </span>
-                      ) : "—"
+                      ) : "â€”"
                     )}
                   </td>
-                  <td>{user.created_at || user.createdAt ? formatDisplayDate(user.created_at || user.createdAt, language) : "—"}</td>
+                  <td>{user.created_at || user.createdAt ? formatDisplayDate(user.created_at || user.createdAt, language) : "â€”"}</td>
                   <td>
                     <div className="table-actions">
                       {isEditing ? (
@@ -1034,16 +1035,16 @@ function UsersAdminPanel({
   const { t, language, translateRole } = useLanguage();
   const protectedDemoDeleteMessage =
     language === "es"
-      ? "Este usuario demo est� protegido y no se puede eliminar."
-      : "This demo user is protected and cannot be deleted.";
+      ? t("common.protectedSampleUserCannotBeDeactivated")
+      : t("common.protectedSampleUserCannotBeDeactivated");
   const protectedDemoFieldMessage =
     language === "es"
-      ? "Este campo est� protegido y no se puede cambiar para usuarios demo permanentes."
-      : "This field is protected and cannot be changed for permanent demo users.";
+      ? t("common.protectedSampleField")
+      : t("common.protectedSampleField");
   const deleteConfirmationBody =
     language === "es"
-      ? "Esto desactivar� al usuario y lo ocultar� de las listas de usuarios activos."
-      : "This will deactivate the user and hide them from active user lists.";
+      ? t("common.confirmDeactivateUserBody")
+      : t("common.confirmDeactivateUserBody");
   const countryOptions = getProfileCountryOptions();
   const safeCourses = Array.isArray(courses) ? courses : [];
   const [search, setSearch] = useState("");
@@ -1073,8 +1074,8 @@ function UsersAdminPanel({
     temporaryPassword: "",
   });
   const privacyAcceptedLabel = language === "es" ? "Privacidad aceptada" : "Privacy accepted";
-  const privacyAcceptedAtLabel = language === "es" ? "Fecha de aceptaci�n" : "Accepted date";
-  const privacyPolicyVersionLabel = language === "es" ? "Versi�n de pol�tica" : "Policy version";
+  const privacyAcceptedAtLabel = language === "es" ? "Fecha de aceptación" : "Accepted date";
+  const privacyPolicyVersionLabel = language === "es" ? "Versión de política" : "Policy version";
   const acceptedText = language === "es" ? "Aceptado" : "Accepted";
   const notAcceptedText = language === "es" ? "No aceptado" : "Not accepted";
 
@@ -1479,6 +1480,7 @@ function UsersAdminPanel({
 
         {message ? <small className="field-note">{message}</small> : null}
         {error ? <small className="field-note danger-text">{error}</small> : null}
+        <small className="field-note">{t("admin.authDeletionHelperNote")}</small>
 
         {temporaryPassword ? (
           <div className="credential-card">
@@ -1607,7 +1609,7 @@ function UsersAdminPanel({
                       {isEditing ? (
                         <input value={draft.username} onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value }))} />
                       ) : (
-                        user.username || "—"
+                        user.username || "â€”"
                       )}
                     </td>
                     <td>
@@ -1665,7 +1667,7 @@ function UsersAdminPanel({
                             />
                             <span>{user.country}</span>
                           </span>
-                        ) : "—"
+                        ) : "â€”"
                       )}
                     </td>
                     <td>
@@ -1678,9 +1680,9 @@ function UsersAdminPanel({
                         {user.privacyPolicyAccepted ? acceptedText : notAcceptedText}
                       </span>
                     </td>
-                    <td>{user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at ? formatDisplayDate(user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at, language) : "—"}</td>
-                    <td>{user.privacyPolicyVersion || user.privacy_policy_version || "—"}</td>
-                    <td>{user.last_login_at || user.lastLoginAt ? formatDisplayDate(user.last_login_at || user.lastLoginAt, language) : "—"}</td>
+                    <td>{user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at ? formatDisplayDate(user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at, language) : "â€”"}</td>
+                    <td>{user.privacyPolicyVersion || user.privacy_policy_version || "â€”"}</td>
+                    <td>{user.last_login_at || user.lastLoginAt ? formatDisplayDate(user.last_login_at || user.lastLoginAt, language) : "â€”"}</td>
                     <td>
                       <div className="table-actions">
                         {isEditing ? (
@@ -1746,7 +1748,7 @@ function UsersAdminPanel({
                 <select value={selectedStudentId} onChange={(event) => setSelectedStudentId(event.target.value)}>
                   {studentUsers.map((student) => (
                     <option key={student.id} value={student.id}>
-                      {student.name} · {student.email}
+                      {student.name} Â· {student.email}
                     </option>
                   ))}
                 </select>
@@ -1776,7 +1778,7 @@ function UsersAdminPanel({
                   <strong>{assignedCourses.length}</strong>
                   <p>
                     {assignedCourses.length
-                      ? assignedCourses.map((course) => course.title).join(" · ")
+                      ? assignedCourses.map((course) => course.title).join(" Â· ")
                       : t("admin.studentHasNoAssignedCourses")}
                   </p>
                 </article>
@@ -1834,11 +1836,11 @@ function UsersAdminPanel({
       {pendingDeleteUser ? (
         <div className="modal-backdrop" onMouseDown={() => setPendingDeleteUser(null)}>
           <div className="certificate-modal confirm-modal" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" type="button" onClick={() => setPendingDeleteUser(null)}>×</button>
-            <span className="eyebrow">{t("common.deleteUser")}</span>
-            <h2>{t("common.confirmDeleteUserTitle")}</h2>
+            <button className="modal-close" type="button" onClick={() => setPendingDeleteUser(null)}>Ã—</button>
+            <span className="eyebrow">{t("common.deactivateUser")}</span>
+            <h2>{t("common.confirmDeactivateUserTitle")}</h2>
             <p>{deleteConfirmationBody}</p>
-            <p><strong>{pendingDeleteUser.name}</strong> · {pendingDeleteUser.email}</p>
+            <p><strong>{pendingDeleteUser.name}</strong> Â· {pendingDeleteUser.email}</p>
             <div className="form-actions compact confirm-modal-actions">
               <button type="button" className="secondary-btn" onClick={() => setPendingDeleteUser(null)}>
                 {t("common.cancel")}
@@ -1849,7 +1851,7 @@ function UsersAdminPanel({
                 disabled={deletingUserId === pendingDeleteUser.id}
                 onClick={() => void confirmDeleteUser()}
               >
-                {deletingUserId === pendingDeleteUser.id ? t("common.saving") : t("common.deleteUser")}
+                {deletingUserId === pendingDeleteUser.id ? t("common.saving") : t("common.deactivateUser")}
               </button>
             </div>
           </div>
@@ -1931,7 +1933,7 @@ function CourseStudentAssignmentSelector({
                     onClick={() => onToggleStudent(student.id)}
                   >
                     <span className="assignment-student-option-check" aria-hidden="true">
-                      {isChecked ? "✓" : ""}
+                      {isChecked ? "âœ“" : ""}
                     </span>
                     <span className="assignment-student-option-copy">
                       <strong>{student.name}</strong>
@@ -3688,7 +3690,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
                     <article key={entry.id} className="bulk-upload-item">
                       <div>
                         <strong>{entry.fileName}</strong>
-                        <span>{`${entry.originalOrder} → ${entry.assignedModuleTitle || "—"}`}</span>
+                        <span>{`${entry.originalOrder} â†’ ${entry.assignedModuleTitle || "â€”"}`}</span>
                       </div>
                       <div className="bulk-upload-meta">
                         <span className={`subtle-badge ${entry.uploadStatus === "uploaded" ? "" : entry.tooLarge ? "warning-badge" : ""}`}>
@@ -3753,7 +3755,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
                     <article key={entry.id} className="bulk-upload-item">
                       <div>
                         <strong>{entry.fileName}</strong>
-                        <span>{`${entry.originalOrder} → ${entry.assignedModuleTitle || "—"}`}</span>
+                        <span>{`${entry.originalOrder} â†’ ${entry.assignedModuleTitle || "â€”"}`}</span>
                       </div>
                       <div className="bulk-upload-meta">
                         <span className={`subtle-badge ${entry.uploadStatus === "uploaded" ? "" : entry.tooLarge ? "warning-badge" : ""}`}>
@@ -3994,7 +3996,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
       {pendingLocalRestore ? (
         <div className="modal-backdrop" onMouseDown={discardPendingLocalDraft}>
           <div className="certificate-modal confirm-modal" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" type="button" onClick={discardPendingLocalDraft}>×</button>
+            <button className="modal-close" type="button" onClick={discardPendingLocalDraft}>Ã—</button>
             <span className="eyebrow">{t("admin.drafts")}</span>
             <h2>{t("admin.localDraftFound")}</h2>
             <div className="form-actions compact confirm-modal-actions">
@@ -4012,7 +4014,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
       {pendingDeleteDraftId ? (
         <div className="modal-backdrop" onMouseDown={() => setPendingDeleteDraftId("")}>
           <div className="certificate-modal confirm-modal" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" type="button" onClick={() => setPendingDeleteDraftId("")}>×</button>
+            <button className="modal-close" type="button" onClick={() => setPendingDeleteDraftId("")}>Ã—</button>
             <span className="eyebrow">{t("admin.drafts")}</span>
             <h2>{t("admin.confirmDeleteDraft")}</h2>
             <div className="form-actions compact confirm-modal-actions">
@@ -4030,7 +4032,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
       {generatorDialog ? (
         <div className="modal-backdrop" onMouseDown={() => setGeneratorDialog(null)}>
           <div className="certificate-modal confirm-modal" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" type="button" onClick={() => setGeneratorDialog(null)}>×</button>
+            <button className="modal-close" type="button" onClick={() => setGeneratorDialog(null)}>Ã—</button>
             <span className="eyebrow">
               {generatorDialog.type === "large-course" ? t("admin.largeCourseWarningTitle") : t("admin.replaceModulesTitle")}
             </span>
@@ -4183,11 +4185,11 @@ function AssignmentReviewsPage() {
                   <tr key={submission.id}>
                     <td>
                       <strong>{submission.studentName || t("common.student")}</strong>
-                      <div>{submission.studentEmail || "—"}</div>
+                      <div>{submission.studentEmail || "â€”"}</div>
                     </td>
-                    <td>{submission.courseTitle || "—"}</td>
-                    <td>{submission.moduleTitle || "—"}</td>
-                    <td>{submission.assignmentTitle || "—"}</td>
+                    <td>{submission.courseTitle || "â€”"}</td>
+                    <td>{submission.moduleTitle || "â€”"}</td>
+                    <td>{submission.assignmentTitle || "â€”"}</td>
                     <td><Status status={submission.status || "submitted"} /></td>
                     <td>{submission.grade === null || submission.grade === undefined ? t("common.notGradedYet") : `${submission.grade}/100`}</td>
                     <td>{formatDisplayDate(submission.submittedAt || submission.submitted_at, language)}</td>
@@ -4209,7 +4211,7 @@ function AssignmentReviewsPage() {
           <div>
             <span className="eyebrow">{t("common.reviewPanel")}</span>
             <h2>{selectedSubmission ? selectedSubmission.assignmentTitle || t("common.assignment") : t("common.selectSubmission")}</h2>
-            <p>{selectedSubmission ? `${selectedSubmission.studentName || t("common.student")} · ${selectedSubmission.courseTitle || t("common.course")}` : t("admin.selectFromList")}</p>
+            <p>{selectedSubmission ? `${selectedSubmission.studentName || t("common.student")} Â· ${selectedSubmission.courseTitle || t("common.course")}` : t("admin.selectFromList")}</p>
           </div>
         </div>
 
@@ -4219,17 +4221,17 @@ function AssignmentReviewsPage() {
               <div>
                 <small>{t("common.student")}</small>
                 <strong>{selectedSubmission.studentName || t("common.student")}</strong>
-                <p>{selectedSubmission.studentEmail || "—"}</p>
+                <p>{selectedSubmission.studentEmail || "â€”"}</p>
               </div>
               <div>
                 <small>{t("common.course")}</small>
-                <strong>{selectedSubmission.courseTitle || "—"}</strong>
-                <p>{selectedSubmission.moduleTitle || "—"}</p>
+                <strong>{selectedSubmission.courseTitle || "â€”"}</strong>
+                <p>{selectedSubmission.moduleTitle || "â€”"}</p>
               </div>
               <div>
                 <small>{t("common.assignment")}</small>
-                <strong>{selectedSubmission.assignmentTitle || "—"}</strong>
-                <p>{selectedSubmission.status ? t(`status.${selectedSubmission.status}`) : "—"}</p>
+                <strong>{selectedSubmission.assignmentTitle || "â€”"}</strong>
+                <p>{selectedSubmission.status ? t(`status.${selectedSubmission.status}`) : "â€”"}</p>
               </div>
               <div>
                 <small>{t("common.submittedDate")}</small>
@@ -4400,6 +4402,8 @@ function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCer
     </div>
   );
 }
+
+
 
 
 
