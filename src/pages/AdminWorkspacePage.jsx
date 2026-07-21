@@ -1046,6 +1046,13 @@ function UsersAdminPanel({
       ? t("common.confirmDeactivateUserBody")
       : t("common.confirmDeactivateUserBody");
   const notSetLabel = t("common.notSet");
+  const reactivateLabel = language === "es" ? "Reactivar" : "Reactivate";
+  const reactivatedMessage = language === "es" ? "Usuario reactivado." : "User reactivated.";
+  const suspendedMessage = language === "es" ? "Usuario suspendido." : "User suspended.";
+  const statusUpdateFailedLabel =
+    language === "es"
+      ? "No se pudo actualizar el estado del usuario"
+      : "Unable to update user status";
   const countryOptions = getProfileCountryOptions();
   const safeCourses = Array.isArray(courses) ? courses : [];
   const [search, setSearch] = useState("");
@@ -1352,20 +1359,25 @@ function UsersAdminPanel({
     setError("");
 
     try {
+      console.log("[UserStatus] Button clicked", {
+        email: user?.email || "",
+        id: user?.id || "",
+        nextStatus,
+      });
       await onUpdateUserStatus(user, nextStatus);
       setMessage(
         nextStatus === "inactive"
           ? t("common.userDeactivatedSuccessfully")
           : nextStatus === "active"
-            ? t("admin.userReactivatedSuccessfully")
-            : t("admin.userSuspendedSuccessfully"),
+            ? reactivatedMessage
+            : suspendedMessage,
       );
     } catch (statusError) {
       console.error("Updating the admin-managed user status failed:", statusError);
       setError(
         statusError?.code === "PROTECTED_DEMO_USER"
           ? protectedDemoFieldMessage
-          : statusError?.message || t("admin.userStatusUpdateFailed"),
+          : `${statusUpdateFailedLabel}: ${statusError?.message || ""}`.trim(),
       );
     } finally {
       setStatusUpdatingUserId(null);
@@ -1574,178 +1586,107 @@ function UsersAdminPanel({
           </select>
         </div>
 
-        <div className="table-wrap users-table-wrap">
-          <table className="users-table">
-            <thead>
-              <tr>
-                <th>{t("auth.name")}</th>
-                <th>{t("auth.email")}</th>
-                <th>{t("auth.username")}</th>
-                <th>{t("admin.assignedCoursesCount")}</th>
-                <th>{t("auth.role")}</th>
-                <th>{t("auth.status")}</th>
-                <th>{t("auth.country")}</th>
-                <th>{t("auth.mustChangePassword")}</th>
-                <th>{privacyAcceptedLabel}</th>
-                <th>{privacyAcceptedAtLabel}</th>
-                <th>{privacyPolicyVersionLabel}</th>
-                <th>{t("auth.lastLoginAt")}</th>
-                <th>{t("admin.actions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.map((user) => {
-                const isEditing = editingUserId === user.id;
-                return (
-                  <tr key={user.id}>
-                    <td className="users-cell users-cell-name">
+        <div className="users-list">
+          {filteredUsers.map((user) => {
+            const isEditing = editingUserId === user.id;
+            const statusKey = `${user.statusKey || user.status || ""}`.toLowerCase();
+            const identitySource = user.name || user.username || user.email || notSetLabel;
+            const initials = `${identitySource}`
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((part) => part.charAt(0))
+              .join("")
+              .toUpperCase() || "?";
+
+            return (
+              <article className="user-list-card" key={user.id || user.email}>
+                <div className="user-list-main">
+                  <div className="user-list-identity">
+                    <span className="user-initials-avatar" aria-hidden="true">{initials}</span>
+                    <div className="user-identity-copy">
                       {isEditing ? (
-                        <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+                        <>
+                          <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+                          <input value={draft.username} onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value }))} />
+                        </>
                       ) : (
-                        <strong className="user-name">{user.name}</strong>
+                        <>
+                          <strong className="user-list-name">{user.name || notSetLabel}</strong>
+                          <span className="user-list-username">@{user.username || notSetLabel}</span>
+                        </>
                       )}
-                    </td>
-                    <td className="users-cell users-cell-email">
-                      <span className="user-email">{user.email || notSetLabel}</span>
-                    </td>
-                    <td className="users-cell users-cell-username">
-                      {isEditing ? (
-                        <input value={draft.username} onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value }))} />
-                      ) : (
-                        <span className="user-username">{user.username || notSetLabel}</span>
-                      )}
-                    </td>
-                    <td className="users-cell users-cell-count">
-                      <span className="subtle-badge users-badge">
-                        {
-                          safeCourses.filter(
-                            (course) =>
-                              Array.isArray(course?.owners) &&
-                              course.owners.some((ownerId) => String(ownerId) === String(user.id)),
-                          ).length
-                        }
-                      </span>
-                    </td>
-                    <td className="users-cell users-cell-role">
-                      {isEditing ? (
+                      <span className="user-list-email">{user.email || notSetLabel}</span>
+                    </div>
+                  </div>
+
+                  <div className="user-list-meta">
+                    {isEditing ? (
+                      <>
                         <select value={draft.role} onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value }))}>
                           <option value="admin">{translateRole("admin")}</option>
                           <option value="student">{translateRole("student")}</option>
                           <option value="instructor">{translateRole("instructor")}</option>
                           <option value="support">{translateRole("support")}</option>
                         </select>
-                      ) : (
-                        <span className="subtle-badge users-badge">{translateRole(user.roleKey || user.role)}</span>
-                      )}
-                    </td>
-                    <td className="users-cell users-cell-status">
-                      {isEditing ? (
                         <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
                           <option value="active">{t("status.active")}</option>
                           <option value="inactive">{t("status.inactive")}</option>
                           <option value="suspended">{t("status.suspended")}</option>
                         </select>
-                      ) : (
+                      </>
+                    ) : (
+                      <>
+                        <span className="subtle-badge users-badge">{translateRole(user.roleKey || user.role)}</span>
                         <Status status={user.statusKey || user.status} />
-                      )}
-                    </td>
-                    <td className="users-cell users-cell-country">
-                      {isEditing ? (
-                        <select value={draft.country} onChange={(event) => setDraft((current) => ({ ...current, country: event.target.value }))}>
-                          <option value="">{t("common.selectCountry")}</option>
-                          {countryOptions.map((option) => (
-                            <option key={option.code} value={option.code}>
-                              {option.flag} {option.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        user.country ? (
-                          <span className="subtle-badge users-badge profile-country-badge country-badge">
-                            <CountryFlag
-                              code={user.country_code || user.countryCode}
-                              name={user.country}
-                              fallbackFlag={user.country_flag || user.countryFlag}
-                              className="profile-country-flag"
-                            />
-                            <span>{user.country}</span>
-                          </span>
-                        ) : notSetLabel
-                      )}
-                    </td>
-                    <td className="users-cell users-cell-security">
-                      <span className={`subtle-badge users-badge ${user.mustChangePassword ? "warning-badge" : ""}`}>
-                        {user.mustChangePassword ? t("common.yes") : t("common.no")}
-                      </span>
-                    </td>
-                    <td className="users-cell users-cell-privacy">
-                      <span className={`subtle-badge users-badge ${user.privacyPolicyAccepted ? "" : "warning-badge"}`}>
-                        {user.privacyPolicyAccepted ? acceptedText : notAcceptedText}
-                      </span>
-                    </td>
-                    <td className="users-cell users-cell-date">
-                      <span className="user-date">{user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at ? formatDisplayDate(user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at, language) : notSetLabel}</span>
-                    </td>
-                    <td className="users-cell users-cell-policy">
-                      <span className="user-policy-version">{user.privacyPolicyVersion || user.privacy_policy_version || notSetLabel}</span>
-                    </td>
-                    <td className="users-cell users-cell-date">
-                      <span className="user-date">{user.last_login_at || user.lastLoginAt ? formatDisplayDate(user.last_login_at || user.lastLoginAt, language) : notSetLabel}</span>
-                    </td>
-                    <td className="users-cell users-cell-actions">
-                      <div className="table-actions user-action-groups">
-                        {isEditing ? (
-                          <>
-                            <button onClick={() => void saveUser()} disabled={saving}>{t("common.save")}</button>
-                            <button onClick={() => setEditingUserId(null)}>{t("common.cancel")}</button>
-                          </>
-                        ) : (
-                          <>
-                            <div className="user-action-row">
-                              <button onClick={() => startEditing(user)}>{t("common.edit")}</button>
-                              <button onClick={() => void resetPassword(user)} disabled={resettingUserId === user.id}>{t("auth.resetPassword")}</button>
-                              {showAuthTestTools ? (
-                                <button onClick={() => void resetPassword(user, "production")} disabled={resettingUserId === user.id}>
-                                  {t("auth.sendNewTemporaryPassword")}
-                                </button>
-                              ) : null}
-                              <button
-                                onClick={() => void sendInvitation(user)}
-                                disabled={!user.email || invitingUserId === user.id}
-                                title={!user.email ? t("auth.emailRequiredToSendInvitation") : ""}
-                              >
-                                {invitingUserId === user.id ? t("auth.sendingInvitation") : t("auth.sendInvitation")}
-                              </button>
-                            </div>
-                            <div className="user-action-row user-status-actions">
-                              {(user.statusKey || "").toLowerCase() !== "active" ? (
-                                <button onClick={() => void applyStatusChange(user, "active")} disabled={statusUpdatingUserId === user.id}>
-                                  {t("admin.reactivate")}
-                                </button>
-                              ) : null}
-                              {(user.statusKey || "").toLowerCase() !== "inactive" ? (
-                                <button onClick={() => void applyStatusChange(user, "inactive")} disabled={statusUpdatingUserId === user.id}>
-                                  {t("admin.deactivate")}
-                                </button>
-                              ) : null}
-                              {(user.statusKey || "").toLowerCase() !== "suspended" ? (
-                                <button onClick={() => void applyStatusChange(user, "suspended")} disabled={statusUpdatingUserId === user.id}>
-                                  {t("auth.suspendUser")}
-                                </button>
-                              ) : null}
-                              <button className="danger-text" onClick={() => requestDeleteUser(user)}>
-                                {t("common.delete")}
-                              </button>
-                            </div>
-                          </>
-                        )}
+                      </>
+                    )}
+                  </div>
+
+                  <div className="user-list-actions">
+                    {isEditing ? (
+                      <div className="user-action-row">
+                        <button type="button" onClick={() => void saveUser()} disabled={saving}>{t("common.save")}</button>
+                        <button type="button" onClick={() => setEditingUserId(null)}>{t("common.cancel")}</button>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    ) : (
+                      <>
+                        <div className="user-action-row">
+                          <button type="button" onClick={() => startEditing(user)}>{t("common.edit")}</button>
+                          <button type="button" onClick={() => void resetPassword(user)} disabled={resettingUserId === user.id}>{t("auth.resetPassword")}</button>
+                          <button
+                            type="button"
+                            onClick={() => void sendInvitation(user)}
+                            disabled={!user.email || invitingUserId === user.id}
+                            title={!user.email ? t("auth.emailRequiredToSendInvitation") : ""}
+                          >
+                            {invitingUserId === user.id ? t("auth.sendingInvitation") : t("auth.sendInvitation")}
+                          </button>
+                        </div>
+                        <div className="user-action-row user-status-actions">
+                          {statusKey !== "active" ? (
+                            <button type="button" onClick={() => void applyStatusChange(user, "active")} disabled={statusUpdatingUserId === user.id}>
+                              {reactivateLabel}
+                            </button>
+                          ) : null}
+                          {statusKey !== "inactive" ? (
+                            <button type="button" onClick={() => void applyStatusChange(user, "inactive")} disabled={statusUpdatingUserId === user.id}>
+                              {t("admin.deactivate")}
+                            </button>
+                          ) : null}
+                          {statusKey !== "suspended" ? (
+                            <button type="button" onClick={() => void applyStatusChange(user, "suspended")} disabled={statusUpdatingUserId === user.id}>
+                              {t("auth.suspendUser")}
+                            </button>
+                          ) : null}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
 

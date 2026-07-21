@@ -531,6 +531,11 @@ export async function updateUserStatus(userOrId, status) {
   }
 
   if (existingUser && isProtectedDemoEmail(existingUser.email) && nextStatus !== "active") {
+    console.log("[UserStatus] Blocked by protected user guard", {
+      email: existingUser.email,
+      id: existingUser.id,
+      nextStatus,
+    });
     const protectedError = new Error("This protected sample user cannot be deactivated.");
     protectedError.code = "PROTECTED_DEMO_USER";
     throw protectedError;
@@ -546,20 +551,32 @@ export async function updateUserStatus(userOrId, status) {
     );
   }
 
+  const updateBy = existingUser.email ? "email" : "id";
+  console.log("[UserStatus] Updating", {
+    email: existingUser.email || "",
+    id: existingUser.id || "",
+    nextStatus,
+    updateBy,
+  });
+
   const data = await runUserMutationWithOptionalColumnRetry(
     (payload) =>
-      (existingUser.id && isValidUuid(existingUser.id)
-        ? supabase.from("users").update(payload).eq("id", existingUser.id)
-        : supabase.from("users").update(payload).ilike("email", existingUser.email))
-        .select("*")
-        .single(),
+      (existingUser.email
+        ? supabase.from("users").update(payload).eq("email", existingUser.email)
+        : supabase.from("users").update(payload).eq("id", existingUser.id))
+        .select("*"),
     {
       status: nextStatus,
       updated_at: nowIso(),
     },
   );
 
-  return normalizeUser(data);
+  const updatedRow = Array.isArray(data) ? data[0] : data;
+  if (!updatedRow) {
+    throw new Error("No user record was updated. Check the user identifier or RLS policy.");
+  }
+
+  return normalizeUser(updatedRow);
 }
 
 export async function updateUser(userId, updates = {}) {

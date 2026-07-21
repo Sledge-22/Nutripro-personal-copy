@@ -243,6 +243,75 @@ th { color: #778882; background: var(--green-50); font-size: 11px; text-transfor
 th:first-child { border-radius: 10px 0 0 10px; } th:last-child { border-radius: 0 10px 10px 0; }
 td { color: #51645e; }
 td strong { color: var(--ink); }
+.users-list { display: grid; gap: 14px; }
+.user-list-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--green-50);
+  box-shadow: 0 4px 18px rgba(24,63,49,.035);
+}
+.user-list-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) auto minmax(260px, .95fr);
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+}
+.user-list-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.user-initials-avatar {
+  width: 50px;
+  height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--color-surface-3);
+  color: var(--color-accent);
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.user-identity-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.user-list-name {
+  display: block;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.2;
+}
+.user-list-username {
+  color: var(--green-700);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.user-list-email {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.user-list-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-start;
+}
+.user-list-actions {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  justify-items: end;
+}
 .users-table-wrap { overflow-x: auto; }
 .users-table { min-width: 1520px; table-layout: auto; }
 .users-table th,
@@ -1677,6 +1746,8 @@ select:focus {
   .submission-summary { flex-direction: column; }
   .review-center-layout, .review-meta-grid { grid-template-columns: 1fr; }
   .filters-row { grid-template-columns: 1fr; }
+  .user-list-main { grid-template-columns: 1fr; align-items: stretch; }
+  .user-list-actions { justify-items: start; }
   .users-table { min-width: 1220px; }
   .users-cell-actions { min-width: 280px; }
   .profile-hero { grid-template-columns: 1fr; }
