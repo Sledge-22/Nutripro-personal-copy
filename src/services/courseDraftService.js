@@ -45,7 +45,7 @@ function mapDraftRow(row) {
 async function tryLoadSupabaseDrafts() {
   const { data, error } = await supabase
     .from("course_drafts")
-    .select("*")
+    .select("id,title,description,status,draft_data,created_at,updated_at")
     .order("updated_at", { ascending: false });
 
   if (error) throw error;
@@ -116,7 +116,7 @@ export async function saveCourseDraft(draftInput) {
     const { data, error } = await supabase
       .from("course_drafts")
       .upsert(payload, { onConflict: "id" })
-      .select("*")
+      .select("id,title,description,status,draft_data,created_at,updated_at")
       .single();
 
     if (error) throw error;

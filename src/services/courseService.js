@@ -4,6 +4,14 @@ import { cloneMockValue, createMockId, getMockCourses, setMockCourses } from "./
 import { getModulesByCourse, replaceModulesForCourse } from "./moduleService.js";
 
 const OPTIONAL_COURSE_COLUMNS = ["image_url", "image_storage_path"];
+const COURSE_SELECT_COLUMNS = [
+  "id",
+  "title",
+  "description",
+  "status",
+  "image_url",
+  "image_storage_path",
+].join(",");
 
 function normalizeCourseStatus(status) {
   if (status === "draft" || status === "archived" || status === "published") return status;
@@ -265,7 +273,7 @@ async function runCourseMutationWithFallback(operation, payload, attempt = 0) {
 export async function getCourses() {
   if (!isSupabaseConfigured) return getMockCourses();
 
-  const { data, error } = await supabase.from("courses").select("*").order("id", { ascending: true });
+  const { data, error } = await supabase.from("courses").select(COURSE_SELECT_COLUMNS).order("id", { ascending: true });
   if (error) {
     console.error("Failed to load courses from Supabase:", error);
     throw error;
@@ -421,7 +429,7 @@ export async function getStudentCourses(studentId) {
 
   const { data: courseRows, error: courseError } = await supabase
     .from("courses")
-    .select("*")
+    .select(COURSE_SELECT_COLUMNS)
     .in("id", courseIds)
     .eq("status", "published")
     .order("id", { ascending: true });
@@ -522,7 +530,7 @@ export async function getStudentCourseAccess(studentId, courseId) {
 
   const { data: courseRow, error: courseError } = await supabase
     .from("courses")
-    .select("*")
+    .select(COURSE_SELECT_COLUMNS)
     .eq("id", normalizedCourseId)
     .limit(1)
     .maybeSingle();

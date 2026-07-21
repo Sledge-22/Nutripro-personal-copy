@@ -74,7 +74,9 @@ function updateMockCourseOwners(courseId, updater) {
 }
 
 async function fetchSupabaseEnrollmentRows() {
-  const { data, error } = await supabase.from("enrollments").select("*");
+  const { data, error } = await supabase
+    .from("enrollments")
+    .select("id,student_id,course_id,status,enrolled_at,created_at");
   if (error) {
     console.error("Loading enrollments from Supabase failed:", error);
     throw error;

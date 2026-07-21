@@ -466,7 +466,7 @@ export async function resolveLoginEmail(identifier) {
 export async function getUsers() {
   if (!isSupabaseConfigured || !supabase) return getMockUsers().map(normalizeUser);
 
-  const { data, error } = await supabase.from("users").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("users").select(USER_PROFILE_SELECT).order("created_at", { ascending: false });
   if (error) {
     console.error("Loading users from Supabase failed:", error);
     throw error;
@@ -483,7 +483,7 @@ export async function getUserById(userId) {
     return user ? normalizeUser(user) : null;
   }
 
-  const { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle();
+  const { data, error } = await supabase.from("users").select(USER_PROFILE_SELECT).eq("id", userId).maybeSingle();
   if (error) {
     console.error("Loading the selected user failed:", error);
     throw error;

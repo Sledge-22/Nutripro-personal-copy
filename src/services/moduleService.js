@@ -9,6 +9,24 @@ const OPTIONAL_MODULE_COLUMNS = [
   "pdf_source",
   "video_source",
 ];
+const MODULE_SELECT_COLUMNS = [
+  "id",
+  "course_id",
+  "sort_order",
+  "title",
+  "description",
+  "requires_assignment",
+  "pdf_url",
+  "video_url",
+  "pdf_file_name",
+  "video_file_name",
+  "pdf_storage_path",
+  "video_storage_path",
+  "pdf_external_url",
+  "video_external_url",
+  "pdf_source",
+  "video_source",
+].join(",");
 
 function fileNameFromUrl(url, fallback) {
   if (!url) return fallback;
@@ -230,7 +248,7 @@ export async function getModulesByCourse(courseId) {
     const selectedCourseId = Number.isNaN(Number(courseId)) ? courseId : Number(courseId);
     const { data, error } = await supabase
       .from("modules")
-      .select("*")
+      .select(MODULE_SELECT_COLUMNS)
       .eq("course_id", selectedCourseId)
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true });
