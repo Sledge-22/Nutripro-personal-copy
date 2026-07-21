@@ -37,6 +37,10 @@ const OPTIONAL_USER_COLUMNS = [
 ];
 
 const PROTECTED_DEMO_EMAILS = new Set([DEMO_ADMIN_EMAIL, LEGACY_DEMO_STUDENT_EMAIL, DEMO_STUDENT_EMAIL]);
+const PRIVACY_REMINDER_COLUMNS = [
+  "privacy_consent_reminder_dismissed",
+  "privacy_consent_reminder_dismissed_at",
+];
 const USER_PROFILE_SELECT = [
   "id",
   "auth_user_id",
@@ -65,6 +69,11 @@ const USER_PROFILE_SELECT = [
   "privacy_consent_reminder_dismissed",
   "privacy_consent_reminder_dismissed_at",
 ].join(", ");
+const USER_PROFILE_SELECT_WITHOUT_PRIVACY_REMINDER = USER_PROFILE_SELECT
+  .split(",")
+  .map((part) => part.trim())
+  .filter((part) => !PRIVACY_REMINDER_COLUMNS.includes(part))
+  .join(", ");
 
 function normalizeOptionalString(value) {
   const normalizedValue = `${value ?? ""}`.trim();
@@ -100,6 +109,43 @@ function toDisplayStatus(status) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function isMissingPrivacyReminderColumnsError(error) {
+  if (!error) return false;
+  const message = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
+  return PRIVACY_REMINDER_COLUMNS.some(
+    (column) => message.includes(`users.${column}`) || message.includes(`'${column}'`) || message.includes(column),
+  );
+}
+
+function createPrivacyReminderColumnsSetupError() {
+  const error = new Error(
+    "Database setup required: privacy consent reminder columns are missing from public.users.",
+  );
+  error.code = "PRIVACY_REMINDER_COLUMNS_MISSING";
+  return error;
+}
+
+async function selectUserProfile(queryBuilder) {
+  const { data, error } = await queryBuilder(USER_PROFILE_SELECT);
+  if (!error) return { data, usedFallback: false };
+
+  if (!isMissingPrivacyReminderColumnsError(error)) {
+    return { data, error, usedFallback: false };
+  }
+
+  console.warn(
+    "public.users is missing privacy reminder columns. Falling back to the legacy profile select until the SQL is applied.",
+    error,
+  );
+
+  const legacyResult = await queryBuilder(USER_PROFILE_SELECT_WITHOUT_PRIVACY_REMINDER);
+  if (legacyResult.error) {
+    return { ...legacyResult, usedFallback: true };
+  }
+
+  return { ...legacyResult, usedFallback: true };
 }
 
 function createTemporaryPassword(length = 14) {
@@ -473,13 +519,25 @@ async function getUserByIdentifier(userOrId) {
     return user ? normalizeUser(user) : null;
   }
 
-  const { data, error } = await supabase.from("users").select(USER_PROFILE_SELECT).ilike("email", candidateEmail).maybeSingle();
+  const { data, error, usedFallback } = await selectUserProfile((selectClause) =>
+    supabase.from("users").select(selectClause).ilike("email", candidateEmail).maybeSingle(),
+  );
   if (error) {
     console.error("Loading the selected user by email failed:", error);
+    if (isMissingPrivacyReminderColumnsError(error)) {
+      throw createPrivacyReminderColumnsSetupError();
+    }
     throw error;
   }
 
-  return data ? normalizeUser(data) : null;
+  const normalizedUser = data ? normalizeUser(data) : null;
+  if (normalizedUser && usedFallback) {
+    normalizedUser.privacyConsentReminderDismissed = false;
+    normalizedUser.privacy_consent_reminder_dismissed = false;
+    normalizedUser.privacyConsentReminderDismissedAt = "";
+    normalizedUser.privacy_consent_reminder_dismissed_at = "";
+  }
+  return normalizedUser;
 }
 
 export async function getUserByUsername(username) {
@@ -491,19 +549,31 @@ export async function getUserByUsername(username) {
     return user ? normalizeUser(user) : null;
   }
 
-  const { data, error } = await supabase
-    .from("users")
-    .select(USER_PROFILE_SELECT)
-    .eq("username", normalizedUsername)
-    .limit(1)
-    .maybeSingle();
+  const { data, error, usedFallback } = await selectUserProfile((selectClause) =>
+    supabase
+      .from("users")
+      .select(selectClause)
+      .eq("username", normalizedUsername)
+      .limit(1)
+      .maybeSingle(),
+  );
 
   if (error) {
     console.error("Loading the selected username failed:", error);
+    if (isMissingPrivacyReminderColumnsError(error)) {
+      throw createPrivacyReminderColumnsSetupError();
+    }
     throw error;
   }
 
-  return data ? normalizeUser(data) : null;
+  const normalizedUser = data ? normalizeUser(data) : null;
+  if (normalizedUser && usedFallback) {
+    normalizedUser.privacyConsentReminderDismissed = false;
+    normalizedUser.privacy_consent_reminder_dismissed = false;
+    normalizedUser.privacyConsentReminderDismissedAt = "";
+    normalizedUser.privacy_consent_reminder_dismissed_at = "";
+  }
+  return normalizedUser;
 }
 
 export async function isUsernameAvailable(username, excludeUserId = null) {
@@ -525,33 +595,51 @@ export async function getUserProfileForAuthUser(authUser) {
     return existingUser ? normalizeUser(existingUser) : null;
   }
 
-  const { data: profileById, error: byIdError } = await supabase
-    .from("users")
-    .select(USER_PROFILE_SELECT)
-    .eq("auth_user_id", authUser.id)
-    .maybeSingle();
+  const {
+    data: profileById,
+    error: byIdError,
+    usedFallback: usedFallbackById,
+  } = await selectUserProfile((selectClause) =>
+    supabase.from("users").select(selectClause).eq("auth_user_id", authUser.id).maybeSingle(),
+  );
 
   if (byIdError) {
     console.error("Loading the signed-in profile by auth id failed:", byIdError);
+    if (isMissingPrivacyReminderColumnsError(byIdError)) {
+      throw createPrivacyReminderColumnsSetupError();
+    }
     throw byIdError;
   }
 
-  if (profileById) return normalizeUser(profileById);
+  if (profileById) {
+    const normalizedProfile = normalizeUser(profileById);
+    if (usedFallbackById) {
+      normalizedProfile.privacyConsentReminderDismissed = false;
+      normalizedProfile.privacy_consent_reminder_dismissed = false;
+      normalizedProfile.privacyConsentReminderDismissedAt = "";
+      normalizedProfile.privacy_consent_reminder_dismissed_at = "";
+    }
+    return normalizedProfile;
+  }
 
   const authEmail = normalizeOptionalString(authUser.email).toLowerCase();
   if (!authEmail) {
     throw new Error("The signed-in auth user does not have an email address.");
   }
 
-  const { data: profileByEmail, error: byEmailError } = await supabase
-    .from("users")
-    .select(USER_PROFILE_SELECT)
-    .eq("email", authEmail)
-    .limit(1)
-    .maybeSingle();
+  const {
+    data: profileByEmail,
+    error: byEmailError,
+    usedFallback: usedFallbackByEmail,
+  } = await selectUserProfile((selectClause) =>
+    supabase.from("users").select(selectClause).eq("email", authEmail).limit(1).maybeSingle(),
+  );
 
   if (byEmailError) {
     console.error("Loading the signed-in profile by email failed:", byEmailError);
+    if (isMissingPrivacyReminderColumnsError(byEmailError)) {
+      throw createPrivacyReminderColumnsSetupError();
+    }
     throw byEmailError;
   }
 
@@ -576,7 +664,14 @@ export async function getUserProfileForAuthUser(authUser) {
     return normalizeUser(linkedProfile);
   }
 
-  return normalizeUser(profileByEmail);
+  const normalizedProfile = normalizeUser(profileByEmail);
+  if (usedFallbackByEmail) {
+    normalizedProfile.privacyConsentReminderDismissed = false;
+    normalizedProfile.privacy_consent_reminder_dismissed = false;
+    normalizedProfile.privacyConsentReminderDismissedAt = "";
+    normalizedProfile.privacy_consent_reminder_dismissed_at = "";
+  }
+  return normalizedProfile;
 }
 
 export async function updateUserStatus(userOrId, status) {
@@ -1198,9 +1293,14 @@ export async function ensureDemoStudent() {
     return normalizeUser(nextUser);
   }
 
-  const { data, error } = await supabase.from("users").select(USER_PROFILE_SELECT).eq("email", DEMO_STUDENT_EMAIL).limit(1);
+  const { data, error } = await selectUserProfile((selectClause) =>
+    supabase.from("users").select(selectClause).eq("email", DEMO_STUDENT_EMAIL).limit(1),
+  );
   if (error) {
     console.error("Failed to load Maya Laurent from Supabase users:", error);
+    if (isMissingPrivacyReminderColumnsError(error)) {
+      throw createPrivacyReminderColumnsSetupError();
+    }
     throw error;
   }
 
