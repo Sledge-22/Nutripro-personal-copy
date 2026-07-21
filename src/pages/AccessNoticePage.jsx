@@ -3,7 +3,7 @@ import { Brand } from "../components/ui.jsx";
 import { LanguageDropdown } from "../components/LanguageDropdown.jsx";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 
-export function AccessNoticePage({ title, message, onSignOut, role }) {
+export function AccessNoticePage({ title, message, onAction, actionLabel, onSignOut, role }) {
   const { t, translateRole } = useLanguage();
 
   return (
@@ -21,6 +21,11 @@ export function AccessNoticePage({ title, message, onSignOut, role }) {
         </div>
 
         <div className="form-actions">
+          {onAction ? (
+            <button type="button" className="primary-btn" onClick={onAction}>
+              {actionLabel || t("auth.returnToDashboard")}
+            </button>
+          ) : null}
           <button type="button" className="secondary-btn" onClick={onSignOut}>
             {t("common.signOut")}
           </button>

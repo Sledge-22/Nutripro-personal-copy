@@ -256,6 +256,9 @@ export const translations = {
       passwordUpdated: "Contrase\u00f1a actualizada correctamente.",
       passwordChangeFailed: "No se pudo actualizar la contrase\u00f1a.",
       accessRestricted: "Acceso restringido",
+      accessDenied: "Acceso denegado",
+      accessDeniedMessage: "No tienes permiso para ver esta página.",
+      returnToDashboard: "Volver al panel",
       inactiveAccount: "Cuenta inactiva",
       inactiveAccountMessage: "Tu cuenta est\u00e1 inactiva. Contacta a un administrador de Nutripro.",
       suspendedAccount: "Cuenta suspendida",
@@ -981,6 +984,7 @@ export const translations = {
       invalidCredentials: "Invalid credentials",
       productionConfigMissing: "Production auth requires VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY or VITE_SUPABASE_ANON_KEY.",
       loadingSession: "Checking your session...",
+      checkingAccess: "Checking access...",
       loadingSessionFailed: "Loading the session failed.",
       loadingProfileFailed: "Loading the user profile failed.",
       emailOrUsername: "Email or username",
@@ -1003,6 +1007,9 @@ export const translations = {
       passwordUpdated: "Password updated successfully.",
       passwordChangeFailed: "Updating the password failed.",
       accessRestricted: "Access restricted",
+      accessDenied: "Access denied",
+      accessDeniedMessage: "You do not have permission to view this page.",
+      returnToDashboard: "Return to dashboard",
       inactiveAccount: "Inactive account",
       inactiveAccountMessage: "Your account is inactive. Contact a Nutripro admin.",
       suspendedAccount: "Suspended account",
@@ -1494,6 +1501,8 @@ export const translations = {
     },
   },
 };
+
+
 
 
 

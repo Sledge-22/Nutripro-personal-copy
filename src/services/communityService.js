@@ -223,7 +223,10 @@ async function loadSupabaseUsers(userIds = []) {
   const normalizedIds = Array.from(new Set(userIds.filter(Boolean)));
   if (!normalizedIds.length) return new Map();
 
-  const { data, error } = await supabase.from("users").select("*").in("id", normalizedIds);
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, name, role, country, country_code, country_name, country_flag, profile_picture_url")
+    .in("id", normalizedIds);
   if (error) {
     console.error("Loading community users from Supabase failed:", error);
     throw error;

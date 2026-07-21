@@ -2,6 +2,7 @@ export const ROUTES = {
   home: "/",
   login: "/login",
   privacy: "/privacy",
+  accessDenied: "/access-denied",
   auth: {
     changePassword: "/auth/change-password",
     setupPreview: "/auth/change-password-preview",

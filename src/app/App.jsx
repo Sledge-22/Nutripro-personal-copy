@@ -114,6 +114,10 @@ function pathMatchesRole(pathname, role) {
   return isAuthUtilityRoute(pathname);
 }
 
+function isProtectedWorkspaceRoute(pathname) {
+  return isAdminRoute(pathname) || isStudentRoute(pathname);
+}
+
 function getAccessBlockReason(profile) {
   const statusKey = `${profile?.statusKey ?? profile?.status ?? ""}`.trim().toLowerCase();
   if (statusKey === "inactive") return "inactive";
@@ -245,7 +249,14 @@ export function App() {
         if (pathname !== ROUTES.auth.access) navigateTo(ROUTES.auth.access, true);
       } else if (profile?.mustChangePassword || profile?.must_change_password || needsPrivacyConsent(profile)) {
         if (pathname !== ROUTES.auth.changePassword) navigateTo(ROUTES.auth.changePassword, true);
-      } else if (!pathMatchesRole(pathname, roleKey)) {
+      } else if (isProtectedWorkspaceRoute(pathname) && !pathMatchesRole(pathname, roleKey)) {
+        navigateTo(ROUTES.accessDenied, true);
+      } else if (
+        pathname === ROUTES.home ||
+        pathname === ROUTES.login ||
+        pathname === ROUTES.accessDenied ||
+        isAuthUtilityRoute(pathname)
+      ) {
         navigateTo(dashboardPathForRole(roleKey), true);
       }
     } catch (error) {
@@ -638,7 +649,7 @@ export function App() {
   }
 
   if (authLoading) {
-    return <LoginPage loading error={loginError} info={t("auth.loadingSession")} onLogin={handleAuthLogin} />;
+    return <LoginPage loading error={loginError} info={t("auth.checkingAccess")} onLogin={handleAuthLogin} />;
   }
 
   if (!authSession?.user || !currentUser) {
@@ -687,6 +698,19 @@ export function App() {
         currentUsername={currentUser?.username || ""}
         requirePasswordChange={Boolean(currentUser?.mustChangePassword || currentUser?.must_change_password)}
         requirePrivacyConsent={needsPrivacyConsent(currentUser)}
+      />
+    );
+  }
+
+  if (pathname === ROUTES.accessDenied) {
+    return (
+      <AccessNoticePage
+        title={t("auth.accessDenied")}
+        message={t("auth.accessDeniedMessage")}
+        actionLabel={t("auth.returnToDashboard")}
+        onAction={() => navigateTo(dashboardPathForRole(currentUser?.roleKey), true)}
+        onSignOut={() => void handleLogout()}
+        role={currentUser?.roleKey}
       />
     );
   }
