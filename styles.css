@@ -1945,3 +1945,28 @@ select:focus {
 .text-link:hover {
   text-decoration: underline;
 }
+
+.password-field-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.password-field-row input {
+  flex: 1 1 auto;
+}
+
+.password-toggle-btn {
+  white-space: nowrap;
+  min-width: fit-content;
+}
+
+@media (max-width: 720px) {
+  .password-field-row {
+    flex-direction: column;
+  }
+
+  .password-toggle-btn {
+    width: 100%;
+  }
+}

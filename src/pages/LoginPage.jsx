@@ -14,6 +14,7 @@ export function LoginPage({
   const { t, language } = useLanguage();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const eyebrow = language === "es" ? "BIENVENIDO A NUTRIPRO" : "WELCOME TO NUTRIPRO";
   const title = language === "es" ? "Hacete experto en tu deporte." : "Become an expert in your sport.";
   const description = language === "es"
@@ -29,12 +30,14 @@ export function LoginPage({
     : language === "es"
       ? "Pide a un administrador de Nutripro que restablezca tu acceso."
       : "Ask a Nutripro administrator to reset your access.";
+  const showPasswordLabel = language === "es" ? "Mostrar contraseña" : "Show password";
+  const hidePasswordLabel = language === "es" ? "Ocultar contraseña" : "Hide password";
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!onLogin) return;
     await onLogin({
-      identifier,
+      identifier: identifier.trim(),
       password,
     });
   };
@@ -62,14 +65,24 @@ export function LoginPage({
 
         <label>
           {t("auth.password")}
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder={t("auth.passwordPlaceholder")}
-            autoComplete="current-password"
-            required
-          />
+          <div className="password-field-row">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder={t("auth.passwordPlaceholder")}
+              autoComplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              className="secondary-btn password-toggle-btn"
+              onClick={() => setShowPassword((current) => !current)}
+              aria-label={showPassword ? hidePasswordLabel : showPasswordLabel}
+            >
+              {showPassword ? hidePasswordLabel : showPasswordLabel}
+            </button>
+          </div>
         </label>
 
         {info ? <small className="field-note">{info}</small> : null}

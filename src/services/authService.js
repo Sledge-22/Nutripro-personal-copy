@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import {
+  dismissPrivacyConsentReminder,
   markPasswordChanged,
   recordPrivacyPolicyConsent,
   finalizeUserOnboarding,
@@ -175,4 +176,12 @@ export async function completePrivacyConsent(userId, version = "2026-07-draft") 
   }
 
   return recordPrivacyPolicyConsent(userId, version);
+}
+
+export async function dismissPrivacyReminder(userId) {
+  if (!userId) {
+    throw new Error("A valid user id is required.");
+  }
+
+  return dismissPrivacyConsentReminder(userId);
 }

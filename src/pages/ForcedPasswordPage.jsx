@@ -6,10 +6,12 @@ import { ROUTES } from "../routes/appRoutes.js";
 
 export function ForcedPasswordPage({
   onSubmit,
+  onDismissReminder,
   loading = false,
   currentUsername = "",
   requirePasswordChange = true,
   requirePrivacyConsent = false,
+  showPrivacyReminder = false,
 }) {
   const { t, language } = useLanguage();
   const [username, setUsername] = useState(currentUsername || "");
@@ -20,11 +22,36 @@ export function ForcedPasswordPage({
   const [message, setMessage] = useState("");
   const needsUsername = requirePasswordChange && !`${currentUsername ?? ""}`.trim();
   const policyVersion = "2026-07-draft";
+  const isReminderOnly = showPrivacyReminder && !requirePasswordChange && !requirePrivacyConsent;
   const passwordStrengthText = t("auth.passwordStrengthRequirement") !== "auth.passwordStrengthRequirement"
     ? t("auth.passwordStrengthRequirement")
     : language === "es"
-      ? "La contrase√±a debe incluir al menos 10 caracteres, letras may√∫sculas y min√∫sculas, un n√∫mero y un s√≠mbolo."
+      ? "La contraseÒa debe incluir al menos 10 caracteres, letras may˙sculas y min˙sculas, un n˙mero y un sÌmbolo."
       : "Password must include at least 10 characters, uppercase and lowercase letters, a number, and a symbol.";
+
+  const title = isReminderOnly
+    ? (language === "es" ? "Recordatorio de privacidad" : "Privacy reminder")
+    : requirePasswordChange
+      ? t("auth.setUpAccount")
+      : language === "es"
+        ? "Confirma privacidad y uso de datos"
+        : "Confirm privacy and data use";
+
+  const description = isReminderOnly
+    ? (language === "es"
+        ? "Nutripro usa la informaciÛn de tu cuenta, cursos, tareas y comunidad para proporcionar acceso a la plataforma y funciones de aprendizaje. Puedes revisar la PolÌtica de privacidad y uso de datos en cualquier momento."
+        : "Nutripro uses your account, course, assignment, and community information to provide platform access and learning features. You can review the Privacy Policy and Data Use terms at any time.")
+    : requirePasswordChange
+      ? t("auth.forcePasswordDescription")
+      : language === "es"
+        ? "Revisa y acepta la PolÌtica de privacidad y los tÈrminos de uso de datos antes de continuar."
+        : "Please review and accept the Privacy Policy and Data Use terms before continuing.";
+
+  const checkboxText = language === "es"
+    ? "He leÌdo y acepto la PolÌtica de privacidad y los tÈrminos de uso de datos."
+    : "I have read and agree to the Privacy Policy and Data Use terms.";
+
+  const readPolicyText = language === "es" ? "Leer polÌtica de privacidad" : "Read privacy policy";
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -39,7 +66,7 @@ export function ForcedPasswordPage({
     if (requirePrivacyConsent && !privacyAccepted) {
       setError(
         language === "es"
-          ? "Debes aceptar la Pol√≠tica de privacidad y los t√©rminos de uso de datos para continuar."
+          ? "Debes aceptar la PolÌtica de privacidad y los tÈrminos de uso de datos para continuar."
           : "You must accept the Privacy Policy and Data Use terms to continue.",
       );
       return;
@@ -67,6 +94,7 @@ export function ForcedPasswordPage({
       privacyPolicyAccepted: privacyAccepted,
       privacyPolicyVersion: policyVersion,
     });
+
     if (!result?.ok) {
       setError(result?.error || t("auth.passwordChangeFailed"));
       return;
@@ -88,20 +116,8 @@ export function ForcedPasswordPage({
 
         <div className="login-copy">
           <span className="eyebrow">{t("auth.forcePasswordEyebrow")}</span>
-          <h1>
-            {requirePasswordChange
-              ? t("auth.setUpAccount")
-              : language === "es"
-                ? "Confirma privacidad y uso de datos"
-                : "Confirm privacy and data use"}
-          </h1>
-          <p>
-            {requirePasswordChange
-              ? t("auth.forcePasswordDescription")
-              : language === "es"
-                ? "Antes de entrar al panel, confirma que le√≠ste y aceptaste la pol√≠tica de privacidad y el uso de datos de Nutripro."
-                : "Before entering the dashboard, confirm that you read and accepted Nutripro's privacy policy and data use notice."}
-          </p>
+          <h1>{title}</h1>
+          <p>{description}</p>
         </div>
 
         <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
@@ -154,14 +170,10 @@ export function ForcedPasswordPage({
                   checked={privacyAccepted}
                   onChange={(event) => setPrivacyAccepted(event.target.checked)}
                 />
-                <span>
-                  {language === "es"
-                    ? "He le√≠do y acepto la Pol√≠tica de privacidad y los t√©rminos de uso de datos."
-                    : "I have read and agree to the Privacy Policy and Data Use terms."}
-                </span>
+                <span>{checkboxText}</span>
               </span>
               <a className="text-link" href={ROUTES.privacy}>
-                {language === "es" ? "Leer pol√≠tica de privacidad" : "Read privacy policy"}
+                {readPolicyText}
               </a>
             </label>
           ) : null}
@@ -173,12 +185,24 @@ export function ForcedPasswordPage({
             <button type="submit" className="primary-btn" disabled={loading}>
               {loading
                 ? t("common.saving")
-                : requirePasswordChange
-                  ? t("auth.changePassword")
-                  : language === "es"
-                    ? "Continuar"
-                    : "Continue"}
+                : isReminderOnly
+                  ? (language === "es" ? "Continuar" : "Continue")
+                  : requirePasswordChange
+                    ? t("auth.changePassword")
+                    : language === "es"
+                      ? "Aceptar y continuar"
+                      : "Accept and continue"}
             </button>
+            {isReminderOnly ? (
+              <button
+                type="button"
+                className="secondary-btn"
+                disabled={loading}
+                onClick={() => void onDismissReminder?.()}
+              >
+                {language === "es" ? "No volver a mostrar" : "Never show again"}
+              </button>
+            ) : null}
           </div>
         </form>
       </section>

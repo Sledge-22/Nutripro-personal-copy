@@ -5,6 +5,7 @@ export const ROUTES = {
   accessDenied: "/access-denied",
   auth: {
     changePassword: "/auth/change-password",
+    privacyReminder: "/auth/privacy-reminder",
     setupPreview: "/auth/change-password-preview",
     access: "/auth/access",
   },

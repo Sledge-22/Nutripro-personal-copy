@@ -29,6 +29,7 @@ import {
 import {
   completePrivacyConsent,
   completeFirstTimeSetup,
+  dismissPrivacyReminder,
   getCurrentSession,
   isAuthConfigured,
   signInWithCredentials,
@@ -127,6 +128,14 @@ function getAccessBlockReason(profile) {
 
 function needsPrivacyConsent(profile) {
   return !Boolean(profile?.privacyPolicyAccepted ?? profile?.privacy_policy_accepted);
+}
+
+function shouldShowPrivacyReminder(profile) {
+  const accepted = Boolean(profile?.privacyPolicyAccepted ?? profile?.privacy_policy_accepted);
+  const dismissed = Boolean(
+    profile?.privacyConsentReminderDismissed ?? profile?.privacy_consent_reminder_dismissed,
+  );
+  return accepted && !dismissed;
 }
 
 export function App() {
@@ -249,6 +258,8 @@ export function App() {
         if (pathname !== ROUTES.auth.access) navigateTo(ROUTES.auth.access, true);
       } else if (profile?.mustChangePassword || profile?.must_change_password || needsPrivacyConsent(profile)) {
         if (pathname !== ROUTES.auth.changePassword) navigateTo(ROUTES.auth.changePassword, true);
+      } else if (shouldShowPrivacyReminder(profile)) {
+        if (pathname !== ROUTES.auth.privacyReminder) navigateTo(ROUTES.auth.privacyReminder, true);
       } else if (isProtectedWorkspaceRoute(pathname) && !pathMatchesRole(pathname, roleKey)) {
         navigateTo(ROUTES.accessDenied, true);
       } else if (
@@ -426,6 +437,19 @@ export function App() {
       const translatedError =
         rawMessage === "Username is not available." ? t("auth.usernameUnavailable") : formatSupabaseError(error, t("auth.passwordChangeFailed"));
       return { ok: false, error: translatedError };
+    }
+  }
+
+  async function handleDismissPrivacyReminder() {
+    try {
+      const updatedProfile = await dismissPrivacyReminder(currentUser?.id);
+      setCurrentUser(updatedProfile ?? currentUser);
+      if ((updatedProfile?.roleKey ?? currentUser?.roleKey) === "student") {
+        setStudentProfile(updatedProfile ?? studentProfile);
+      }
+      navigateTo(dashboardPathForRole(updatedProfile?.roleKey ?? currentUser?.roleKey), true);
+    } catch (error) {
+      console.error("Dismissing the privacy reminder failed:", error);
     }
   }
 
@@ -698,6 +722,23 @@ export function App() {
         currentUsername={currentUser?.username || ""}
         requirePasswordChange={Boolean(currentUser?.mustChangePassword || currentUser?.must_change_password)}
         requirePrivacyConsent={needsPrivacyConsent(currentUser)}
+      />
+    );
+  }
+
+  if (pathname === ROUTES.auth.privacyReminder && shouldShowPrivacyReminder(currentUser)) {
+    return (
+      <ForcedPasswordPage
+        onSubmit={async () => {
+          navigateTo(dashboardPathForRole(currentUser?.roleKey), true);
+          return { ok: true };
+        }}
+        onDismissReminder={handleDismissPrivacyReminder}
+        loading={workspaceLoading}
+        currentUsername={currentUser?.username || ""}
+        requirePasswordChange={false}
+        requirePrivacyConsent={false}
+        showPrivacyReminder
       />
     );
   }

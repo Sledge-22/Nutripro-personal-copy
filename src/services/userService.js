@@ -31,6 +31,8 @@ const OPTIONAL_USER_COLUMNS = [
   "invitation_sent_at",
   "invitation_status",
   "invitation_email_id",
+  "privacy_consent_reminder_dismissed",
+  "privacy_consent_reminder_dismissed_at",
   "updated_at",
 ];
 
@@ -86,6 +88,11 @@ function normalizeUser(row = {}) {
   const privacyPolicyAccepted = Boolean(row.privacy_policy_accepted ?? row.privacyPolicyAccepted ?? false);
   const privacyPolicyAcceptedAt = row.privacy_policy_accepted_at ?? row.privacyPolicyAcceptedAt ?? "";
   const privacyPolicyVersion = row.privacy_policy_version ?? row.privacyPolicyVersion ?? "";
+  const privacyConsentReminderDismissed = Boolean(
+    row.privacy_consent_reminder_dismissed ?? row.privacyConsentReminderDismissed ?? false,
+  );
+  const privacyConsentReminderDismissedAt =
+    row.privacy_consent_reminder_dismissed_at ?? row.privacyConsentReminderDismissedAt ?? "";
   const normalizedCountry = normalizeCountrySelection(
     row.country_code ?? row.countryCode ?? row.country_name ?? row.countryName ?? row.country,
   );
@@ -133,6 +140,10 @@ function normalizeUser(row = {}) {
     privacy_policy_accepted_at: privacyPolicyAcceptedAt,
     privacyPolicyVersion,
     privacy_policy_version: privacyPolicyVersion,
+    privacyConsentReminderDismissed,
+    privacy_consent_reminder_dismissed: privacyConsentReminderDismissed,
+    privacyConsentReminderDismissedAt,
+    privacy_consent_reminder_dismissed_at: privacyConsentReminderDismissedAt,
   };
 }
 
@@ -611,6 +622,8 @@ export async function recordPrivacyPolicyConsent(userId, version = "2026-07-draf
         privacy_policy_accepted: true,
         privacy_policy_accepted_at: timestamp,
         privacy_policy_version: version,
+        privacy_consent_reminder_dismissed: false,
+        privacy_consent_reminder_dismissed_at: null,
         updated_at: timestamp,
       })),
     );
@@ -623,6 +636,37 @@ export async function recordPrivacyPolicyConsent(userId, version = "2026-07-draf
       privacy_policy_accepted: true,
       privacy_policy_accepted_at: timestamp,
       privacy_policy_version: version,
+      privacy_consent_reminder_dismissed: false,
+      privacy_consent_reminder_dismissed_at: null,
+      updated_at: timestamp,
+    },
+  );
+
+  return normalizeUser(data);
+}
+
+export async function dismissPrivacyConsentReminder(userId) {
+  if (!userId) return null;
+
+  const timestamp = nowIso();
+
+  if (!isSupabaseConfigured || !supabase) {
+    return normalizeUser(
+      updateMockUsers(userId, (user) => ({
+        ...user,
+        privacy_consent_reminder_dismissed: true,
+        privacy_consent_reminder_dismissed_at: timestamp,
+        updated_at: timestamp,
+      })),
+    );
+  }
+
+  const data = await runUserMutationWithOptionalColumnRetry(
+    (payload) =>
+      supabase.from("users").update(payload).eq("id", userId).select("*").single(),
+    {
+      privacy_consent_reminder_dismissed: true,
+      privacy_consent_reminder_dismissed_at: timestamp,
       updated_at: timestamp,
     },
   );
