@@ -6,6 +6,7 @@ import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
 import { getSubmissionsForAdmin, reviewSubmission } from "../services/assignmentService.js";
 import { deleteCourseDraft, getCourseDrafts, markCourseDraftPublished, saveCourseDraft } from "../services/courseDraftService.js";
 import { uploadCourseImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
+import { getAdminAuditLogs } from "../services/auditLogService.js";
 import { normalizeCountrySelection } from "../data/countries.js";
 import { getProfileCountryOptions } from "../data/profileCountries.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
@@ -806,7 +807,10 @@ function AdminDashboardPage({ users, courses, certificates, currentUser }) {
 }
 
 function AdminSettingsPage() {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(true);
+  const [auditLogsError, setAuditLogsError] = useState("");
   const pageTitle = language === "es" ? "Configuración" : "Settings";
   const pageText = language === "es"
     ? "Administra los controles generales del sitio y las preferencias administrativas."
@@ -815,6 +819,52 @@ function AdminSettingsPage() {
   const comingSoonText = language === "es"
     ? "Próximamente en esta sección."
     : "Coming soon in this section.";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAuditLogs = async () => {
+      setLoadingAuditLogs(true);
+      setAuditLogsError("");
+
+      try {
+        const logs = await getAdminAuditLogs({ limit: 50 });
+        if (isMounted) setAuditLogs(logs);
+      } catch (error) {
+        console.error("Loading admin audit logs failed:", error);
+        if (isMounted) {
+          setAuditLogs([]);
+          setAuditLogsError(t("admin.auditLogsLoadFailed"));
+        }
+      } finally {
+        if (isMounted) setLoadingAuditLogs(false);
+      }
+    };
+
+    void loadAuditLogs();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [t]);
+
+  const summarizeAuditDetails = (log) => {
+    const details = log?.details ?? {};
+
+    if (details.previous_status || details.new_status) {
+      return `${details.previous_status || t("common.notSet")} → ${details.new_status || t("common.notSet")}`;
+    }
+
+    if (details.previous_role || details.new_role) {
+      return `${details.previous_role || t("common.notSet")} → ${details.new_role || t("common.notSet")}`;
+    }
+
+    if (Array.isArray(details.changed_fields) && details.changed_fields.length) {
+      return details.changed_fields.join(", ");
+    }
+
+    return t("common.notSet");
+  };
 
   return (
     <>
@@ -843,6 +893,53 @@ function AdminSettingsPage() {
           <OverviewCard icon="dashboard" title={(language === "es" ? "Privacidad y uso de datos" : "Privacy & Data Use") + " · " + comingSoon} text={comingSoonText} />
           <OverviewCard icon="dashboard" title={(language === "es" ? "Seguridad" : "Security") + " · " + comingSoon} text={comingSoonText} />
         </div>
+      </section>
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{t("admin.auditLogs")}</span>
+            <h2>{t("admin.recentAdminActivity")}</h2>
+            <p>{t("admin.auditLogsDescription")}</p>
+          </div>
+          <span className="count-badge">{auditLogs.length}</span>
+        </div>
+
+        {loadingAuditLogs ? <small className="field-note">{t("common.loading")}</small> : null}
+        {!loadingAuditLogs && auditLogsError ? <small className="field-note danger-text">{auditLogsError}</small> : null}
+        {!loadingAuditLogs && !auditLogsError && !auditLogs.length ? (
+          <small className="field-note">{t("admin.noAuditLogsYet")}</small>
+        ) : null}
+
+        {!loadingAuditLogs && auditLogs.length ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t("admin.time")}</th>
+                  <th>{t("admin.adminLabel")}</th>
+                  <th>{t("admin.action")}</th>
+                  <th>{t("admin.target")}</th>
+                  <th>{t("admin.details")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td>{log.createdAt ? new Date(log.createdAt).toLocaleString(language) : "—"}</td>
+                    <td className="audit-email-cell">{log.adminEmail || "—"}</td>
+                    <td><span className="status submitted audit-action-badge">{log.action}</span></td>
+                    <td className="audit-email-cell">
+                      <strong>{log.targetType || "—"}</strong>
+                      <br />
+                      <span>{log.targetEmail || log.targetId || "—"}</span>
+                    </td>
+                    <td className="audit-details-cell">{summarizeAuditDetails(log)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </section>
     </>
   );

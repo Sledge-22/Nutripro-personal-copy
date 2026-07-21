@@ -1216,6 +1216,16 @@ td,
   margin-top: 12px;
 }
 
+.audit-email-cell,
+.audit-details-cell {
+  word-break: break-word;
+}
+
+.audit-action-badge {
+  white-space: normal;
+  line-height: 1.35;
+}
+
 @media (max-width: 960px) {
   .admin-user-form-grid {
     grid-template-columns: 1fr;

@@ -27,6 +27,7 @@ import {
   updateUser,
   updateUserStatus,
 } from "../services/userService.js";
+import { recordAdminAuditLog } from "../services/auditLogService.js";
 import {
   completePrivacyConsent,
   completeFirstTimeSetup,
@@ -107,6 +108,17 @@ function dashboardPathForRole(role) {
   if (normalizedRole === "admin") return ROUTES.admin.dashboard;
   if (normalizedRole === "student") return ROUTES.student.dashboard;
   return ROUTES.auth.access;
+}
+
+function normalizeRoleKey(value) {
+  const normalizedRole = `${value ?? ""}`.trim().toLowerCase();
+  return ["admin", "student", "instructor", "support"].includes(normalizedRole) ? normalizedRole : "";
+}
+
+function normalizeStatusKey(value) {
+  const normalizedStatus = `${value ?? ""}`.trim().toLowerCase();
+  if (normalizedStatus === "paused") return "suspended";
+  return ["active", "inactive", "suspended"].includes(normalizedStatus) ? normalizedStatus : "";
 }
 
 function pathMatchesRole(pathname, role) {
@@ -501,12 +513,72 @@ export function App() {
       setCurrentUser((current) => ({ ...current, ...updatedUser }));
     }
 
+    const previousStatus = normalizeStatusKey(targetUser?.statusKey ?? targetUser?.status);
+    const nextStatus = normalizeStatusKey(updatedUser?.statusKey ?? updatedUser?.status ?? status);
+    const auditAction =
+      nextStatus === "active"
+        ? "user_reactivated"
+        : nextStatus === "suspended"
+          ? "user_suspended"
+          : "user_deactivated";
+
+    void recordAdminAuditLog({
+      adminUser: currentUser,
+      action: auditAction,
+      targetType: "user",
+      targetId: updatedUser?.id ?? targetUserId,
+      targetEmail: updatedUser?.email ?? targetEmail,
+      details: {
+        previous_status: previousStatus || null,
+        new_status: nextStatus || null,
+      },
+    });
+
     const nextUsers = await getUsers();
     setUsers(nextUsers);
   }
 
   async function handleUpdateUser(userId, updates) {
-    await updateUser(userId, updates);
+    const existingUser = users.find((user) => String(user.id) === String(userId)) ?? null;
+    const updatedUser = await updateUser(userId, updates);
+
+    const previousStatus = normalizeStatusKey(existingUser?.statusKey ?? existingUser?.status);
+    const nextStatus = normalizeStatusKey(updatedUser?.statusKey ?? updatedUser?.status ?? updates?.status);
+    const previousRole = normalizeRoleKey(existingUser?.roleKey ?? existingUser?.role);
+    const nextRole = normalizeRoleKey(updatedUser?.roleKey ?? updatedUser?.role ?? updates?.role);
+    const changedFields = Object.keys(updates ?? {}).filter(
+      (key) => !["password", "temporaryPassword", "token", "secret"].includes(`${key}`),
+    );
+
+    let auditAction = "user_updated";
+    const auditDetails = {
+      changed_fields: changedFields,
+    };
+
+    if (previousStatus && nextStatus && previousStatus !== nextStatus) {
+      auditAction =
+        nextStatus === "active"
+          ? "user_reactivated"
+          : nextStatus === "suspended"
+            ? "user_suspended"
+            : "user_deactivated";
+      auditDetails.previous_status = previousStatus;
+      auditDetails.new_status = nextStatus;
+    } else if (previousRole && nextRole && previousRole !== nextRole) {
+      auditAction = "user_role_changed";
+      auditDetails.previous_role = previousRole;
+      auditDetails.new_role = nextRole;
+    }
+
+    void recordAdminAuditLog({
+      adminUser: currentUser,
+      action: auditAction,
+      targetType: "user",
+      targetId: updatedUser?.id ?? userId,
+      targetEmail: updatedUser?.email ?? existingUser?.email ?? "",
+      details: auditDetails,
+    });
+
     const nextUsers = await getUsers();
     setUsers(nextUsers);
     if (String(currentUser?.id) === String(userId)) {
@@ -532,6 +604,18 @@ export function App() {
       productionOnboardingTest: Boolean(options.productionOnboardingTest),
       language: options.language,
     });
+    void recordAdminAuditLog({
+      adminUser: currentUser,
+      action: "password_reset_requested",
+      targetType: "user",
+      targetId: result?.user?.id ?? userId,
+      targetEmail: result?.user?.email ?? "",
+      details: {
+        must_change_password: true,
+        simulation_mode: Boolean(result?.simulationMode),
+        email_sent: Boolean(result?.emailSent),
+      },
+    });
     const nextUsers = await getUsers();
     setUsers(nextUsers);
     return result;
@@ -539,12 +623,34 @@ export function App() {
 
   async function handleDeleteUser(userId) {
     const result = await deleteUser(userId);
+    void recordAdminAuditLog({
+      adminUser: currentUser,
+      action: "user_deactivated",
+      targetType: "user",
+      targetId: result?.user?.id ?? userId,
+      targetEmail: result?.user?.email ?? "",
+      details: {
+        previous_status: normalizeStatusKey(result?.user?.statusKey ?? ""),
+        new_status: "inactive",
+        soft_deleted: Boolean(result?.softDeleted),
+      },
+    });
     setUsers(await getUsers());
     return result;
   }
 
   async function handleSendUserInvitation(user, options = {}) {
     const result = await sendUserInvitation(user, options);
+    void recordAdminAuditLog({
+      adminUser: currentUser,
+      action: "invitation_sent",
+      targetType: "user",
+      targetId: result?.user?.id ?? user?.id ?? "",
+      targetEmail: result?.user?.email ?? user?.email ?? "",
+      details: {
+        invitation_email_id: result?.id || null,
+      },
+    });
     setUsers(await getUsers());
     return result;
   }
