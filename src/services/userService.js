@@ -552,6 +552,10 @@ export async function updateUserStatus(userOrId, status) {
   }
 
   const updateBy = existingUser.email ? "email" : "id";
+  const payload = {
+    status: nextStatus,
+    updated_at: nowIso(),
+  };
   console.log("[UserStatus] Updating", {
     email: existingUser.email || "",
     id: existingUser.id || "",
@@ -559,24 +563,35 @@ export async function updateUserStatus(userOrId, status) {
     updateBy,
   });
 
-  const data = await runUserMutationWithOptionalColumnRetry(
-    (payload) =>
-      (existingUser.email
-        ? supabase.from("users").update(payload).eq("email", existingUser.email)
-        : supabase.from("users").update(payload).eq("id", existingUser.id))
-        .select("*"),
-    {
-      status: nextStatus,
-      updated_at: nowIso(),
-    },
-  );
+  const { data, error } = await (existingUser.email
+    ? supabase
+        .from("users")
+        .update(payload)
+        .eq("email", existingUser.email)
+        .select("id,email,status,updated_at")
+    : supabase
+        .from("users")
+        .update(payload)
+        .eq("id", existingUser.id)
+        .select("id,email,status,updated_at"));
+
+  console.log("[UserStatus] update result", { data, error });
+
+  if (error) {
+    throw new Error(error.message || error.details || error.hint || "Unable to update user status.");
+  }
 
   const updatedRow = Array.isArray(data) ? data[0] : data;
   if (!updatedRow) {
     throw new Error("No user record was updated. Check the user identifier or RLS policy.");
   }
 
-  return normalizeUser(updatedRow);
+  return normalizeUser({
+    ...existingUser,
+    ...updatedRow,
+    status: nextStatus,
+    updated_at: payload.updated_at,
+  });
 }
 
 export async function updateUser(userId, updates = {}) {

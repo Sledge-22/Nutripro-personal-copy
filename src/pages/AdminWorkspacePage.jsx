@@ -1364,6 +1364,15 @@ function UsersAdminPanel({
         id: user?.id || "",
         nextStatus,
       });
+      setMessage(
+        `${language === "es" ? "Se hizo clic en" : "Clicked"} ${
+          nextStatus === "inactive"
+            ? t("admin.deactivate")
+            : nextStatus === "suspended"
+              ? t("auth.suspendUser")
+              : reactivateLabel
+        } ${language === "es" ? "para" : "for"} ${user?.email || user?.name || notSetLabel}...`,
+      );
       await onUpdateUserStatus(user, nextStatus);
       setMessage(
         nextStatus === "inactive"
@@ -1377,7 +1386,9 @@ function UsersAdminPanel({
       setError(
         statusError?.code === "PROTECTED_DEMO_USER"
           ? protectedDemoFieldMessage
-          : `${statusUpdateFailedLabel}: ${statusError?.message || ""}`.trim(),
+          : `${statusUpdateFailedLabel}: ${
+              statusError?.message || "No user record was updated. Check email matching or RLS."
+            }`.trim(),
       );
     } finally {
       setStatusUpdatingUserId(null);

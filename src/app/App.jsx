@@ -460,13 +460,29 @@ export function App() {
   }
 
   async function handleUpdateUserStatus(userOrId, status) {
+    const updatedUser = await updateUserStatus(userOrId, status);
     const targetUserId = typeof userOrId === "object" ? userOrId?.id : userOrId;
-    await updateUserStatus(userOrId, status);
+    const targetEmail =
+      typeof userOrId === "object" ? `${userOrId?.email ?? ""}`.trim().toLowerCase() : `${updatedUser?.email ?? ""}`.trim().toLowerCase();
+
+    setUsers((current) =>
+      current.map((user) =>
+        (targetEmail && `${user.email ?? ""}`.trim().toLowerCase() === targetEmail) ||
+        (targetUserId && String(user.id) === String(targetUserId))
+          ? { ...user, ...updatedUser }
+          : user,
+      ),
+    );
+
+    if (
+      (targetEmail && `${currentUser?.email ?? ""}`.trim().toLowerCase() === targetEmail) ||
+      String(currentUser?.id) === String(targetUserId)
+    ) {
+      setCurrentUser((current) => ({ ...current, ...updatedUser }));
+    }
+
     const nextUsers = await getUsers();
     setUsers(nextUsers);
-    if (String(currentUser?.id) === String(targetUserId)) {
-      setCurrentUser(nextUsers.find((user) => String(user.id) === String(targetUserId)) ?? currentUser);
-    }
   }
 
   async function handleUpdateUser(userId, updates) {
