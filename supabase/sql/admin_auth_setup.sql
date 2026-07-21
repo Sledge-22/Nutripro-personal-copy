@@ -36,7 +36,13 @@ as $$
   select exists (
     select 1
     from public.users
-    where auth_user_id = auth.uid()
+    where (
+      auth_user_id = auth.uid()
+      or (
+        auth_user_id is null
+        and lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+      )
+    )
       and lower(role) = 'admin'
       and lower(status) = 'active'
   )

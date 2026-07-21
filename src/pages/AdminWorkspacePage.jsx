@@ -768,7 +768,7 @@ export function AdminWorkspacePage({
   }
 
   if (pathname === "/admin/settings") {
-    return <AdminSettingsPage siteAccessMode={siteAccessMode} siteAccessModeStorage={siteAccessModeStorage} onUpdateSiteAccessMode={onUpdateSiteAccessMode} />;
+    return <AdminSettingsPage />;
   }
 
   return <AdminDashboardPage users={users} courses={courses} certificates={certificates} currentUser={currentUser} />;
@@ -808,51 +808,16 @@ function AdminDashboardPage({ users, courses, certificates, currentUser }) {
   );
 }
 
-function AdminSettingsPage({ siteAccessMode = "demo", siteAccessModeStorage = "local", onUpdateSiteAccessMode }) {
+function AdminSettingsPage() {
   const { language } = useLanguage();
-  const [settingsMessage, setSettingsMessage] = useState("");
-  const [settingsError, setSettingsError] = useState("");
-  const [updatingMode, setUpdatingMode] = useState(false);
   const pageTitle = language === "es" ? "Configuración" : "Settings";
   const pageText = language === "es"
     ? "Administra los controles generales del sitio y las preferencias administrativas."
     : "Manage site-wide controls and administrative preferences.";
-  const modeHeading = language === "es" ? "Modo de acceso del sitio" : "Site Access Mode";
-  const modeDescription = language === "es"
-    ? "Controla si Nutripro se abre en modo demo o en modo de inicio de sesión de producción."
-    : "Control whether Nutripro opens in demo mode or production login mode.";
-  const demoModeLabel = language === "es" ? "Modo demo" : "Demo Mode";
-  const productionModeLabel = language === "es" ? "Modo inicio de sesión" : "Login Mode";
-  const helperText = language === "es"
-    ? "Este control es para pruebas y preparación del lanzamiento. Puede eliminarse más adelante cuando el inicio de sesión de producción esté finalizado."
-    : "This control is for testing and launch preparation. It can be removed later once production login is finalized.";
-  const warningText = language === "es"
-    ? "El inicio de sesión de producción solo debe activarse después de probar las cuentas, contraseñas e invitaciones."
-    : "Production Login should only be enabled after user accounts, passwords, and invitation flow are tested.";
-  const successText = language === "es" ? "Modo de acceso del sitio actualizado." : "Site access mode updated.";
-  const localSuccessText = language === "es" ? "Modo de acceso del sitio actualizado para este navegador." : "Site access mode updated for this browser.";
-  const failurePrefix = language === "es" ? "No se pudo actualizar el modo de acceso del sitio:" : "Unable to update site access mode:";
   const comingSoon = language === "es" ? "Próximamente" : "Coming soon";
-  const comingSoonText = language === "es" ? "Próximamente en esta sección." : "Coming soon in this section.";
-  const demoAdminHelper = language === "es"
-    ? "Los cambios del admin demo se guardan localmente para pruebas. La configuración de producción requiere un inicio de sesión real de administrador."
-    : "Demo admin changes are stored locally for testing. Production site settings require a real admin login.";
-
-  const handleModeChange = async (nextMode) => {
-    if (!onUpdateSiteAccessMode || nextMode === siteAccessMode) return;
-    setUpdatingMode(true);
-    setSettingsMessage("");
-    setSettingsError("");
-    try {
-      const result = await onUpdateSiteAccessMode(nextMode);
-      setSettingsMessage(result?.storage === "local" ? localSuccessText : successText);
-    } catch (error) {
-      console.error("Updating the admin-controlled site access mode failed:", error);
-      setSettingsError(`${failurePrefix} ${error?.message || "Unknown error"}`);
-    } finally {
-      setUpdatingMode(false);
-    }
-  };
+  const comingSoonText = language === "es"
+    ? "Próximamente en esta sección."
+    : "Coming soon in this section.";
 
   return (
     <>
@@ -869,42 +834,21 @@ function AdminSettingsPage({ siteAccessMode = "demo", siteAccessModeStorage = "l
         <div className="section-heading">
           <div>
             <span className="eyebrow">{language === "es" ? "CONFIGURACIÓN DEL SITIO" : "SITE SETTINGS"}</span>
-            <h2>{modeHeading}</h2>
-            <p>{modeDescription}</p>
-          </div>
-        </div>
-        <div className="auth-mode-toggle" role="tablist" aria-label={modeHeading}>
-          <button type="button" className={`auth-mode-option ${siteAccessMode === "demo" ? "active" : ""}`} onClick={() => void handleModeChange("demo")} disabled={updatingMode}>
-            {demoModeLabel}
-          </button>
-          <button type="button" className={`auth-mode-option ${siteAccessMode === "production" ? "active" : ""}`} onClick={() => void handleModeChange("production")} disabled={updatingMode}>
-            {productionModeLabel}
-          </button>
-        </div>
-        <small className="field-note">{helperText}</small>
-        {siteAccessModeStorage === "local" ? <small className="field-note">{demoAdminHelper}</small> : null}
-        {siteAccessMode === "production" ? <small className="field-note warning-badge">{warningText}</small> : null}
-        {settingsMessage ? <small className="field-note">{settingsMessage}</small> : null}
-        {settingsError ? <small className="field-note danger-text">{settingsError}</small> : null}
-      </section>
-      <section className="section-card">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">{comingSoon.toUpperCase()}</span>
-            <h2>{language === "es" ? "Más controles administrativos" : "More admin controls"}</h2>
+            <h2>{language === "es" ? "Controles administrativos" : "Administrative controls"}</h2>
+            <p>{pageText}</p>
           </div>
         </div>
         <div className="overview-grid">
-          <OverviewCard icon="community" title={`${language === "es" ? "Correo e invitaciones" : "Email & Invitations"} · ${comingSoon}`} text={comingSoonText} />
-          <OverviewCard icon="courses" title={`${language === "es" ? "Marca" : "Branding"} · ${comingSoon}`} text={comingSoonText} />
-          <OverviewCard icon="certificate" title={`${language === "es" ? "Certificados" : "Certificates"} · ${comingSoon}`} text={comingSoonText} />
-          <OverviewCard icon="users" title={`${language === "es" ? "Moderación de comunidad" : "Community Moderation"} · ${comingSoon}`} text={comingSoonText} />
+          <OverviewCard icon="community" title={(language === "es" ? "Correo e invitaciones" : "Email & Invitations") + " · " + comingSoon} text={comingSoonText} />
+          <OverviewCard icon="courses" title={(language === "es" ? "Marca" : "Branding") + " · " + comingSoon} text={comingSoonText} />
+          <OverviewCard icon="certificate" title={(language === "es" ? "Certificados" : "Certificates") + " · " + comingSoon} text={comingSoonText} />
+          <OverviewCard icon="users" title={(language === "es" ? "Moderación de comunidad" : "Community Moderation") + " · " + comingSoon} text={comingSoonText} />
+          <OverviewCard icon="dashboard" title={(language === "es" ? "Privacidad y uso de datos" : "Privacy & Data Use") + " · " + comingSoon} text={comingSoonText} />
         </div>
       </section>
     </>
   );
 }
-
 function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser }) {
   const { t, language } = useLanguage();
   const countryOptions = getProfileCountryOptions();
@@ -1090,6 +1034,18 @@ function UsersAdminPanel({
   onSetStudentCourseAssignments,
 }) {
   const { t, language, translateRole } = useLanguage();
+  const protectedDemoDeleteMessage =
+    language === "es"
+      ? "Este usuario demo está protegido y no se puede eliminar."
+      : "This demo user is protected and cannot be deleted.";
+  const protectedDemoFieldMessage =
+    language === "es"
+      ? "Este campo está protegido y no se puede cambiar para usuarios demo permanentes."
+      : "This field is protected and cannot be changed for permanent demo users.";
+  const deleteConfirmationBody =
+    language === "es"
+      ? "Esto desactivará al usuario y lo ocultará de las listas de usuarios activos."
+      : "This will deactivate the user and hide them from active user lists.";
   const countryOptions = getProfileCountryOptions();
   const safeCourses = Array.isArray(courses) ? courses : [];
   const [search, setSearch] = useState("");
@@ -1382,7 +1338,7 @@ function UsersAdminPanel({
       console.error("Deleting the admin-managed user failed:", deleteError);
       setError(
         deleteError?.code === "PROTECTED_DEMO_USER"
-          ? t("common.protectedDemoUsers")
+          ? protectedDemoDeleteMessage
           : deleteError?.message || t("common.userDeleteFailed"),
       );
     } finally {
@@ -1408,7 +1364,7 @@ function UsersAdminPanel({
       console.error("Updating the admin-managed user status failed:", statusError);
       setError(
         statusError?.code === "PROTECTED_DEMO_USER"
-          ? t("common.protectedDemoUsers")
+          ? protectedDemoFieldMessage
           : statusError?.message || t("common.userDeleteFailed"),
       );
     } finally {
@@ -1883,7 +1839,7 @@ function UsersAdminPanel({
             <button className="modal-close" type="button" onClick={() => setPendingDeleteUser(null)}>Ã—</button>
             <span className="eyebrow">{t("common.deleteUser")}</span>
             <h2>{t("common.confirmDeleteUserTitle")}</h2>
-            <p>{t("common.confirmDeleteUserBody")}</p>
+            <p>{deleteConfirmationBody}</p>
             <p><strong>{pendingDeleteUser.name}</strong> Â· {pendingDeleteUser.email}</p>
             <div className="form-actions compact confirm-modal-actions">
               <button type="button" className="secondary-btn" onClick={() => setPendingDeleteUser(null)}>

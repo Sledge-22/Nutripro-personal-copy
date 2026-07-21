@@ -167,7 +167,7 @@ export function StudentWorkspacePage({
   certificates,
   posts,
   progressState,
-  authMode = "demo",
+  authMode = "production",
   onCreatePost,
   onCreateComment,
   onUpdatePost,
@@ -376,7 +376,7 @@ function StudentDashboardPage({ courses, certificates, progressFor }) {
   );
 }
 
-function StudentProfilePage({ profile, authMode = "demo", onUpdateProfile }) {
+function StudentProfilePage({ profile, authMode = "production", onUpdateProfile }) {
   const { t, language } = useLanguage();
   const countryOptions = getProfileCountryOptions();
   const translatedSelectCountry = t("common.selectCountry");

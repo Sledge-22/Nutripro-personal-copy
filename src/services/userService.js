@@ -8,6 +8,7 @@ export const DEMO_STUDENT_EMAIL = "maya@nutripro.demo";
 const DEMO_STUDENT_ROLE = "student";
 const DEMO_STUDENT_STATUS = "active";
 const DEMO_ADMIN_EMAIL = "admin@nutripro.demo";
+const LEGACY_DEMO_STUDENT_EMAIL = "student@nutripro.demo";
 const DEFAULT_ADMIN_USER_FUNCTION = "admin-user-management";
 const DEFAULT_SEND_INVITATION_FUNCTION = "send-invitation-email";
 const ADMIN_USER_FUNCTION =
@@ -33,7 +34,7 @@ const OPTIONAL_USER_COLUMNS = [
   "updated_at",
 ];
 
-const PROTECTED_DEMO_EMAILS = new Set([DEMO_ADMIN_EMAIL, DEMO_STUDENT_EMAIL]);
+const PROTECTED_DEMO_EMAILS = new Set([DEMO_ADMIN_EMAIL, LEGACY_DEMO_STUDENT_EMAIL, DEMO_STUDENT_EMAIL]);
 
 function normalizeOptionalString(value) {
   const normalizedValue = `${value ?? ""}`.trim();
