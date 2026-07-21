@@ -1646,16 +1646,17 @@ function UsersAdminPanel({
                   <div className="user-list-actions">
                     {isEditing ? (
                       <div className="user-action-row">
-                        <button type="button" onClick={() => void saveUser()} disabled={saving}>{t("common.save")}</button>
-                        <button type="button" onClick={() => setEditingUserId(null)}>{t("common.cancel")}</button>
+                        <button type="button" className="primary-btn" onClick={() => void saveUser()} disabled={saving}>{t("common.save")}</button>
+                        <button type="button" className="secondary-btn" onClick={() => setEditingUserId(null)}>{t("common.cancel")}</button>
                       </div>
                     ) : (
                       <>
                         <div className="user-action-row">
-                          <button type="button" onClick={() => startEditing(user)}>{t("common.edit")}</button>
-                          <button type="button" onClick={() => void resetPassword(user)} disabled={resettingUserId === user.id}>{t("auth.resetPassword")}</button>
+                          <button type="button" className="secondary-btn" onClick={() => startEditing(user)}>{t("common.edit")}</button>
+                          <button type="button" className="secondary-btn" onClick={() => void resetPassword(user)} disabled={resettingUserId === user.id}>{t("auth.resetPassword")}</button>
                           <button
                             type="button"
+                            className="primary-btn"
                             onClick={() => void sendInvitation(user)}
                             disabled={!user.email || invitingUserId === user.id}
                             title={!user.email ? t("auth.emailRequiredToSendInvitation") : ""}
@@ -1665,17 +1666,17 @@ function UsersAdminPanel({
                         </div>
                         <div className="user-action-row user-status-actions">
                           {statusKey !== "active" ? (
-                            <button type="button" onClick={() => void applyStatusChange(user, "active")} disabled={statusUpdatingUserId === user.id}>
+                            <button type="button" className="secondary-btn" onClick={() => void applyStatusChange(user, "active")} disabled={statusUpdatingUserId === user.id}>
                               {reactivateLabel}
                             </button>
                           ) : null}
                           {statusKey !== "inactive" ? (
-                            <button type="button" onClick={() => void applyStatusChange(user, "inactive")} disabled={statusUpdatingUserId === user.id}>
+                            <button type="button" className="danger-btn" onClick={() => void applyStatusChange(user, "inactive")} disabled={statusUpdatingUserId === user.id}>
                               {t("admin.deactivate")}
                             </button>
                           ) : null}
                           {statusKey !== "suspended" ? (
-                            <button type="button" onClick={() => void applyStatusChange(user, "suspended")} disabled={statusUpdatingUserId === user.id}>
+                            <button type="button" className="danger-btn" onClick={() => void applyStatusChange(user, "suspended")} disabled={statusUpdatingUserId === user.id}>
                               {t("auth.suspendUser")}
                             </button>
                           ) : null}

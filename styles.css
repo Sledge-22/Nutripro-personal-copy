@@ -312,6 +312,19 @@ td strong { color: var(--ink); }
   min-width: 0;
   justify-items: end;
 }
+.user-list-actions .user-action-row {
+  justify-content: flex-end;
+}
+.user-list-actions .primary-btn,
+.user-list-actions .secondary-btn,
+.user-list-actions .danger-btn {
+  min-height: 38px;
+  padding: 0.55rem 0.9rem;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
 .users-table-wrap { overflow-x: auto; }
 .users-table { min-width: 1520px; table-layout: auto; }
 .users-table th,
@@ -1748,6 +1761,7 @@ select:focus {
   .filters-row { grid-template-columns: 1fr; }
   .user-list-main { grid-template-columns: 1fr; align-items: stretch; }
   .user-list-actions { justify-items: start; }
+  .user-list-actions .user-action-row { justify-content: flex-start; }
   .users-table { min-width: 1220px; }
   .users-cell-actions { min-width: 280px; }
   .profile-hero { grid-template-columns: 1fr; }
