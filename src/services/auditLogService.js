@@ -49,6 +49,20 @@ function readLocalAuditLogs() {
   }
 }
 
+function mergeAuditLogs(primaryLogs = [], secondaryLogs = []) {
+  const merged = [...primaryLogs, ...secondaryLogs];
+  const seenKeys = new Set();
+
+  return merged
+    .filter((entry) => {
+      const dedupeKey = `${entry?.id ?? ""}-${entry?.createdAt ?? entry?.created_at ?? ""}-${entry?.action ?? ""}`;
+      if (seenKeys.has(dedupeKey)) return false;
+      seenKeys.add(dedupeKey);
+      return true;
+    })
+    .sort((left, right) => new Date(right?.createdAt ?? right?.created_at ?? 0).getTime() - new Date(left?.createdAt ?? left?.created_at ?? 0).getTime());
+}
+
 function writeLocalAuditLogs(logs) {
   if (typeof window === "undefined") return;
 
@@ -120,7 +134,13 @@ export async function recordAdminAuditLog({
     return normalizeAuditLog(data);
   } catch (error) {
     console.warn("Recording admin audit log failed:", error);
-    return null;
+    const fallbackLog = normalizeAuditLog({
+      id: `local-${Date.now()}`,
+      ...payload,
+      created_at: new Date().toISOString(),
+    });
+    writeLocalAuditLogs([fallbackLog, ...readLocalAuditLogs()].slice(0, 100));
+    return fallbackLog;
   }
 }
 
@@ -136,23 +156,27 @@ export async function getAdminAuditLogs({ limit = 50, action = "", adminEmail = 
       .map(normalizeAuditLog);
   }
 
-  try {
-    let query = supabase
-      .from("admin_audit_logs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(normalizedLimit);
+  let query = supabase
+    .from("admin_audit_logs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(normalizedLimit);
 
-    if (action) query = query.eq("action", action);
-    if (adminEmail) query = query.eq("admin_email", adminEmail.toLowerCase());
-    if (targetEmail) query = query.eq("target_email", targetEmail.toLowerCase());
+  if (action) query = query.eq("action", action);
+  if (adminEmail) query = query.eq("admin_email", adminEmail.toLowerCase());
+  if (targetEmail) query = query.eq("target_email", targetEmail.toLowerCase());
 
-    const { data, error } = await query;
-    if (error) throw error;
-
-    return Array.isArray(data) ? data.map(normalizeAuditLog) : [];
-  } catch (error) {
+  const { data, error } = await query;
+  if (error) {
     console.warn("Loading admin audit logs failed:", error);
-    return [];
+    throw error;
   }
+
+  const supabaseLogs = Array.isArray(data) ? data.map(normalizeAuditLog) : [];
+  const localLogs = readLocalAuditLogs()
+    .filter((entry) => !action || entry.action === action)
+    .filter((entry) => !adminEmail || entry.adminEmail === adminEmail)
+    .filter((entry) => !targetEmail || entry.targetEmail === targetEmail);
+
+  return mergeAuditLogs(supabaseLogs, localLogs).slice(0, normalizedLimit);
 }

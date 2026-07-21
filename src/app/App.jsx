@@ -121,6 +121,11 @@ function normalizeStatusKey(value) {
   return ["active", "inactive", "suspended"].includes(normalizedStatus) ? normalizedStatus : "";
 }
 
+function normalizeCourseStatusKey(value) {
+  const normalizedStatus = `${value ?? ""}`.trim().toLowerCase();
+  return ["draft", "published", "archived"].includes(normalizedStatus) ? normalizedStatus : "draft";
+}
+
 function pathMatchesRole(pathname, role) {
   const normalizedRole = `${role ?? ""}`.trim().toLowerCase();
   if (normalizedRole === "admin") return isAdminRoute(pathname);
@@ -593,6 +598,17 @@ export function App() {
       productionAuthEnabled: isProductionAuthMode,
       productionOnboardingTest: Boolean(options.productionOnboardingTest),
     });
+    void recordAdminAuditLog({
+      adminUser: currentUser,
+      action: "user_created",
+      targetType: "user",
+      targetId: result?.user?.id ?? "",
+      targetEmail: result?.user?.email ?? payload?.email ?? "",
+      details: {
+        role: normalizeRoleKey(result?.user?.roleKey ?? payload?.role),
+        status: normalizeStatusKey(result?.user?.statusKey ?? payload?.status),
+      },
+    });
     const nextUsers = await getUsers();
     setUsers(nextUsers);
     return result;
@@ -616,6 +632,18 @@ export function App() {
         email_sent: Boolean(result?.emailSent),
       },
     });
+    if (result?.emailSent) {
+      void recordAdminAuditLog({
+        adminUser: currentUser,
+        action: "temporary_password_sent",
+        targetType: "user",
+        targetId: result?.user?.id ?? userId,
+        targetEmail: result?.user?.email ?? "",
+        details: {
+          delivery_method: "email",
+        },
+      });
+    }
     const nextUsers = await getUsers();
     setUsers(nextUsers);
     return result;
@@ -657,10 +685,39 @@ export function App() {
 
   async function handleSaveCourse(course, editingId, options = {}) {
     try {
+      const existingCourse = editingId
+        ? courses.find((entry) => String(entry.id) === String(editingId)) ?? null
+        : null;
       const savedCourse = editingId
         ? await updateCourse(editingId, course, options)
         : await createCourse(course, options);
       setCourses((currentCourses) => upsertCourseList(currentCourses, savedCourse));
+      const previousStatus = normalizeCourseStatusKey(existingCourse?.status);
+      const nextStatus = normalizeCourseStatusKey(savedCourse?.status ?? course?.status);
+      void recordAdminAuditLog({
+        adminUser: currentUser,
+        action: editingId ? "course_updated" : "course_created",
+        targetType: "course",
+        targetId: savedCourse?.id ?? editingId ?? "",
+        details: {
+          course_title: savedCourse?.title ?? course?.title ?? "",
+          previous_status: editingId ? previousStatus : null,
+          new_status: nextStatus,
+        },
+      });
+      if (editingId && previousStatus !== nextStatus) {
+        void recordAdminAuditLog({
+          adminUser: currentUser,
+          action: nextStatus === "published" ? "course_published" : "course_unpublished",
+          targetType: "course",
+          targetId: savedCourse?.id ?? editingId ?? "",
+          details: {
+            course_title: savedCourse?.title ?? course?.title ?? "",
+            previous_status: previousStatus,
+            new_status: nextStatus,
+          },
+        });
+      }
 
       void refreshCourses().catch((refreshError) => {
         console.error("Refreshing courses after save failed:", refreshError);
@@ -673,7 +730,18 @@ export function App() {
   }
 
   async function handleDeleteCourse(courseId) {
+    const existingCourse = courses.find((entry) => String(entry.id) === String(courseId)) ?? null;
     await deleteCourse(courseId);
+    void recordAdminAuditLog({
+      adminUser: currentUser,
+      action: "course_deleted",
+      targetType: "course",
+      targetId: courseId,
+      details: {
+        course_title: existingCourse?.title ?? "",
+        previous_status: normalizeCourseStatusKey(existingCourse?.status),
+      },
+    });
     await refreshCourses();
   }
 
@@ -691,6 +759,18 @@ export function App() {
           console.error("Refreshing courses after assignment update failed:", refreshError);
         });
       }
+      const targetStudent = users.find((entry) => String(entry.id) === String(studentId)) ?? null;
+      void recordAdminAuditLog({
+        adminUser: currentUser,
+        action: "course_assigned",
+        targetType: "user",
+        targetId: studentId,
+        targetEmail: targetStudent?.email ?? "",
+        details: {
+          assigned_student_count: 1,
+          course_ids: Array.isArray(courseIds) ? courseIds.map(String) : [],
+        },
+      });
 
       return { ok: true };
     } catch (error) {
@@ -703,7 +783,18 @@ export function App() {
   }
 
   async function handleGenerateCertificate(payload) {
-    await generateCertificate(payload);
+    const certificate = await generateCertificate(payload);
+    void recordAdminAuditLog({
+      adminUser: currentUser,
+      action: "certificate_issued",
+      targetType: "certificate",
+      targetId: certificate?.id ?? "",
+      targetEmail: payload?.studentEmail ?? "",
+      details: {
+        course_id: payload?.courseId ?? "",
+        course_title: payload?.course ?? "",
+      },
+    });
     await refreshCertificates();
   }
 
@@ -724,12 +815,35 @@ export function App() {
   }
 
   async function handleUpdateCommunityPost(postId, updates) {
+    const existingPost = posts.find((entry) => String(entry.id) === String(postId)) ?? null;
     await updateCommunityPost(postId, updates);
+    if ("is_removed" in (updates ?? {})) {
+      void recordAdminAuditLog({
+        adminUser: currentUser,
+        action: updates?.is_removed ? "community_post_removed" : "community_post_restored",
+        targetType: "community_post",
+        targetId: postId,
+        details: {
+          reason: updates?.removal_reason ?? null,
+          title: existingPost?.title ?? "",
+        },
+      });
+    }
     setPosts(await getCommunityPosts());
   }
 
   async function handleDeleteCommunityPost(postId) {
+    const existingPost = posts.find((entry) => String(entry.id) === String(postId)) ?? null;
     await deleteCommunityPost(postId);
+    void recordAdminAuditLog({
+      adminUser: currentUser,
+      action: "community_post_deleted",
+      targetType: "community_post",
+      targetId: postId,
+      details: {
+        title: existingPost?.title ?? "",
+      },
+    });
     setPosts(await getCommunityPosts());
   }
 

@@ -820,6 +820,40 @@ function AdminSettingsPage() {
     ? "Próximamente en esta sección."
     : "Coming soon in this section.";
 
+  const sanitizeExportDetails = (details) => {
+    if (!details || typeof details !== "object" || Array.isArray(details)) return {};
+
+    return Object.entries(details).reduce((safeDetails, [key, value]) => {
+      const normalizedKey = `${key ?? ""}`.trim().toLowerCase();
+      if (
+        normalizedKey.includes("password") ||
+        normalizedKey.includes("temporary_password") ||
+        normalizedKey.includes("temp_password") ||
+        normalizedKey.includes("token") ||
+        normalizedKey.includes("reset_token") ||
+        normalizedKey.includes("invite_token") ||
+        normalizedKey.includes("access_token") ||
+        normalizedKey.includes("refresh_token") ||
+        normalizedKey.includes("service_role") ||
+        normalizedKey.includes("secret") ||
+        normalizedKey.includes("api_key")
+      ) {
+        return safeDetails;
+      }
+
+      safeDetails[key] =
+        value && typeof value === "object" && !Array.isArray(value)
+          ? sanitizeExportDetails(value)
+          : value;
+      return safeDetails;
+    }, {});
+  };
+
+  const escapeCsvValue = (value) => {
+    const safeValue = value == null ? "" : String(value).replace(/\r?\n|\r/g, " ");
+    return `"${safeValue.replace(/"/g, '""')}"`;
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -834,7 +868,8 @@ function AdminSettingsPage() {
         console.error("Loading admin audit logs failed:", error);
         if (isMounted) {
           setAuditLogs([]);
-          setAuditLogsError(t("admin.auditLogsLoadFailed"));
+          const exactError = error?.message || error?.details || error?.hint || t("admin.auditLogsLoadFailed");
+          setAuditLogsError(`${t("admin.auditLogsLoadFailed")}: ${exactError}`);
         }
       } finally {
         if (isMounted) setLoadingAuditLogs(false);
@@ -864,6 +899,50 @@ function AdminSettingsPage() {
     }
 
     return t("common.notSet");
+  };
+
+  const exportAuditLogsCsv = () => {
+    if (!auditLogs.length) {
+      setAuditLogsError(t("admin.noAuditLogsAvailableToExport"));
+      return;
+    }
+
+    setAuditLogsError("");
+
+    const headers = [
+      t("admin.time"),
+      t("admin.adminLabel"),
+      t("admin.action"),
+      t("admin.targetType"),
+      t("admin.targetEmail"),
+      t("admin.targetId"),
+      t("admin.details"),
+    ];
+
+    const rows = auditLogs.map((log) => [
+      log.createdAt ? new Date(log.createdAt).toLocaleString(language) : "",
+      log.adminEmail || "",
+      log.action || "",
+      log.targetType || "",
+      log.targetEmail || "",
+      log.targetId || "",
+      JSON.stringify(sanitizeExportDetails(log.details ?? {})),
+    ]);
+
+    const csvContent = [
+      headers.map(escapeCsvValue).join(","),
+      ...rows.map((row) => row.map(escapeCsvValue).join(",")),
+    ].join("\r\n");
+
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const fileName = `nutripro-audit-logs-${dateStamp}.csv`;
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -901,7 +980,12 @@ function AdminSettingsPage() {
             <h2>{t("admin.recentAdminActivity")}</h2>
             <p>{t("admin.auditLogsDescription")}</p>
           </div>
-          <span className="count-badge">{auditLogs.length}</span>
+          <div className="section-heading-actions">
+            <button type="button" className="secondary-btn" onClick={exportAuditLogsCsv}>
+              {t("admin.exportCsv")}
+            </button>
+            <span className="count-badge">{auditLogs.length}</span>
+          </div>
         </div>
 
         {loadingAuditLogs ? <small className="field-note">{t("common.loading")}</small> : null}
