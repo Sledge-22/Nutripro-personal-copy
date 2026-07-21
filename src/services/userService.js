@@ -204,6 +204,35 @@ function isProtectedDemoEmail(email) {
   return PROTECTED_DEMO_EMAILS.has(`${email ?? ""}`.trim().toLowerCase());
 }
 
+export function canUpdateUserStatus(targetUser, currentUser, nextStatus) {
+  const targetEmail = `${targetUser?.email ?? ""}`.trim().toLowerCase();
+  const currentEmail = `${currentUser?.email ?? ""}`.trim().toLowerCase();
+  const normalizedNextStatus = normalizeStatusValue(nextStatus);
+  const isProtectedSampleUser = isProtectedDemoEmail(targetEmail);
+
+  if (isProtectedSampleUser) {
+    return {
+      allowed: false,
+      reason: "This protected sample user cannot be updated.",
+      code: "PROTECTED_DEMO_USER",
+    };
+  }
+
+  const isSelf = Boolean(targetEmail && currentEmail && targetEmail === currentEmail);
+  const isAdmin = normalizeRoleValue(currentUser?.roleKey ?? currentUser?.role, "") === "admin";
+  const isDeactivation = normalizedNextStatus === "inactive" || normalizedNextStatus === "suspended";
+
+  if (isSelf && isAdmin && isDeactivation) {
+    return {
+      allowed: false,
+      reason: "You cannot deactivate or suspend your own active admin account.",
+      code: "SELF_ADMIN_STATUS_BLOCK",
+    };
+  }
+
+  return { allowed: true, code: "ALLOWED" };
+}
+
 function updateMockUsers(userId, updater) {
   const users = getMockUsers().map((user) => (String(user.id) === String(userId) ? updater(user) : user));
   setMockUsers(users);

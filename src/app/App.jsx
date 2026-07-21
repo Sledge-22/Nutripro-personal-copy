@@ -16,6 +16,7 @@ import { PrivacyPage } from "../pages/PrivacyPage.jsx";
 import { AdminWorkspacePage } from "../pages/AdminWorkspacePage.jsx";
 import { StudentWorkspacePage } from "../pages/StudentWorkspacePage.jsx";
 import {
+  canUpdateUserStatus,
   createAdminUser,
   deleteUser,
   getUserProfileForAuthUser,
@@ -464,20 +465,19 @@ export function App() {
       typeof userOrId === "object"
         ? userOrId
         : users.find((user) => String(user.id) === String(userOrId)) ?? null;
-    const nextStatus = `${status ?? ""}`.trim().toLowerCase();
-    const currentUserEmail = `${currentUser?.email ?? ""}`.trim().toLowerCase();
-    const targetUserEmail = `${targetUser?.email ?? ""}`.trim().toLowerCase();
+    const guard = canUpdateUserStatus(targetUser, currentUser, status);
 
-    if (
-      (nextStatus === "inactive" || nextStatus === "suspended") &&
-      `${currentUser?.roleKey ?? ""}`.trim().toLowerCase() === "admin" &&
-      currentUserEmail &&
-      targetUserEmail &&
-      currentUserEmail === targetUserEmail
-    ) {
-      const selfStatusError = new Error("You cannot deactivate or suspend your own active admin account.");
-      selfStatusError.code = "SELF_ADMIN_STATUS_BLOCK";
-      throw selfStatusError;
+    console.log("[UserStatus] student test protected?", canUpdateUserStatus({ email: "student@nutripro.test" }, currentUser, status));
+    console.log("[UserStatus] guard", {
+      email: targetUser?.email || "",
+      nextStatus: `${status ?? ""}`.trim().toLowerCase(),
+      guard,
+    });
+
+    if (!guard.allowed) {
+      const statusGuardError = new Error(guard.reason);
+      statusGuardError.code = guard.code;
+      throw statusGuardError;
     }
 
     const updatedUser = await updateUserStatus(userOrId, status);
