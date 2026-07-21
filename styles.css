@@ -243,6 +243,34 @@ th { color: #778882; background: var(--green-50); font-size: 11px; text-transfor
 th:first-child { border-radius: 10px 0 0 10px; } th:last-child { border-radius: 0 10px 10px 0; }
 td { color: #51645e; }
 td strong { color: var(--ink); }
+.users-table-wrap { overflow-x: auto; }
+.users-table { min-width: 1520px; table-layout: auto; }
+.users-table th,
+.users-table td { vertical-align: top; }
+.users-cell { min-width: 0; }
+.users-cell-name { min-width: 180px; }
+.users-cell-email { min-width: 220px; }
+.users-cell-username { min-width: 140px; }
+.users-cell-role,
+.users-cell-status,
+.users-cell-country,
+.users-cell-security,
+.users-cell-privacy,
+.users-cell-count,
+.users-cell-policy { white-space: nowrap; }
+.users-cell-date { min-width: 134px; white-space: nowrap; }
+.users-cell-actions { min-width: 320px; }
+.user-name { display: block; white-space: normal; word-break: normal; overflow-wrap: break-word; }
+.user-email { display: block; white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
+.user-username,
+.user-date,
+.user-policy-version { display: inline-block; white-space: nowrap; }
+.users-badge,
+.users-table .status,
+.users-table .country-badge { white-space: nowrap; flex-wrap: nowrap; align-items: center; }
+.user-action-groups { display: grid; gap: 8px; min-width: 0; }
+.user-action-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.user-status-actions button { min-width: 112px; }
 .status { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 999px; color: #397355; background: #e7f4ec; font-size: 11px; font-weight: 700; }
 .status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .status.submitted { color: #406f9d; background: #e8f2ff; }
@@ -1649,6 +1677,8 @@ select:focus {
   .submission-summary { flex-direction: column; }
   .review-center-layout, .review-meta-grid { grid-template-columns: 1fr; }
   .filters-row { grid-template-columns: 1fr; }
+  .users-table { min-width: 1220px; }
+  .users-cell-actions { min-width: 280px; }
   .profile-hero { grid-template-columns: 1fr; }
 }
 

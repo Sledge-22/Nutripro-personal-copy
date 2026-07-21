@@ -1045,6 +1045,7 @@ function UsersAdminPanel({
     language === "es"
       ? t("common.confirmDeactivateUserBody")
       : t("common.confirmDeactivateUserBody");
+  const notSetLabel = t("common.notSet");
   const countryOptions = getProfileCountryOptions();
   const safeCourses = Array.isArray(courses) ? courses : [];
   const [search, setSearch] = useState("");
@@ -1351,20 +1352,20 @@ function UsersAdminPanel({
     setError("");
 
     try {
-      await onUpdateUserStatus(user.id, nextStatus);
+      await onUpdateUserStatus(user, nextStatus);
       setMessage(
         nextStatus === "inactive"
           ? t("common.userDeactivatedSuccessfully")
           : nextStatus === "active"
-            ? t("admin.activate")
-            : t("auth.suspendUser"),
+            ? t("admin.userReactivatedSuccessfully")
+            : t("admin.userSuspendedSuccessfully"),
       );
     } catch (statusError) {
       console.error("Updating the admin-managed user status failed:", statusError);
       setError(
         statusError?.code === "PROTECTED_DEMO_USER"
           ? protectedDemoFieldMessage
-          : statusError?.message || t("common.userDeleteFailed"),
+          : statusError?.message || t("admin.userStatusUpdateFailed"),
       );
     } finally {
       setStatusUpdatingUserId(null);
@@ -1573,8 +1574,8 @@ function UsersAdminPanel({
           </select>
         </div>
 
-        <div className="table-wrap">
-          <table>
+        <div className="table-wrap users-table-wrap">
+          <table className="users-table">
             <thead>
               <tr>
                 <th>{t("auth.name")}</th>
@@ -1597,23 +1598,25 @@ function UsersAdminPanel({
                 const isEditing = editingUserId === user.id;
                 return (
                   <tr key={user.id}>
-                    <td>
+                    <td className="users-cell users-cell-name">
                       {isEditing ? (
                         <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
                       ) : (
-                        <strong>{user.name}</strong>
+                        <strong className="user-name">{user.name}</strong>
                       )}
                     </td>
-                    <td>{user.email}</td>
-                    <td>
+                    <td className="users-cell users-cell-email">
+                      <span className="user-email">{user.email || notSetLabel}</span>
+                    </td>
+                    <td className="users-cell users-cell-username">
                       {isEditing ? (
                         <input value={draft.username} onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value }))} />
                       ) : (
-                        user.username || "â€”"
+                        <span className="user-username">{user.username || notSetLabel}</span>
                       )}
                     </td>
-                    <td>
-                      <span className="subtle-badge">
+                    <td className="users-cell users-cell-count">
+                      <span className="subtle-badge users-badge">
                         {
                           safeCourses.filter(
                             (course) =>
@@ -1623,7 +1626,7 @@ function UsersAdminPanel({
                         }
                       </span>
                     </td>
-                    <td>
+                    <td className="users-cell users-cell-role">
                       {isEditing ? (
                         <select value={draft.role} onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value }))}>
                           <option value="admin">{translateRole("admin")}</option>
@@ -1632,10 +1635,10 @@ function UsersAdminPanel({
                           <option value="support">{translateRole("support")}</option>
                         </select>
                       ) : (
-                        <span className="subtle-badge">{translateRole(user.roleKey || user.role)}</span>
+                        <span className="subtle-badge users-badge">{translateRole(user.roleKey || user.role)}</span>
                       )}
                     </td>
-                    <td>
+                    <td className="users-cell users-cell-status">
                       {isEditing ? (
                         <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
                           <option value="active">{t("status.active")}</option>
@@ -1646,7 +1649,7 @@ function UsersAdminPanel({
                         <Status status={user.statusKey || user.status} />
                       )}
                     </td>
-                    <td>
+                    <td className="users-cell users-cell-country">
                       {isEditing ? (
                         <select value={draft.country} onChange={(event) => setDraft((current) => ({ ...current, country: event.target.value }))}>
                           <option value="">{t("common.selectCountry")}</option>
@@ -1658,7 +1661,7 @@ function UsersAdminPanel({
                         </select>
                       ) : (
                         user.country ? (
-                          <span className="subtle-badge profile-country-badge country-badge">
+                          <span className="subtle-badge users-badge profile-country-badge country-badge">
                             <CountryFlag
                               code={user.country_code || user.countryCode}
                               name={user.country}
@@ -1667,24 +1670,30 @@ function UsersAdminPanel({
                             />
                             <span>{user.country}</span>
                           </span>
-                        ) : "â€”"
+                        ) : notSetLabel
                       )}
                     </td>
-                    <td>
-                      <span className={`subtle-badge ${user.mustChangePassword ? "warning-badge" : ""}`}>
+                    <td className="users-cell users-cell-security">
+                      <span className={`subtle-badge users-badge ${user.mustChangePassword ? "warning-badge" : ""}`}>
                         {user.mustChangePassword ? t("common.yes") : t("common.no")}
                       </span>
                     </td>
-                    <td>
-                      <span className={`subtle-badge ${user.privacyPolicyAccepted ? "" : "warning-badge"}`}>
+                    <td className="users-cell users-cell-privacy">
+                      <span className={`subtle-badge users-badge ${user.privacyPolicyAccepted ? "" : "warning-badge"}`}>
                         {user.privacyPolicyAccepted ? acceptedText : notAcceptedText}
                       </span>
                     </td>
-                    <td>{user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at ? formatDisplayDate(user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at, language) : "â€”"}</td>
-                    <td>{user.privacyPolicyVersion || user.privacy_policy_version || "â€”"}</td>
-                    <td>{user.last_login_at || user.lastLoginAt ? formatDisplayDate(user.last_login_at || user.lastLoginAt, language) : "â€”"}</td>
-                    <td>
-                      <div className="table-actions">
+                    <td className="users-cell users-cell-date">
+                      <span className="user-date">{user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at ? formatDisplayDate(user.privacyPolicyAcceptedAt || user.privacy_policy_accepted_at, language) : notSetLabel}</span>
+                    </td>
+                    <td className="users-cell users-cell-policy">
+                      <span className="user-policy-version">{user.privacyPolicyVersion || user.privacy_policy_version || notSetLabel}</span>
+                    </td>
+                    <td className="users-cell users-cell-date">
+                      <span className="user-date">{user.last_login_at || user.lastLoginAt ? formatDisplayDate(user.last_login_at || user.lastLoginAt, language) : notSetLabel}</span>
+                    </td>
+                    <td className="users-cell users-cell-actions">
+                      <div className="table-actions user-action-groups">
                         {isEditing ? (
                           <>
                             <button onClick={() => void saveUser()} disabled={saving}>{t("common.save")}</button>
@@ -1692,26 +1701,42 @@ function UsersAdminPanel({
                           </>
                         ) : (
                           <>
-                            <button onClick={() => startEditing(user)}>{t("common.edit")}</button>
-                            <button onClick={() => void resetPassword(user)} disabled={resettingUserId === user.id}>{t("auth.resetPassword")}</button>
-                            {showAuthTestTools ? (
-                              <button onClick={() => void resetPassword(user, "production")} disabled={resettingUserId === user.id}>
-                                {t("auth.sendNewTemporaryPassword")}
+                            <div className="user-action-row">
+                              <button onClick={() => startEditing(user)}>{t("common.edit")}</button>
+                              <button onClick={() => void resetPassword(user)} disabled={resettingUserId === user.id}>{t("auth.resetPassword")}</button>
+                              {showAuthTestTools ? (
+                                <button onClick={() => void resetPassword(user, "production")} disabled={resettingUserId === user.id}>
+                                  {t("auth.sendNewTemporaryPassword")}
+                                </button>
+                              ) : null}
+                              <button
+                                onClick={() => void sendInvitation(user)}
+                                disabled={!user.email || invitingUserId === user.id}
+                                title={!user.email ? t("auth.emailRequiredToSendInvitation") : ""}
+                              >
+                                {invitingUserId === user.id ? t("auth.sendingInvitation") : t("auth.sendInvitation")}
                               </button>
-                            ) : null}
-                            <button
-                              onClick={() => void sendInvitation(user)}
-                              disabled={!user.email || invitingUserId === user.id}
-                              title={!user.email ? t("auth.emailRequiredToSendInvitation") : ""}
-                            >
-                              {invitingUserId === user.id ? t("auth.sendingInvitation") : t("auth.sendInvitation")}
-                            </button>
-                            <button onClick={() => void applyStatusChange(user, "active")} disabled={statusUpdatingUserId === user.id}>{t("admin.activate")}</button>
-                            <button onClick={() => void applyStatusChange(user, "inactive")} disabled={statusUpdatingUserId === user.id}>{t("admin.deactivate")}</button>
-                            <button onClick={() => void applyStatusChange(user, "suspended")} disabled={statusUpdatingUserId === user.id}>{t("auth.suspendUser")}</button>
-                            <button className="danger-text" onClick={() => requestDeleteUser(user)}>
-                              {t("common.delete")}
-                            </button>
+                            </div>
+                            <div className="user-action-row user-status-actions">
+                              {(user.statusKey || "").toLowerCase() !== "active" ? (
+                                <button onClick={() => void applyStatusChange(user, "active")} disabled={statusUpdatingUserId === user.id}>
+                                  {t("admin.reactivate")}
+                                </button>
+                              ) : null}
+                              {(user.statusKey || "").toLowerCase() !== "inactive" ? (
+                                <button onClick={() => void applyStatusChange(user, "inactive")} disabled={statusUpdatingUserId === user.id}>
+                                  {t("admin.deactivate")}
+                                </button>
+                              ) : null}
+                              {(user.statusKey || "").toLowerCase() !== "suspended" ? (
+                                <button onClick={() => void applyStatusChange(user, "suspended")} disabled={statusUpdatingUserId === user.id}>
+                                  {t("auth.suspendUser")}
+                                </button>
+                              ) : null}
+                              <button className="danger-text" onClick={() => requestDeleteUser(user)}>
+                                {t("common.delete")}
+                              </button>
+                            </div>
                           </>
                         )}
                       </div>

@@ -389,6 +389,42 @@ export async function getUserById(userId) {
   return data ? normalizeUser(data) : null;
 }
 
+function isValidUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    `${value ?? ""}`.trim(),
+  );
+}
+
+async function getUserByIdentifier(userOrId) {
+  if (!userOrId) return null;
+
+  if (typeof userOrId !== "object") {
+    return getUserById(userOrId);
+  }
+
+  const candidateId = normalizeOptionalString(userOrId.id);
+  const candidateEmail = normalizeOptionalString(userOrId.email).toLowerCase();
+
+  if (candidateId && isValidUuid(candidateId)) {
+    return getUserById(candidateId);
+  }
+
+  if (!candidateEmail) return null;
+
+  if (!isSupabaseConfigured || !supabase) {
+    const user = getMockUsers().find((entry) => `${entry.email ?? ""}`.trim().toLowerCase() === candidateEmail) ?? null;
+    return user ? normalizeUser(user) : null;
+  }
+
+  const { data, error } = await supabase.from("users").select("*").ilike("email", candidateEmail).maybeSingle();
+  if (error) {
+    console.error("Loading the selected user by email failed:", error);
+    throw error;
+  }
+
+  return data ? normalizeUser(data) : null;
+}
+
 export async function getUserByUsername(username) {
   const normalizedUsername = normalizeOptionalString(username).toLowerCase();
   if (!normalizedUsername) return null;
@@ -486,9 +522,13 @@ export async function getUserProfileForAuthUser(authUser) {
   return normalizeUser(profileByEmail);
 }
 
-export async function updateUserStatus(userId, status) {
+export async function updateUserStatus(userOrId, status) {
   const nextStatus = normalizeStatusValue(status);
-  const existingUser = await getUserById(userId);
+  const existingUser = await getUserByIdentifier(userOrId);
+
+  if (!existingUser?.id && !existingUser?.email) {
+    throw new Error("Unable to update user: missing user identifier.");
+  }
 
   if (existingUser && isProtectedDemoEmail(existingUser.email) && nextStatus !== "active") {
     const protectedError = new Error("This protected sample user cannot be deactivated.");
@@ -498,7 +538,7 @@ export async function updateUserStatus(userId, status) {
 
   if (!isSupabaseConfigured || !supabase) {
     return normalizeUser(
-      updateMockUsers(userId, (user) => ({
+      updateMockUsers(existingUser.id, (user) => ({
         ...user,
         status: toDisplayStatus(nextStatus),
         updated_at: nowIso(),
@@ -508,7 +548,11 @@ export async function updateUserStatus(userId, status) {
 
   const data = await runUserMutationWithOptionalColumnRetry(
     (payload) =>
-      supabase.from("users").update(payload).eq("id", userId).select("*").single(),
+      (existingUser.id && isValidUuid(existingUser.id)
+        ? supabase.from("users").update(payload).eq("id", existingUser.id)
+        : supabase.from("users").update(payload).ilike("email", existingUser.email))
+        .select("*")
+        .single(),
     {
       status: nextStatus,
       updated_at: nowIso(),

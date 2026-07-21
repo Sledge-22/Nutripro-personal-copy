@@ -459,12 +459,13 @@ export function App() {
     }
   }
 
-  async function handleUpdateUserStatus(userId, status) {
-    await updateUserStatus(userId, status);
+  async function handleUpdateUserStatus(userOrId, status) {
+    const targetUserId = typeof userOrId === "object" ? userOrId?.id : userOrId;
+    await updateUserStatus(userOrId, status);
     const nextUsers = await getUsers();
     setUsers(nextUsers);
-    if (String(currentUser?.id) === String(userId)) {
-      setCurrentUser(nextUsers.find((user) => String(user.id) === String(userId)) ?? currentUser);
+    if (String(currentUser?.id) === String(targetUserId)) {
+      setCurrentUser(nextUsers.find((user) => String(user.id) === String(targetUserId)) ?? currentUser);
     }
   }
 
