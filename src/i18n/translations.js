@@ -568,7 +568,7 @@ export const translations = {
       hiddenFromWorkspace: "Este curso está oculto actualmente del área del estudiante.",
       onlyEnrolledStudentsCanViewCourse: "Solo los estudiantes asignados pueden ver este curso.",
       studentAccountMissing: "Falta la cuenta del estudiante.",
-      demoStudentMissing: "No se pudo resolver el estudiante demo Maya Laurent.",
+      demoStudentMissing: "No se pudo resolver la cuenta activa del estudiante.",
       courseDetailFailed: "No se pudo cargar el detalle del curso.",
       selectedCourseCouldNotLoad: "No se pudo cargar el curso seleccionado en este momento.",
       selectedCourseRecordMissing: "No se pudo resolver el registro del curso seleccionado.",
@@ -1315,7 +1315,7 @@ export const translations = {
       hiddenFromWorkspace: "This course is currently hidden from the student workspace.",
       onlyEnrolledStudentsCanViewCourse: "Only assigned students can view this course.",
       studentAccountMissing: "Student account missing.",
-      demoStudentMissing: "The Maya Laurent demo student could not be resolved.",
+      demoStudentMissing: "The active student account could not be resolved.",
       courseDetailFailed: "Course detail failed to load.",
       selectedCourseCouldNotLoad: "The selected course could not be loaded right now.",
       selectedCourseRecordMissing: "The selected course record could not be resolved.",
@@ -1494,6 +1494,7 @@ export const translations = {
     },
   },
 };
+
 
 
 

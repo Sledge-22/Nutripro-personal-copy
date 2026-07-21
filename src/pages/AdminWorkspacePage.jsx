@@ -688,10 +688,7 @@ export function AdminWorkspacePage({
   certificates,
   posts,
   currentUser,
-  siteAccessMode = "demo",
-  siteAccessModeStorage = "local",
   showAuthTestTools = true,
-  onUpdateSiteAccessMode,
   onUpdateUserStatus,
   onUpdateUser,
   onCreateUser,
@@ -844,6 +841,7 @@ function AdminSettingsPage() {
           <OverviewCard icon="certificate" title={(language === "es" ? "Certificados" : "Certificates") + " · " + comingSoon} text={comingSoonText} />
           <OverviewCard icon="users" title={(language === "es" ? "Moderación de comunidad" : "Community Moderation") + " · " + comingSoon} text={comingSoonText} />
           <OverviewCard icon="dashboard" title={(language === "es" ? "Privacidad y uso de datos" : "Privacy & Data Use") + " · " + comingSoon} text={comingSoonText} />
+          <OverviewCard icon="dashboard" title={(language === "es" ? "Seguridad" : "Security") + " · " + comingSoon} text={comingSoonText} />
         </div>
       </section>
     </>
@@ -4402,6 +4400,8 @@ function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCer
     </div>
   );
 }
+
+
 
 
 

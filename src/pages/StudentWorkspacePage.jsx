@@ -167,7 +167,6 @@ export function StudentWorkspacePage({
   certificates,
   posts,
   progressState,
-  authMode = "production",
   onCreatePost,
   onCreateComment,
   onUpdatePost,
@@ -302,7 +301,7 @@ export function StudentWorkspacePage({
   }
 
   if (pathname === ROUTES.student.profile) {
-    return <StudentProfilePage profile={studentProfile} authMode={authMode} onUpdateProfile={onUpdateProfile} />;
+    return <StudentProfilePage profile={studentProfile} onUpdateProfile={onUpdateProfile} />;
   }
 
   if (pathname === ROUTES.student.certificates) {
@@ -376,7 +375,7 @@ function StudentDashboardPage({ courses, certificates, progressFor }) {
   );
 }
 
-function StudentProfilePage({ profile, authMode = "production", onUpdateProfile }) {
+function StudentProfilePage({ profile, onUpdateProfile }) {
   const { t, language } = useLanguage();
   const countryOptions = getProfileCountryOptions();
   const translatedSelectCountry = t("common.selectCountry");
@@ -410,11 +409,6 @@ function StudentProfilePage({ profile, authMode = "production", onUpdateProfile 
     : language === "es"
       ? "La contraseña debe incluir al menos 10 caracteres, letras mayúsculas y minúsculas, un número y un símbolo."
       : "Password must include at least 10 characters, uppercase and lowercase letters, a number, and a symbol.";
-  const demoPasswordUnavailableText = t("auth.demoPasswordChangeUnavailable") !== "auth.demoPasswordChangeUnavailable"
-    ? t("auth.demoPasswordChangeUnavailable")
-    : language === "es"
-      ? "Los cambios de contraseña están disponibles solo para cuentas de producción."
-      : "Password changes are available for production accounts only.";
 
   useEffect(() => {
     const nextCountry = normalizeCountrySelection(
@@ -485,11 +479,6 @@ function StudentProfilePage({ profile, authMode = "production", onUpdateProfile 
     setPasswordMessage("");
     setPasswordError("");
 
-    if (authMode !== "production") {
-      setPasswordError(demoPasswordUnavailableText);
-      return;
-    }
-
     const { nextPassword, confirmPassword } = passwordForm;
     if (
       nextPassword.length < 10 ||
@@ -535,7 +524,7 @@ function StudentProfilePage({ profile, authMode = "production", onUpdateProfile 
           <div>
             <span className="eyebrow">{t("common.myProfile")}</span>
             <h2>{form.name || profile?.name || "Maya Laurent"}</h2>
-            <p>{form.email || profile?.email || "maya@nutripro.demo"}</p>
+            <p>{form.email || profile?.email || ""}</p>
             {selectedCountry.country ? (
               <span className="subtle-badge profile-country-badge country-badge">
                 <CountryFlag
@@ -601,39 +590,35 @@ function StudentProfilePage({ profile, authMode = "production", onUpdateProfile 
             <h3>{t("auth.changePassword")}</h3>
           </div>
 
-          {authMode === "production" ? (
-            <>
-              <label>
-                {t("auth.newPassword")}
-                <input
-                  type="password"
-                  value={passwordForm.nextPassword}
-                  onChange={(event) => setPasswordForm((current) => ({ ...current, nextPassword: event.target.value }))}
-                  autoComplete="new-password"
-                />
-              </label>
+          <>
+            <label>
+              {t("auth.newPassword")}
+              <input
+                type="password"
+                value={passwordForm.nextPassword}
+                onChange={(event) => setPasswordForm((current) => ({ ...current, nextPassword: event.target.value }))}
+                autoComplete="new-password"
+              />
+            </label>
 
-              <label>
-                {t("auth.confirmPassword")}
-                <input
-                  type="password"
-                  value={passwordForm.confirmPassword}
-                  onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
-                  autoComplete="new-password"
-                />
-              </label>
+            <label>
+              {t("auth.confirmPassword")}
+              <input
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+                autoComplete="new-password"
+              />
+            </label>
 
-              <small className="field-note">{passwordStrengthText}</small>
-            </>
-          ) : (
-            <small className="field-note">{demoPasswordUnavailableText}</small>
-          )}
+            <small className="field-note">{passwordStrengthText}</small>
+          </>
 
           {passwordMessage ? <small className="field-note">{passwordMessage}</small> : null}
           {passwordError ? <small className="field-note danger-text">{passwordError}</small> : null}
 
           <div className="form-actions">
-            <button className="secondary-btn" type="submit" disabled={passwordSaving || authMode !== "production"}>
+            <button className="secondary-btn" type="submit" disabled={passwordSaving}>
               {passwordSaving ? t("common.saving") : t("auth.changePassword")}
             </button>
           </div>

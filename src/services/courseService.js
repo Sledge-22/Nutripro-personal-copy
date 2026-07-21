@@ -389,7 +389,7 @@ export async function deleteCourse(courseId) {
 
 export async function getStudentCourses(studentId) {
   if (!studentId) {
-    console.error("Student course access failed because the Maya Laurent demo student user is missing.");
+    console.error("Student course access failed because the active student user is missing.");
     return [];
   }
 
@@ -451,7 +451,7 @@ export async function getStudentCourseAccess(studentId, courseId) {
   console.log("Maya student id:", studentId);
 
   if (!studentId) {
-    console.error("Student course access failed because the Maya Laurent demo student user is missing.");
+    console.error("Student course access failed because the active student user is missing.");
     return { reason: "missing-student", course: null, enrollment: null, courseStatus: null };
   }
 
@@ -604,3 +604,4 @@ export async function publishCourse(courseId) {
 export async function unpublishCourse(courseId) {
   return updateCourseStatus(courseId, "draft");
 }
+
