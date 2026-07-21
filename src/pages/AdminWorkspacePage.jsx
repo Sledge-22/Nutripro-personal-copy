@@ -4461,58 +4461,134 @@ function AssignmentReviewsPage() {
 
 function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCertificate }) {
   const { t, language } = useLanguage();
-  const students = users.filter((user) => user.role === "Student");
+  const students = users.filter((user) => {
+    const role = `${user.roleKey ?? user.role ?? ""}`.trim().toLowerCase();
+    return role === "student" || role === "estudiante";
+  });
   const [studentId, setStudentId] = useState(students[0]?.id || "");
-  const [courseId, setCourseId] = useState(courses[0]?.id || "");
+  const [courseId, setCourseId] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const selectedStudent = students.find((user) => String(user.id) === String(studentId)) ?? students[0] ?? null;
-  const selectedCourse = courses.find((entry) => String(entry.id) === String(courseId)) ?? courses[0] ?? null;
+  const availableCourses = selectedStudent
+    ? courses.filter((course) => {
+        const owners = Array.isArray(course.owners) ? course.owners : [];
+        return owners.some((ownerId) => String(ownerId) === String(selectedStudent.id));
+      })
+    : [];
+  const selectedCourse = availableCourses.find((entry) => String(entry.id) === String(courseId)) ?? availableCourses[0] ?? null;
 
-  const generate = (event) => {
+  useEffect(() => {
+    if (!selectedStudent) {
+      if (studentId) setStudentId("");
+      if (courseId) setCourseId("");
+      return;
+    }
+
+    if (!studentId || !students.some((user) => String(user.id) === String(studentId))) {
+      setStudentId(selectedStudent.id);
+      return;
+    }
+
+    if (!availableCourses.length) {
+      if (courseId) setCourseId("");
+      return;
+    }
+
+    const currentCourseStillAvailable = availableCourses.some((course) => String(course.id) === String(courseId));
+    if (!courseId || !currentCourseStillAvailable) {
+      setCourseId(availableCourses[0].id);
+    }
+  }, [availableCourses, courseId, selectedStudent, studentId, students]);
+
+  const canGenerate = Boolean(selectedStudent && selectedCourse && !generating);
+
+  const generate = async (event) => {
     event.preventDefault();
     const student = students.find((user) => String(user.id) === String(studentId));
-    const course = courses.find((entry) => String(entry.id) === String(courseId));
+    const course = availableCourses.find((entry) => String(entry.id) === String(courseId));
     if (!student || !course) return;
 
-    void onGenerateCertificate({
-      studentId: student.id,
-      student: student.name,
-      courseId: course.id,
-      course: course.title,
-    });
+    setGenerating(true);
+    setMessage("");
+    setError("");
+
+    try {
+      await onGenerateCertificate({
+        studentId: student.id,
+        student: student.name,
+        studentEmail: student.email ?? "",
+        courseId: course.id,
+        course: course.title,
+      });
+      setMessage(t("admin.certificateGenerated"));
+    } catch (generationError) {
+      console.error("Certificate generation failed:", generationError);
+      setError(generationError?.message || t("admin.unableToGenerateCertificate"));
+    } finally {
+      setGenerating(false);
+    }
   };
 
   return (
     <div className="cert-layout">
-      <form className="section-card generator-card" onSubmit={generate}>
+      <form className="section-card generator-card certificate-generator" onSubmit={(event) => void generate(event)}>
         <span className="eyebrow">{t("common.certificatesGenerator")}</span>
         <h2>{t("admin.generateCertificate")}</h2>
         <p>{t("admin.selectStudentCompletedCourse")}</p>
 
         <label>
           {t("common.student")}
-          <select value={studentId} onChange={(event) => setStudentId(event.target.value)}>
-            {students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.name}
-              </option>
-            ))}
-          </select>
+          <div className="certificate-select-wrap">
+            <select
+              className="certificate-select"
+              value={studentId}
+              onChange={(event) => setStudentId(event.target.value)}
+              disabled={!students.length || generating}
+            >
+              {!students.length ? (
+                <option value="">{t("admin.noStudentsAvailable")}</option>
+              ) : null}
+              {students.map((student) => (
+                <option key={student.id} value={student.id}>
+                  {student.name}
+                  {student.username ? ` (@${student.username})` : student.email ? ` (${student.email})` : ""}
+                </option>
+              ))}
+            </select>
+            <span className="certificate-select-chevron" aria-hidden="true"><Icon name="chevron" size={16} /></span>
+          </div>
         </label>
 
         <label>
           {t("common.course")}
-          <select value={courseId} onChange={(event) => setCourseId(event.target.value)}>
-            {courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.title}
-              </option>
-            ))}
-          </select>
+          <div className="certificate-select-wrap">
+            <select
+              className="certificate-select"
+              value={courseId}
+              onChange={(event) => setCourseId(event.target.value)}
+              disabled={!availableCourses.length || generating}
+            >
+              {!availableCourses.length ? (
+                <option value="">{t("admin.noCompletedCoursesAvailableForStudent")}</option>
+              ) : null}
+              {availableCourses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.title}
+                </option>
+              ))}
+            </select>
+            <span className="certificate-select-chevron" aria-hidden="true"><Icon name="chevron" size={16} /></span>
+          </div>
         </label>
 
-        <button className="primary-btn" type="submit">
+        {message ? <small className="field-note">{message}</small> : null}
+        {error ? <small className="field-note danger-text">{error}</small> : null}
+
+        <button className="primary-btn" type="submit" disabled={!canGenerate}>
           <Icon name="certificate" />
-          {t("admin.generateCertificate")}
+          {generating ? t("common.loading") : t("admin.generateCertificate")}
         </button>
       </form>
 

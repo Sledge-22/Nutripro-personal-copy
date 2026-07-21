@@ -562,6 +562,45 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
 .generator-card > p { color: #d5e8df; }
 .generator-card label { color: #eef8f2; }
 .generator-card select { color: var(--ink); background: #fff; }
+.certificate-generator label {
+  display: grid;
+  gap: 10px;
+}
+
+.certificate-select-wrap {
+  position: relative;
+}
+
+.certificate-select {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 52px;
+  border-radius: 999px;
+  color: var(--color-text) !important;
+  background: rgba(24, 20, 16, .94) !important;
+  border: 1px solid var(--color-border);
+  font-weight: 700;
+}
+
+.certificate-select:focus {
+  border-color: rgba(80, 210, 225, .7);
+  box-shadow: 0 0 0 4px rgba(80, 210, 225, .12);
+}
+
+.certificate-generator option {
+  color: var(--color-text);
+  background: #18130e;
+}
+
+.certificate-select-chevron {
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--color-text-soft);
+}
 .generator-card .primary-btn { width: 100%; margin-top: 10px; color: var(--green-950); background: #d7efdf; border-color: #d7efdf; }
 code { padding: 5px 7px; border-radius: 6px; color: var(--green-800); background: var(--green-50); font-family: var(--font-body); font-weight: 700; }
 .page-intro { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; }
@@ -1224,6 +1263,13 @@ td,
 .audit-action-badge {
   white-space: normal;
   line-height: 1.35;
+}
+
+.section-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 960px) {
