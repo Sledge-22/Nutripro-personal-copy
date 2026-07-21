@@ -35,7 +35,6 @@ function normalizeRole(role) {
 
 function normalizeAuthorInfo(row = {}, fallback = {}) {
   const name = row.name ?? row.author_name ?? row.author ?? fallback.name ?? fallback.author ?? "Student";
-  const email = row.email ?? fallback.email ?? "";
   const role = normalizeRole(row.role ?? row.author_role ?? fallback.role ?? fallback.authorRole ?? "student");
   const normalizedCountry = normalizeCountrySelection(
     row.author_country_code ??
@@ -64,7 +63,6 @@ function normalizeAuthorInfo(row = {}, fallback = {}) {
 
   return {
     author: name,
-    authorEmail: email,
     authorRole: role,
     country: normalizedCountry.country,
     authorCountryCode: normalizedCountry.countryCode,
@@ -363,9 +361,18 @@ export async function getCommunityPosts() {
 
   try {
     const [postsResult, commentsResult, votesResult] = await Promise.all([
-      supabase.from("community_posts").select("*").order("is_pinned", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false }),
-      supabase.from("community_comments").select("*").order("created_at", { ascending: true }).order("id", { ascending: true }),
-      supabase.from("community_votes").select("*"),
+      supabase
+        .from("community_posts")
+        .select("id,student_id,author_id,author_name,author_role,author_country_code,author_country_name,author_country_flag,title,body,category,course_id,tags,upvote_count,downvote_count,vote_score,comment_count,is_pinned,is_resolved,is_locked,is_removed,removed_at,removed_by,removal_reason,pdf_file_name,pdf_storage_path,pdf_public_url,pdf_file_size,pdf_uploaded_at,created_at")
+        .order("is_pinned", { ascending: false })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false }),
+      supabase
+        .from("community_comments")
+        .select("id,post_id,parent_comment_id,student_id,author_id,author_name,author_role,body,upvote_count,downvote_count,vote_score,is_helpful_answer,is_removed,removed_at,removed_by,removal_reason,created_at")
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true }),
+      supabase.from("community_votes").select("id,post_id,user_id,vote_type,created_at"),
     ]);
 
     if (postsResult.error) throw postsResult.error;

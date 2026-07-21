@@ -37,6 +37,34 @@ const OPTIONAL_USER_COLUMNS = [
 ];
 
 const PROTECTED_DEMO_EMAILS = new Set([DEMO_ADMIN_EMAIL, LEGACY_DEMO_STUDENT_EMAIL, DEMO_STUDENT_EMAIL]);
+const USER_PROFILE_SELECT = [
+  "id",
+  "auth_user_id",
+  "name",
+  "email",
+  "username",
+  "role",
+  "status",
+  "country",
+  "country_code",
+  "country_name",
+  "country_flag",
+  "bio",
+  "profile_picture_url",
+  "must_change_password",
+  "password_updated_at",
+  "last_login_at",
+  "created_at",
+  "updated_at",
+  "invitation_sent_at",
+  "invitation_status",
+  "invitation_email_id",
+  "privacy_policy_accepted",
+  "privacy_policy_accepted_at",
+  "privacy_policy_version",
+  "privacy_consent_reminder_dismissed",
+  "privacy_consent_reminder_dismissed_at",
+].join(", ");
 
 function normalizeOptionalString(value) {
   const normalizedValue = `${value ?? ""}`.trim();
@@ -445,7 +473,7 @@ async function getUserByIdentifier(userOrId) {
     return user ? normalizeUser(user) : null;
   }
 
-  const { data, error } = await supabase.from("users").select("*").ilike("email", candidateEmail).maybeSingle();
+  const { data, error } = await supabase.from("users").select(USER_PROFILE_SELECT).ilike("email", candidateEmail).maybeSingle();
   if (error) {
     console.error("Loading the selected user by email failed:", error);
     throw error;
@@ -465,7 +493,7 @@ export async function getUserByUsername(username) {
 
   const { data, error } = await supabase
     .from("users")
-    .select("*")
+    .select(USER_PROFILE_SELECT)
     .eq("username", normalizedUsername)
     .limit(1)
     .maybeSingle();
@@ -499,7 +527,7 @@ export async function getUserProfileForAuthUser(authUser) {
 
   const { data: profileById, error: byIdError } = await supabase
     .from("users")
-    .select("*")
+    .select(USER_PROFILE_SELECT)
     .eq("auth_user_id", authUser.id)
     .maybeSingle();
 
@@ -517,7 +545,7 @@ export async function getUserProfileForAuthUser(authUser) {
 
   const { data: profileByEmail, error: byEmailError } = await supabase
     .from("users")
-    .select("*")
+    .select(USER_PROFILE_SELECT)
     .eq("email", authEmail)
     .limit(1)
     .maybeSingle();
@@ -1170,7 +1198,7 @@ export async function ensureDemoStudent() {
     return normalizeUser(nextUser);
   }
 
-  const { data, error } = await supabase.from("users").select("*").eq("email", DEMO_STUDENT_EMAIL).limit(1);
+  const { data, error } = await supabase.from("users").select(USER_PROFILE_SELECT).eq("email", DEMO_STUDENT_EMAIL).limit(1);
   if (error) {
     console.error("Failed to load Maya Laurent from Supabase users:", error);
     throw error;

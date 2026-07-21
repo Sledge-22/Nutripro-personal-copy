@@ -836,7 +836,8 @@ function AdminSettingsPage() {
         normalizedKey.includes("refresh_token") ||
         normalizedKey.includes("service_role") ||
         normalizedKey.includes("secret") ||
-        normalizedKey.includes("api_key")
+        normalizedKey.includes("api_key") ||
+        normalizedKey.includes("authorization")
       ) {
         return safeDetails;
       }

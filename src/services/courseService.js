@@ -195,7 +195,7 @@ function normalizeCourse(row, owners = [], modules = []) {
 }
 
 async function fetchEnrollmentRows() {
-  const { data, error } = await supabase.from("enrollments").select("*");
+  const { data, error } = await supabase.from("enrollments").select("id, course_id, student_id, user_id, owner_id, status");
   if (error) throw error;
   return data ?? [];
 }

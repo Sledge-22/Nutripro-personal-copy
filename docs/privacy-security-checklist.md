@@ -1,65 +1,55 @@
-# Nutripro privacy and security checklist
+# Nutripro privacy & security checklist
 
-This checklist is a working technical review. It is not legal advice and does not replace formal GDPR review.
+Completed frontend checks
 
-## Product/privacy checks
-
-- `/privacy` exists and is available in Spanish and English.
-- Production users must accept the privacy notice before entering the dashboard.
-- Demo access is not blocked by the privacy consent step.
-- Privacy consent is intended to be stored on `public.users` using:
-  - `privacy_policy_accepted`
-  - `privacy_policy_accepted_at`
-  - `privacy_policy_version`
-- Current policy version: `2026-07-draft`
-
-## Profile data exposure checks completed in code
-
-- Community UI uses safe author snapshot fields such as:
-  - display name
-  - role label
-  - country badge
-  - profile image/avatar
-- Community UI does not intentionally render:
+- Community posts/comments only use safe author display fields:
+  - name
+  - role
+  - profile picture
+  - country code/name/flag
+- Community display does not render:
   - email
-  - `auth_user_id`
+  - auth_user_id
   - account status
-  - `last_login_at`
-  - password change timestamps
-  - consent timestamps
-- Student profile editing remains scoped to the current student flow in the app.
-- Demo users do not write non-UUID ids into UUID columns in the profile save flow.
+  - last_login_at
+  - password reset fields
+  - privacy consent fields
+- Student profile page is self-only through the current signed-in user flow.
+- Student course detail access uses the active student identity and enrollment checks.
+- Student progress, certificates, and assignment submission views are scoped to the logged-in student flow.
+- Admin routes remain separated from student routes in frontend routing and access checks.
+- Audit log sanitization removes sensitive keys recursively.
+- Audit CSV export sanitizes sensitive keys before download.
+- No service role key is exposed in frontend code.
+- No plaintext passwords are stored in `public.users`.
+- Demo Mode has been removed.
+- Production login is required.
 
-## Supabase / RLS checks still requiring manual verification
+Frontend query hygiene completed
 
-- `public.users` should not be openly readable with all columns by anonymous users.
-- Students should only read/update their own private profile row.
-- Admins should be the only role allowed to manage all users.
-- `site_settings` writes should remain admin-only under production auth.
-- Community data should use safe author snapshots or a limited public profile projection.
-- Assignment submission buckets should not be publicly readable.
-- Private assignment files should only be accessible to the intended student/admin flows.
-- Course/admin uploads should be reviewed bucket-by-bucket for public vs private access.
+- Tightened several broad Supabase selects in user-facing or privacy-sensitive paths:
+  - community posts/comments/votes
+  - certificates
+  - student/course-related enrollment reads
+  - auth/profile user lookups
 
-## Secrets and auth checks
+Manual Supabase / RLS review still required
 
-- Supabase service role key must never be exposed in frontend code.
-- Passwords must never be stored in `public.users`.
-- Password verification must remain inside Supabase Auth.
-- Invitation email secrets must remain server-side only.
+- Frontend route protection improves the user experience, but Supabase Row Level Security policies or secure Edge Functions are still needed for production-grade enforcement.
+- Confirm RLS prevents students from reading:
+  - other students' `public.users` rows
+  - other students' assignment submissions
+  - other students' progress
+  - other students' certificates
+  - admin audit logs
+- Confirm only admins can read/write:
+  - admin audit logs
+  - user management fields such as role/status
+  - course builder / assignment review / certificate management flows
+- Confirm community tables only expose intended rows and fields through RLS or safe views.
+- Confirm no unsafe public write policies exist.
 
-## Recommended SQL follow-up
-
-```sql
-alter table public.users
-add column if not exists privacy_policy_accepted boolean default false,
-add column if not exists privacy_policy_accepted_at timestamptz,
-add column if not exists privacy_policy_version text;
-```
-
-## Optional safer public profile view
-
-Use a limited view for public/community-facing profile reads instead of exposing full `public.users`:
+Optional SQL idea if a safe public profile view is useful later
 
 ```sql
 create or replace view public.public_user_profiles as
@@ -68,33 +58,20 @@ select
   name,
   username,
   role,
+  profile_picture_url,
   country_code,
   country_name,
-  country_flag,
-  profile_picture_url
+  country_flag
 from public.users
 where status = 'active';
 ```
 
-Do not include:
+Do not include in public-safe profile views
 
-- `email`
-- `auth_user_id`
-- `must_change_password`
-- `password_updated_at`
-- `last_login_at`
-- internal admin notes
-
-## Manual QA checklist
-
-- Unauthenticated visitor cannot view private user data from the UI.
-- Student cannot access admin user management.
-- Student cannot view another student's email or private profile details.
-- Student cannot access assignment submissions belonging to others.
-- Community post cards only show safe author fields.
-- Privacy consent checkbox is unchecked by default.
-- User cannot continue production setup without accepting the privacy notice.
-- Consent timestamp and version save correctly after acceptance.
-- Privacy page loads correctly in Spanish and English.
-- Demo Admin access still works.
-- Demo Student access still works.
+- email
+- auth_user_id
+- status for private account management purposes
+- last_login_at
+- password reset fields
+- privacy consent fields
+- invitation tokens or security tokens

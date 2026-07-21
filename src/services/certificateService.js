@@ -74,7 +74,10 @@ export async function getCertificates() {
   if (!isSupabaseConfigured) return getMockCertificates();
 
   try {
-    const { data, error } = await supabase.from("certificates").select("*").order("id", { ascending: false });
+    const { data, error } = await supabase
+      .from("certificates")
+      .select("id,student_id,student_name,course_id,course_title,certificate_number,issue_date,issued_at,status")
+      .order("id", { ascending: false });
     if (error) throw error;
     return (data ?? []).map(normalizeCertificate);
   } catch {
@@ -115,7 +118,7 @@ async function findExistingIssuedCertificate(studentId, courseId) {
 
   const { data, error } = await supabase
     .from("certificates")
-    .select("*")
+    .select("id,student_id,student_name,course_id,course_title,certificate_number,issue_date,issued_at,status")
     .eq("student_id", normalizedStudentId)
     .eq("course_id", normalizedCourseId)
     .eq("status", "issued")
@@ -132,8 +135,8 @@ async function findExistingIssuedCertificate(studentId, courseId) {
 
 async function getSupabaseStudentAndCourse(studentId, courseId) {
   const [{ data: studentRow, error: studentError }, { data: courseRow, error: courseError }] = await Promise.all([
-    supabase.from("users").select("*").eq("id", studentId).limit(1).maybeSingle(),
-    supabase.from("courses").select("*").eq("id", courseId).limit(1).maybeSingle(),
+    supabase.from("users").select("id, name").eq("id", studentId).limit(1).maybeSingle(),
+    supabase.from("courses").select("id, title").eq("id", courseId).limit(1).maybeSingle(),
   ]);
 
   if (studentError) throw studentError;
@@ -157,7 +160,10 @@ async function getSupabaseStudentAndCourse(studentId, courseId) {
 
 async function getSupabaseAssignmentsForModules(moduleIds = []) {
   if (!moduleIds.length) return [];
-  const { data, error } = await supabase.from("module_assignments").select("*").in("module_id", moduleIds);
+  const { data, error } = await supabase
+    .from("module_assignments")
+    .select("id,module_id,title,instructions,title_en,title_es,instructions_en,instructions_es,submission_type")
+    .in("module_id", moduleIds);
   if (error) {
     console.error("Loading module assignments for certificate eligibility failed:", error);
     throw error;
@@ -169,7 +175,7 @@ async function getSupabaseSubmissionsForStudent(studentId, assignmentIds = []) {
   if (!assignmentIds.length) return [];
   const { data, error } = await supabase
     .from("assignment_submissions")
-    .select("*")
+    .select("id,assignment_id,student_id,status,grade,reviewed_at,graded_at")
     .eq("student_id", studentId)
     .in("assignment_id", assignmentIds);
 

@@ -22,6 +22,8 @@ function sanitizeAuditDetails(details) {
       normalizedKey.includes("token") ||
       normalizedKey.includes("secret") ||
       normalizedKey.includes("service_key") ||
+      normalizedKey.includes("service_role") ||
+      normalizedKey.includes("authorization") ||
       normalizedKey.includes("apikey") ||
       normalizedKey.includes("api_key")
     ) {
