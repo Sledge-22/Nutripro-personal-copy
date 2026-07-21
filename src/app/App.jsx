@@ -460,6 +460,26 @@ export function App() {
   }
 
   async function handleUpdateUserStatus(userOrId, status) {
+    const targetUser =
+      typeof userOrId === "object"
+        ? userOrId
+        : users.find((user) => String(user.id) === String(userOrId)) ?? null;
+    const nextStatus = `${status ?? ""}`.trim().toLowerCase();
+    const currentUserEmail = `${currentUser?.email ?? ""}`.trim().toLowerCase();
+    const targetUserEmail = `${targetUser?.email ?? ""}`.trim().toLowerCase();
+
+    if (
+      (nextStatus === "inactive" || nextStatus === "suspended") &&
+      `${currentUser?.roleKey ?? ""}`.trim().toLowerCase() === "admin" &&
+      currentUserEmail &&
+      targetUserEmail &&
+      currentUserEmail === targetUserEmail
+    ) {
+      const selfStatusError = new Error("You cannot deactivate or suspend your own active admin account.");
+      selfStatusError.code = "SELF_ADMIN_STATUS_BLOCK";
+      throw selfStatusError;
+    }
+
     const updatedUser = await updateUserStatus(userOrId, status);
     const targetUserId = typeof userOrId === "object" ? userOrId?.id : userOrId;
     const targetEmail =

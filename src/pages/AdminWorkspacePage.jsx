@@ -1039,8 +1039,12 @@ function UsersAdminPanel({
       : t("common.protectedSampleUserCannotBeDeactivated");
   const protectedDemoFieldMessage =
     language === "es"
-      ? t("common.protectedSampleField")
-      : t("common.protectedSampleField");
+      ? "Este usuario de muestra protegido no se puede actualizar."
+      : "This protected sample user cannot be updated.";
+  const selfAdminStatusBlockedMessage =
+    language === "es"
+      ? "No puedes desactivar ni suspender tu propia cuenta activa de administrador."
+      : "You cannot deactivate or suspend your own active admin account.";
   const deleteConfirmationBody =
     language === "es"
       ? t("common.confirmDeactivateUserBody")
@@ -1386,6 +1390,8 @@ function UsersAdminPanel({
       setError(
         statusError?.code === "PROTECTED_DEMO_USER"
           ? protectedDemoFieldMessage
+          : statusError?.code === "SELF_ADMIN_STATUS_BLOCK"
+            ? selfAdminStatusBlockedMessage
           : `${statusUpdateFailedLabel}: ${
               statusError?.message || "No user record was updated. Check email matching or RLS."
             }`.trim(),

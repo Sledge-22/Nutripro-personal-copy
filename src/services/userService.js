@@ -536,7 +536,7 @@ export async function updateUserStatus(userOrId, status) {
       id: existingUser.id,
       nextStatus,
     });
-    const protectedError = new Error("This protected sample user cannot be deactivated.");
+    const protectedError = new Error("This protected sample user cannot be updated.");
     protectedError.code = "PROTECTED_DEMO_USER";
     throw protectedError;
   }
@@ -600,7 +600,7 @@ export async function updateUser(userId, updates = {}) {
   const nextStatus = "status" in payload ? normalizeStatusValue(payload.status) : null;
 
   if (existingUser && isProtectedDemoEmail(existingUser.email) && nextStatus && nextStatus !== "active") {
-    const protectedError = new Error("This protected sample user cannot be deactivated.");
+    const protectedError = new Error("This protected sample user cannot be updated.");
     protectedError.code = "PROTECTED_DEMO_USER";
     throw protectedError;
   }

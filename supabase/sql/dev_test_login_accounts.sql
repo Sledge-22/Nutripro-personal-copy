@@ -39,3 +39,13 @@ do update set
   status = excluded.status,
   must_change_password = excluded.must_change_password,
   password_updated_at = excluded.password_updated_at;
+
+-- Link the temporary development accounts to their real Supabase Auth users
+-- after those auth accounts have been created. This keeps admin checks,
+-- route protection, and user-management status updates working correctly.
+update public.users as profile
+set auth_user_id = auth_user.id
+from auth.users as auth_user
+where lower(profile.email) = lower(auth_user.email)
+  and lower(profile.email) in ('admin@nutripro.test', 'student@nutripro.test')
+  and (profile.auth_user_id is null or profile.auth_user_id <> auth_user.id);
