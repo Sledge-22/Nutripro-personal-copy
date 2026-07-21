@@ -150,6 +150,7 @@ export function App() {
   const [loginInfo, setLoginInfo] = useState("");
   const [authSession, setAuthSession] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [privacyReminderSeenThisSession, setPrivacyReminderSeenThisSession] = useState(false);
   const [users, setUsers] = useState(initialUsers);
   const [courses, setCourses] = useState(initialCourses);
   const [studentProfile, setStudentProfile] = useState(null);
@@ -204,6 +205,7 @@ export function App() {
 
     if (!authSession?.user) {
       setCurrentUser(null);
+      setPrivacyReminderSeenThisSession(false);
       setLoginInfo("");
       setWorkspaceLoading(false);
       if (pathname !== ROUTES.login && pathname !== ROUTES.privacy) {
@@ -213,7 +215,7 @@ export function App() {
     }
 
     void loadAuthenticatedWorkspace(authSession.user);
-  }, [productionAuthAvailable, authSession, pathname]);
+  }, [productionAuthAvailable, authSession, pathname, privacyReminderSeenThisSession]);
 
   async function loadAuthenticatedWorkspace(authUser) {
     setWorkspaceLoading(true);
@@ -258,7 +260,7 @@ export function App() {
         if (pathname !== ROUTES.auth.access) navigateTo(ROUTES.auth.access, true);
       } else if (profile?.mustChangePassword || profile?.must_change_password || needsPrivacyConsent(profile)) {
         if (pathname !== ROUTES.auth.changePassword) navigateTo(ROUTES.auth.changePassword, true);
-      } else if (shouldShowPrivacyReminder(profile)) {
+      } else if (shouldShowPrivacyReminder(profile) && !privacyReminderSeenThisSession) {
         if (pathname !== ROUTES.auth.privacyReminder) navigateTo(ROUTES.auth.privacyReminder, true);
       } else if (isProtectedWorkspaceRoute(pathname) && !pathMatchesRole(pathname, roleKey)) {
         navigateTo(ROUTES.accessDenied, true);
@@ -429,6 +431,9 @@ export function App() {
           };
 
       setCurrentUser(result.profile ?? currentUser);
+      if (requiresConsent) {
+        setPrivacyReminderSeenThisSession(true);
+      }
       navigateTo(dashboardPathForRole(result.profile?.roleKey ?? currentUser?.roleKey), true);
       return { ok: true };
     } catch (error) {
@@ -443,6 +448,7 @@ export function App() {
   async function handleDismissPrivacyReminder() {
     try {
       const updatedProfile = await dismissPrivacyReminder(currentUser?.id);
+      setPrivacyReminderSeenThisSession(true);
       setCurrentUser(updatedProfile ?? currentUser);
       if ((updatedProfile?.roleKey ?? currentUser?.roleKey) === "student") {
         setStudentProfile(updatedProfile ?? studentProfile);
@@ -730,6 +736,7 @@ export function App() {
     return (
       <ForcedPasswordPage
         onSubmit={async () => {
+          setPrivacyReminderSeenThisSession(true);
           navigateTo(dashboardPathForRole(currentUser?.roleKey), true);
           return { ok: true };
         }}
