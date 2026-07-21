@@ -173,6 +173,7 @@ export function App() {
   const [courses, setCourses] = useState(initialCourses);
   const [studentProfile, setStudentProfile] = useState(null);
   const [studentCourses, setStudentCourses] = useState([]);
+  const [studentCoursesError, setStudentCoursesError] = useState("");
   const [certificates, setCertificates] = useState(initialCertificates);
   const [studentCertificates, setStudentCertificates] = useState([]);
   const [posts, setPosts] = useState(initialCommunityPosts);
@@ -246,32 +247,44 @@ export function App() {
       const roleKey = profile?.roleKey ?? `${profile?.role ?? ""}`.toLowerCase();
       const nextStudentId = roleKey === "student" ? profile?.id ?? null : null;
 
-      const [
-        nextUsers,
-        nextCourses,
-        nextCertificates,
-        nextPosts,
-        nextStudentCourses,
-        nextStudentCertificates,
-        nextProgress,
-      ] = await Promise.all([
+      const [nextUsers, nextCourses, nextCertificates, nextPosts] = await Promise.all([
         getUsers(),
         getCourses(),
         getCertificates(),
         getCommunityPosts(),
-        nextStudentId ? getStudentCourses(nextStudentId) : Promise.resolve([]),
-        nextStudentId ? getStudentCertificates(nextStudentId) : Promise.resolve([]),
-        nextStudentId ? getStudentProgress(nextStudentId) : Promise.resolve(initialStudentProgress),
       ]);
+
+      const [nextStudentCoursesResult, nextStudentCertificatesResult, nextProgressResult] = nextStudentId
+        ? await Promise.allSettled([
+            getStudentCourses(nextStudentId),
+            getStudentCertificates(nextStudentId),
+            getStudentProgress(nextStudentId),
+          ])
+        : [
+            { status: "fulfilled", value: [] },
+            { status: "fulfilled", value: [] },
+            { status: "fulfilled", value: initialStudentProgress },
+          ];
 
       setUsers(nextUsers);
       setCourses(nextCourses);
       setCertificates(nextCertificates);
       setPosts(nextPosts);
       setStudentProfile(roleKey === "student" ? profile : null);
-      setStudentCourses(nextStudentCourses);
-      setStudentCertificates(nextStudentCertificates);
-      setProgressState(nextProgress);
+      setStudentCourses(nextStudentCoursesResult.status === "fulfilled" ? nextStudentCoursesResult.value : []);
+      setStudentCertificates(
+        nextStudentCertificatesResult.status === "fulfilled" ? nextStudentCertificatesResult.value : [],
+      );
+      setProgressState(nextProgressResult.status === "fulfilled" ? nextProgressResult.value : initialStudentProgress);
+      setStudentCoursesError(
+        nextStudentCoursesResult.status === "rejected"
+          ? `${language === "es" ? "No se pudieron cargar tus inscripciones de cursos" : "Unable to load your course enrollments"}: ${formatSupabaseError(nextStudentCoursesResult.reason, "Unknown error")}`
+          : "",
+      );
+
+      if (nextStudentCoursesResult.status === "rejected") {
+        console.error("Loading student enrollments during workspace hydration failed:", nextStudentCoursesResult.reason);
+      }
 
       const blockedReason = getAccessBlockReason(profile);
       if (blockedReason || !["admin", "student"].includes(roleKey)) {
@@ -319,8 +332,12 @@ export function App() {
 
     if (ownedCoursesResult.status === "fulfilled") {
       setStudentCourses(ownedCoursesResult.value);
+      setStudentCoursesError("");
     } else {
       console.error("Refreshing student courses failed:", ownedCoursesResult.reason);
+      setStudentCoursesError(
+        `${language === "es" ? "No se pudieron cargar tus inscripciones de cursos" : "Unable to load your course enrollments"}: ${formatSupabaseError(ownedCoursesResult.reason, "Unknown error")}`,
+      );
     }
   }
 
@@ -1021,8 +1038,8 @@ export function App() {
   }
 
   if (workspaceLoading && role === "Student" && pathname.startsWith("/student/courses/")) {
-    return <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />;
+    return <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />;
   }
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={currentUser} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} posts={posts} currentUser={currentUser} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={currentUser} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} posts={posts} currentUser={currentUser} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }

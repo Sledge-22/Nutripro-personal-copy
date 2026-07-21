@@ -195,7 +195,7 @@ function normalizeCourse(row, owners = [], modules = []) {
 }
 
 async function fetchEnrollmentRows() {
-  const { data, error } = await supabase.from("enrollments").select("id, course_id, student_id, user_id, owner_id, status");
+  const { data, error } = await supabase.from("enrollments").select("id, course_id, student_id, status");
   if (error) throw error;
   return data ?? [];
 }
@@ -207,7 +207,7 @@ function ownersForCourse(courseId, enrollments) {
       const entryStatus = `${entry.status ?? "active"}`.trim().toLowerCase();
       return String(entryCourseId) === String(courseId) && entryStatus !== "inactive";
     })
-    .map((entry) => entry.student_id ?? entry.user_id ?? entry.owner_id)
+    .map((entry) => entry.student_id ?? entry.studentId)
     .filter(Boolean);
 }
 

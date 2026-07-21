@@ -167,6 +167,7 @@ export function StudentWorkspacePage({
   certificates,
   posts,
   progressState,
+  studentCoursesError = "",
   onCreatePost,
   onCreateComment,
   onUpdatePost,
@@ -333,13 +334,13 @@ export function StudentWorkspacePage({
   }
 
   if (pathname === ROUTES.student.courses) {
-    return <OwnedCoursesPage courses={ownedCourses} progressFor={progressFor} />;
+    return <OwnedCoursesPage courses={ownedCourses} progressFor={progressFor} studentCoursesError={studentCoursesError} />;
   }
 
-  return <StudentDashboardPage courses={ownedCourses} certificates={studentCertificates} progressFor={progressFor} />;
+  return <StudentDashboardPage courses={ownedCourses} certificates={studentCertificates} progressFor={progressFor} studentCoursesError={studentCoursesError} />;
 }
 
-function StudentDashboardPage({ courses, certificates, progressFor }) {
+function StudentDashboardPage({ courses, certificates, progressFor, studentCoursesError = "" }) {
   const { t } = useLanguage();
   const average = courses.length
     ? Math.round(courses.reduce((sum, course) => sum + progressFor(course), 0) / courses.length)
@@ -348,6 +349,7 @@ function StudentDashboardPage({ courses, certificates, progressFor }) {
   return (
     <>
       <Welcome title={t("dashboard.studentWelcomeTitle")} text={t("dashboard.studentWelcomeText")} />
+      {studentCoursesError ? <small className="field-note danger-text">{studentCoursesError}</small> : null}
       <div className="stats-grid student-stats">
         <Stat icon="courses" label={t("dashboard.ownedCourses")} value={courses.length} note={t("dashboard.inYourLearningArea")} />
         <Stat icon="dashboard" label={t("dashboard.averageProgress")} value={`${average}%`} note={t("dashboard.acrossOwnedCourses")} />
@@ -628,7 +630,7 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
   );
 }
 
-function OwnedCoursesPage({ courses, progressFor }) {
+function OwnedCoursesPage({ courses, progressFor, studentCoursesError = "" }) {
   const { t } = useLanguage();
 
   return (
@@ -640,6 +642,7 @@ function OwnedCoursesPage({ courses, progressFor }) {
           <p>{t("dashboard.assignedOnly")}</p>
         </div>
       </div>
+      {studentCoursesError ? <small className="field-note danger-text">{studentCoursesError}</small> : null}
       <div className="owned-grid">
         {courses.map((course, index) => {
           const progress = progressFor(course);

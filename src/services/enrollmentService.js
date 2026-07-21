@@ -17,7 +17,7 @@ function normalizeEnrollmentStatus(status) {
 }
 
 function normalizeEnrollment(row = {}) {
-  const studentId = row.student_id ?? row.studentId ?? row.user_id ?? row.userId ?? null;
+  const studentId = row.student_id ?? row.studentId ?? null;
   const courseId = row.course_id ?? row.courseId ?? null;
   const status = normalizeEnrollmentStatus(row.status);
 
