@@ -828,16 +828,6 @@ function createUserDraft() {
   };
 }
 
-function ensureCourseHasFirstClass(classes = [], language = "es") {
-  if (Array.isArray(classes) && classes.length) {
-    return classes;
-  }
-
-  return [
-    createClassDraft(1, language === "es" ? "Clase 1" : "Class 1"),
-  ];
-}
-
 export function AdminWorkspacePage({
   pathname,
   users,
@@ -3723,9 +3713,6 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   const { t, language, translateSubmissionType } = useLanguage();
   const [form, setForm] = useState(createCourseDraft());
   const [editingId, setEditingId] = useState(null);
-  const [bulkModuleCount, setBulkModuleCount] = useState("1");
-  const [bulkGeneratorError, setBulkGeneratorError] = useState("");
-  const [generatorDialog, setGeneratorDialog] = useState(null);
   const [saveError, setSaveError] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
@@ -3734,10 +3721,6 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   const [isPublishing, setIsPublishing] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
   const [collapsedModuleIds, setCollapsedModuleIds] = useState([]);
-  const [bulkPdfFiles, setBulkPdfFiles] = useState([]);
-  const [bulkVideoFiles, setBulkVideoFiles] = useState([]);
-  const [bulkPdfLinksText, setBulkPdfLinksText] = useState("");
-  const [bulkVideoLinksText, setBulkVideoLinksText] = useState("");
   const [savedDrafts, setSavedDrafts] = useState([]);
   const [draftsLoading, setDraftsLoading] = useState(false);
   const [draftsMessage, setDraftsMessage] = useState("");
@@ -3914,16 +3897,11 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   const editCourse = (course) => {
     setEditingId(course.id);
     setForm(createCourseDraft(course));
-    setBulkPdfFiles([]);
-    setBulkVideoFiles([]);
-    setBulkPdfLinksText("");
-    setBulkVideoLinksText("");
     setActiveSavedDraftId("");
     setDraftMessage("");
     setDraftWarning("");
     setSaveMessage("");
     setSaveError("");
-    setBulkGeneratorError("");
     setStudentAssignmentOpen(true);
     setStudentSearch("");
     setCollapsedModuleIds(createCollapsedModuleIds(course.modules || [], (course.modules || []).length > 12));
@@ -3933,14 +3911,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   const reset = () => {
     setForm(createCourseDraft());
     setEditingId(null);
-    setBulkPdfFiles([]);
-    setBulkVideoFiles([]);
-    setBulkPdfLinksText("");
-    setBulkVideoLinksText("");
     setActiveSavedDraftId("");
-    setBulkModuleCount("1");
-    setBulkGeneratorError("");
-    setGeneratorDialog(null);
     setCollapsedModuleIds([]);
     setSaveError("");
     setPublishProgress("");
@@ -4115,13 +4086,8 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
     ) || Boolean((restoredForm.bulkPdfSelections || []).length || (restoredForm.bulkVideoSelections || []).length);
 
     setForm(restoredForm);
-    setBulkPdfFiles([]);
-    setBulkVideoFiles([]);
-    setBulkPdfLinksText("");
-    setBulkVideoLinksText("");
     setEditingId(null);
     setActiveSavedDraftId(draft.id);
-    setBulkModuleCount(String((restoredForm.modules || []).length || 1));
     setCollapsedModuleIds(createCollapsedModuleIds(restoredForm.modules || [], (restoredForm.modules || []).length > 12));
     setDraftMessage(t("admin.restoredDraft"));
     setDraftWarning(hasPendingReselection ? t("admin.reselectFilesAfterRestore") : "");
@@ -4146,198 +4112,6 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
       console.error("Deleting saved draft failed:", error);
       setDraftsError(t("admin.deletingDraftFailed"));
     }
-  };
-
-  const assignBulkPdfLinks = () => {
-    const links = bulkPdfLinksText
-      .split(/\r?\n/)
-      .map((value) => value.trim())
-      .filter(Boolean);
-
-    setForm((current) => ({
-      ...current,
-      modules: current.modules.map((module, index) => {
-        const link = links[index];
-        if (!link) return module;
-        return {
-          ...module,
-          pdfExternalUrl: link,
-          pdf_external_url: link,
-          pdfSource: "external",
-          pdf_source: "external",
-          pdfUrl: module.pdfStoragePath || module.pdf_storage_path ? module.pdf_url || module.pdfUrl || "" : link,
-          pdf_url: module.pdfStoragePath || module.pdf_storage_path ? module.pdf_url || module.pdfUrl || "" : link,
-          pdfLabel: module.pdf_url || module.pdfUrl ? module.pdfLabel : link,
-        };
-      }),
-    }));
-  };
-
-  const assignBulkVideoLinks = () => {
-    const links = bulkVideoLinksText
-      .split(/\r?\n/)
-      .map((value) => value.trim())
-      .filter(Boolean);
-
-    setForm((current) => ({
-      ...current,
-      modules: current.modules.map((module, index) => {
-        const link = links[index];
-        if (!link) return module;
-        return {
-          ...module,
-          videoExternalUrl: link,
-          video_external_url: link,
-          videoSource: "external",
-          video_source: "external",
-          videoUrl: module.videoStoragePath || module.video_storage_path ? module.video_url || module.videoUrl || "" : link,
-          video_url: module.videoStoragePath || module.video_storage_path ? module.video_url || module.videoUrl || "" : link,
-          video: {
-            ...module.video,
-            link,
-            url: module.videoStoragePath || module.video_storage_path ? module.video_url || module.videoUrl || "" : link,
-          },
-        };
-      }),
-    }));
-  };
-
-  const handleBulkPdfSelection = (files) => {
-    const nextFiles = Array.from(files || []);
-    setBulkPdfFiles(nextFiles);
-    setForm((current) => ({
-      ...current,
-      bulkPdfSelections: nextFiles.map((file, index) =>
-        createBulkSelectionEntry({
-          file,
-          position: index,
-          module: current.modules[index] || null,
-          moduleIndex: current.modules[index] ? index : null,
-          language,
-          kind: "pdf",
-        }),
-      ),
-    }));
-  };
-
-  const handleBulkVideoSelection = (files) => {
-    const nextFiles = Array.from(files || []);
-    setBulkVideoFiles(nextFiles);
-    setForm((current) => ({
-      ...current,
-      bulkVideoSelections: nextFiles.map((file, index) =>
-        createBulkSelectionEntry({
-          file,
-          position: index,
-          module: current.modules[index] || null,
-          moduleIndex: current.modules[index] ? index : null,
-          language,
-          kind: "video",
-          tooLarge: (file?.size ?? 0) > MAX_VIDEO_SIZE_BYTES,
-        }),
-      ),
-    }));
-  };
-
-  const assignBulkPdfFiles = () => {
-    setForm((current) => {
-      const nextModules = current.modules.map((module, index) => {
-        const file = bulkPdfFiles[index];
-        if (!file) return module;
-
-        return {
-          ...module,
-          pdfFile: file,
-          pdfPendingName: file.name,
-          pdfPendingSize: file.size ?? null,
-          pdfPendingType: file.type || "",
-          pdfLabel: file.name,
-          pdfName: file.name,
-          pdf_file_name: file.name,
-          pdfSource: "upload",
-          pdf_source: "upload",
-          pdfUrl: "",
-          pdf_url: "",
-          pdfStoragePath: "",
-          pdf_storage_path: "",
-          pdfUploading: false,
-          pdfError: "",
-        };
-      });
-
-      return {
-        ...current,
-        modules: nextModules,
-        bulkPdfSelections: bulkPdfFiles.map((file, index) =>
-          createBulkSelectionEntry({
-            file,
-            position: index,
-            module: nextModules[index] || null,
-            moduleIndex: nextModules[index] ? index : null,
-            language,
-            kind: "pdf",
-          }),
-        ),
-      };
-    });
-  };
-
-  const assignBulkVideoFiles = () => {
-    setForm((current) => {
-      const nextModules = current.modules.map((module, index) => {
-        const file = bulkVideoFiles[index];
-        if (!file) return module;
-        if ((file.size ?? 0) > MAX_VIDEO_SIZE_BYTES) {
-          return {
-            ...module,
-            video: {
-              ...module.video,
-              error: t("common.fileTooLarge"),
-            },
-          };
-        }
-
-        return {
-          ...module,
-          videoFile: file,
-          videoPendingName: file.name,
-          videoPendingSize: file.size ?? null,
-          videoPendingType: file.type || "",
-          videoSource: "upload",
-          video_source: "upload",
-          videoUrl: "",
-          video_url: "",
-          videoName: file.name,
-          video_file_name: file.name,
-          videoStoragePath: "",
-          video_storage_path: "",
-          video: {
-            ...module.video,
-            uploadLabel: file.name,
-            url: "",
-            link: "",
-            uploading: false,
-            error: "",
-          },
-        };
-      });
-
-      return {
-        ...current,
-        modules: nextModules,
-        bulkVideoSelections: bulkVideoFiles.map((file, index) =>
-          createBulkSelectionEntry({
-            file,
-            position: index,
-            module: nextModules[index] || null,
-            moduleIndex: nextModules[index] ? index : null,
-            language,
-            kind: "video",
-            tooLarge: (file?.size ?? 0) > MAX_VIDEO_SIZE_BYTES,
-          }),
-        ),
-      };
-    });
   };
 
   const previewCourse = buildCoursePayload(form, editingId, courses.find((course) => course.id === editingId));
