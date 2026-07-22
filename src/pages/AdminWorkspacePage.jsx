@@ -3854,52 +3854,33 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
       const remainingClasses = (current.classes || [])
         .filter((entry) => entry.id !== classId)
         .map((entry, index) => ({ ...entry, sortOrder: index + 1, sort_order: index + 1 }));
-      const nextClasses = remainingClasses.length ? remainingClasses : [createClassDraft()];
       return {
         ...current,
-        classes: nextClasses,
+        classes: remainingClasses,
         modules: current.modules.filter((module) => String(module.class_id || module.classId || "") !== String(classId)),
       };
     });
   };
 
   const addModule = (classId = null) => {
+    const targetClassId = classId || form.classes?.[0]?.id || "";
+    if (!targetClassId) {
+      setSaveError(t("admin.selectOrCreateClassBeforeModules"));
+      return;
+    }
+
     setForm((current) => ({
       ...current,
-      classes: ensureCourseHasFirstClass(current.classes, language),
       modules: [
         ...current.modules,
         {
           ...createModuleDraft(current.modules.length + 1),
-          classId: classId || ensureCourseHasFirstClass(current.classes, language)[0]?.id || "",
-          class_id: classId || ensureCourseHasFirstClass(current.classes, language)[0]?.id || "",
+          classId: targetClassId,
+          class_id: targetClassId,
         },
       ],
     }));
     setCollapsedModuleIds((current) => current.filter(Boolean));
-  };
-
-  const ensureFirstClassAndReturnId = () => {
-    const ensuredClasses = ensureCourseHasFirstClass(form.classes, language);
-    const firstClassId = ensuredClasses[0]?.id || "";
-
-    if (!form.classes?.length) {
-      setForm((current) => ({
-        ...current,
-        classes: ensuredClasses,
-      }));
-    }
-
-    return firstClassId;
-  };
-
-  const addModulesToClass = (modulesToAdd = []) => {
-    const targetClassId = ensureFirstClassAndReturnId();
-    return modulesToAdd.map((module) => ({
-      ...module,
-      classId: module.class_id || module.classId || targetClassId,
-      class_id: module.class_id || module.classId || targetClassId,
-    }));
   };
 
   const deleteModule = (moduleId) => {
@@ -4369,76 +4350,6 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   const getModulesForClass = (classId) =>
     (form.modules || []).filter((module) => String(module.class_id || module.classId || "") === String(classId));
 
-  const applyGeneratedModules = (count) => {
-    const ensuredClasses = ensureCourseHasFirstClass(form.classes, language);
-    const targetClassId = ensuredClasses[0]?.id || "";
-    const nextModules = createGeneratedModules(count, language).map((module) => ({
-      ...module,
-      classId: targetClassId,
-      class_id: targetClassId,
-    }));
-    const shouldCollapse = count > 12;
-
-    window.requestAnimationFrame(() => {
-      setBulkPdfFiles([]);
-      setBulkVideoFiles([]);
-      setForm((current) => ({
-        ...current,
-        classes: ensureCourseHasFirstClass(current.classes, language),
-        bulkPdfSelections: [],
-        bulkVideoSelections: [],
-        modules: nextModules,
-      }));
-      setBulkModuleCount(String(count));
-      setBulkGeneratorError("");
-      setCollapsedModuleIds(createCollapsedModuleIds(nextModules, shouldCollapse));
-    });
-  };
-
-  const continueBulkGeneration = (count) => {
-    setGeneratorDialog(null);
-    applyGeneratedModules(count);
-  };
-
-  const generateModules = () => {
-    const normalizedCount = clampModuleCount(bulkModuleCount);
-
-    if (!normalizedCount) {
-      setBulkGeneratorError(t("admin.bulkModuleCountValidation"));
-      return;
-    }
-
-    setBulkGeneratorError("");
-
-    if (normalizedCount > 30) {
-      setGeneratorDialog({ type: "large-course", count: normalizedCount });
-      return;
-    }
-
-    if (hasExistingModuleContent) {
-      setGeneratorDialog({ type: "replace-modules", count: normalizedCount });
-      return;
-    }
-
-    continueBulkGeneration(normalizedCount);
-  };
-
-  const handleGeneratorContinue = () => {
-    if (!generatorDialog) return;
-
-    if (generatorDialog.type === "large-course") {
-      if (hasExistingModuleContent) {
-        setGeneratorDialog({ type: "replace-modules", count: generatorDialog.count });
-        return;
-      }
-
-      continueBulkGeneration(generatorDialog.count);
-      return;
-    }
-
-    continueBulkGeneration(generatorDialog.count);
-  };
-
   const uploadPendingModuleFiles = async () => {
     const nextForm = {
       ...form,
@@ -4607,6 +4518,12 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
               moduleTitle: invalidModule.title || t("common.module"),
             }),
       );
+      return;
+    }
+
+    const moduleWithoutClass = form.modules.find((module) => !(module.class_id || module.classId));
+    if (moduleWithoutClass) {
+      setSaveError(t("admin.selectOrCreateClassBeforeModules"));
       return;
     }
 
@@ -4940,166 +4857,6 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
             </div>
           </div>
 
-          <div className="module-generator-card">
-            <div>
-              <span className="eyebrow">{t("admin.bulkModuleGenerator")}</span>
-              <h4>{t("admin.generateModulesTitle")}</h4>
-              <p>{t("admin.generateModulesHelp")}</p>
-            </div>
-            <div className="module-generator-form">
-              <label>
-                {t("admin.numberOfModules")}
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  inputMode="numeric"
-                  value={bulkModuleCount}
-                  onChange={(event) => {
-                    setBulkModuleCount(event.target.value);
-                    if (bulkGeneratorError) setBulkGeneratorError("");
-                  }}
-                />
-              </label>
-              <button type="button" className="primary-btn" disabled={isBusy} onClick={generateModules}>
-                {t("admin.generateModulesButton")}
-              </button>
-            </div>
-            {bulkGeneratorError ? <small className="field-note danger-text">{bulkGeneratorError}</small> : null}
-          </div>
-
-          <div className="bulk-upload-grid">
-            <section className="module-generator-card bulk-upload-card">
-              <div>
-                <span className="eyebrow">{t("admin.bulkPdfUpload")}</span>
-                <h4>{t("admin.bulkPdfUpload")}</h4>
-                <p>{t("admin.bulkPdfUploadDescription")}</p>
-                <small className="field-note">{t("admin.filesAssignedInOrder")}</small>
-                <small className="field-note">{t("admin.bulkPdfUploadExample")}</small>
-              </div>
-
-              <label>
-                {t("admin.bulkPdfUpload")}
-                <input type="file" multiple accept={PDF_ACCEPT} onChange={(event) => handleBulkPdfSelection(event.target.files)} />
-              </label>
-
-              {form.bulkPdfSelections?.length ? (
-                <div className="bulk-upload-list">
-                  {form.bulkPdfSelections.map((entry) => (
-                    <article key={entry.id} className="bulk-upload-item">
-                      <div>
-                        <strong>{entry.fileName}</strong>
-                        <span>{`${entry.originalOrder} â†’ ${entry.assignedModuleTitle || "â€”"}`}</span>
-                      </div>
-                      <div className="bulk-upload-meta">
-                        <span className={`subtle-badge ${entry.uploadStatus === "uploaded" ? "" : entry.tooLarge ? "warning-badge" : ""}`}>
-                          {entry.tooLarge
-                            ? t("common.fileTooLarge")
-                            : t("common.fileAssigned")}
-                        </span>
-                        {entry.tooLarge ? <small className="field-note danger-text">{t("common.replaceFileManually")}</small> : null}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-
-              {form.bulkPdfSelections?.length > form.modules.length ? (
-                <small className="field-note danger-text">{t("admin.morePdfsThanModules")}</small>
-              ) : null}
-              {form.bulkPdfSelections?.length > 0 && form.bulkPdfSelections?.length < form.modules.length ? (
-                <small className="field-note warning-badge">{t("admin.someModulesMissingPdf")}</small>
-              ) : null}
-
-              <div className="row-actions">
-                <button type="button" className="primary-btn" disabled={!form.bulkPdfSelections?.length || isBusy} onClick={assignBulkPdfFiles}>
-                  {t("admin.assignPdfsToModules")}
-                </button>
-              </div>
-
-              <label>
-                {t("admin.externalPdfLink")}
-                <textarea
-                  rows="4"
-                  value={bulkPdfLinksText}
-                  onChange={(event) => setBulkPdfLinksText(event.target.value)}
-                  placeholder={"https://drive.google.com/...\nhttps://example.com/file.pdf"}
-                />
-              </label>
-              <small className="field-note">{t("admin.pasteOneLinkPerLine")}</small>
-              <div className="row-actions">
-                <button type="button" className="secondary-btn" disabled={!bulkPdfLinksText.trim() || isBusy} onClick={assignBulkPdfLinks}>
-                  {t("common.useExternalLink")}
-                </button>
-              </div>
-            </section>
-
-            <section className="module-generator-card bulk-upload-card">
-              <div>
-                <span className="eyebrow">{t("admin.bulkVideoUpload")}</span>
-                <h4>{t("admin.bulkVideoUpload")}</h4>
-                <p>{t("admin.bulkVideoUploadDescription")}</p>
-                <small className="field-note">{t("admin.filesAssignedInOrder")}</small>
-                <small className="field-note">{t("admin.bulkVideoUploadExample")}</small>
-              </div>
-
-              <label>
-                {t("admin.bulkVideoUpload")}
-                <input type="file" multiple accept={VIDEO_ACCEPT} onChange={(event) => handleBulkVideoSelection(event.target.files)} />
-              </label>
-
-              {form.bulkVideoSelections?.length ? (
-                <div className="bulk-upload-list">
-                  {form.bulkVideoSelections.map((entry) => (
-                    <article key={entry.id} className="bulk-upload-item">
-                      <div>
-                        <strong>{entry.fileName}</strong>
-                        <span>{`${entry.originalOrder} â†’ ${entry.assignedModuleTitle || "â€”"}`}</span>
-                      </div>
-                      <div className="bulk-upload-meta">
-                        <span className={`subtle-badge ${entry.uploadStatus === "uploaded" ? "" : entry.tooLarge ? "warning-badge" : ""}`}>
-                          {entry.tooLarge
-                            ? t("common.fileTooLarge")
-                            : t("common.fileAssigned")}
-                        </span>
-                        {entry.tooLarge ? <small className="field-note danger-text">{t("common.replaceFileManually")}</small> : null}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-
-              {form.bulkVideoSelections?.length > form.modules.length ? (
-                <small className="field-note danger-text">{t("admin.moreVideosThanModules")}</small>
-              ) : null}
-              {form.bulkVideoSelections?.length > 0 && form.bulkVideoSelections?.length < form.modules.length ? (
-                <small className="field-note warning-badge">{t("admin.someModulesMissingVideo")}</small>
-              ) : null}
-
-              <div className="row-actions">
-                <button type="button" className="primary-btn" disabled={!form.bulkVideoSelections?.length || isBusy} onClick={assignBulkVideoFiles}>
-                  {t("admin.assignVideosToModules")}
-                </button>
-              </div>
-
-              <label>
-                {t("admin.externalVideoLink")}
-                <textarea
-                  rows="4"
-                  value={bulkVideoLinksText}
-                  onChange={(event) => setBulkVideoLinksText(event.target.value)}
-                  placeholder={"https://drive.google.com/...\nhttps://youtube.com/watch?v=..."}
-                />
-              </label>
-              <small className="field-note">{t("admin.pasteOneLinkPerLine")}</small>
-              <div className="row-actions">
-                <button type="button" className="secondary-btn" disabled={!bulkVideoLinksText.trim() || isBusy} onClick={assignBulkVideoLinks}>
-                  {t("common.useExternalLink")}
-                </button>
-              </div>
-            </section>
-          </div>
-
           {!classesForRender.length ? (
             <section className="section-card">
               <div className="section-heading">
@@ -5112,7 +4869,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
               <div className="form-actions">
                 <button type="button" className="primary-btn" onClick={addClass}>
                   <Icon name="plus" />
-                  {t("admin.addClass")}
+                  {t("admin.addFirstClass")}
                 </button>
               </div>
             </section>
@@ -5304,8 +5061,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
                     <Status status={course.status || "published"} />
                   </div>
                   <p>{course.description}</p>
-                  <span>{(course.classes ?? []).length} {t("common.classes").toLowerCase()}</span>
-                  <span>{(course.modules ?? []).length} {t("common.modules").toLowerCase()}</span>
+                  <span>{t("admin.courseStructureCount", { classes: (course.classes ?? []).length, modules: (course.modules ?? []).length })}</span>
                   <span>{(course.modules ?? []).filter((module) => module.pdf_url || module.pdfUrl || module.pdfLabel !== "No PDF selected").length} PDFs</span>
                   <span>{(course.modules ?? []).filter((module) => module.video_url || module.videoUrl || module.video?.url || module.video?.link).length} videos</span>
                   <span>{(course.modules ?? []).filter((module) => module.assignment?.title?.trim()).length} {t("common.assignments") || "assignments"}</span>
@@ -5406,34 +5162,6 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
         </div>
       ) : null}
 
-      {generatorDialog ? (
-        <div className="modal-backdrop" onMouseDown={() => setGeneratorDialog(null)}>
-          <div className="certificate-modal confirm-modal" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" type="button" onClick={() => setGeneratorDialog(null)}>Ã—</button>
-            <span className="eyebrow">
-              {generatorDialog.type === "large-course" ? t("admin.largeCourseWarningTitle") : t("admin.replaceModulesTitle")}
-            </span>
-            <h2>
-              {generatorDialog.type === "large-course"
-                ? t("admin.largeCourseWarningTitle")
-                : t("admin.replaceModulesTitle")}
-            </h2>
-            <p>
-              {generatorDialog.type === "large-course"
-                ? t("admin.largeCourseWarningBody")
-                : t("admin.replaceModulesBody")}
-            </p>
-            <div className="form-actions compact confirm-modal-actions">
-              <button type="button" className="secondary-btn" onClick={() => setGeneratorDialog(null)}>
-                {t("common.cancel")}
-              </button>
-              <button type="button" className="primary-btn" onClick={handleGeneratorContinue}>
-                {generatorDialog.type === "large-course" ? t("common.continue") : t("admin.replaceModulesButton")}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
