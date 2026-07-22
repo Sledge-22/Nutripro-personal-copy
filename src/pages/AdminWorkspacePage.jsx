@@ -1744,6 +1744,7 @@ function UsersAdminPanel({
   const privacyPolicyVersionLabel = language === "es" ? "Versión de política" : "Policy version";
   const acceptedText = language === "es" ? "Aceptado" : "Accepted";
   const notAcceptedText = language === "es" ? "No aceptado" : "Not accepted";
+  const invitationSendingDisabled = true;
 
   const getErrorMessage = (issue) => {
     if (!issue) return "Unknown error";
@@ -2211,7 +2212,13 @@ function UsersAdminPanel({
             <button type="button" className="primary-btn" disabled={saving} onClick={() => void createUser({ mode: "production", sendInvitationAfterCreate: false })}>
               {saving ? t("common.saving") : t("auth.createProductionUser")}
             </button>
-            <button type="button" className="secondary-btn" disabled={saving} onClick={() => void createUser({ mode: "production", sendInvitationAfterCreate: true })}>
+            <button
+              type="button"
+              className="secondary-btn"
+              disabled={saving || invitationSendingDisabled}
+              onClick={() => void createUser({ mode: "production", sendInvitationAfterCreate: true })}
+              title={invitationSendingDisabled ? t("auth.emailInvitationsDisabledUntilDomainVerified") : ""}
+            >
               {t("auth.createUserAndSendInvitation")}
             </button>
           </div>
@@ -2221,6 +2228,8 @@ function UsersAdminPanel({
         {error ? <small className="field-note danger-text">{error}</small> : null}
         <small className="field-note">{t("admin.authDeletionHelperNote")}</small>
         <small className="field-note">{t("auth.temporaryPasswordSecurityNote")}</small>
+        <small className="field-note">{t("auth.emailInvitationsDisabledUntilDomainVerified")}</small>
+        <small className="field-note">{t("auth.emailInvitationsDomainReadyNote")}</small>
 
         {temporaryPassword ? (
           <div className="credential-card">
@@ -2284,13 +2293,20 @@ function UsersAdminPanel({
               <button
                 type="button"
                 className="primary-btn"
-                disabled={!testInviteDraft.email || invitingUserId === "test-invitation"}
+                disabled={!testInviteDraft.email || invitingUserId === "test-invitation" || invitationSendingDisabled}
                 onClick={() => void sendTestInvitation()}
-                title={!testInviteDraft.email ? t("auth.emailRequiredToSendInvitation") : ""}
+                title={
+                  invitationSendingDisabled
+                    ? t("auth.emailInvitationsDisabledUntilDomainVerified")
+                    : !testInviteDraft.email
+                      ? t("auth.emailRequiredToSendInvitation")
+                      : ""
+                }
               >
                 {invitingUserId === "test-invitation" ? t("auth.sendingInvitation") : t("auth.sendTestInvitation")}
               </button>
             </div>
+            <small className="field-note">{t("auth.emailInvitationsDisabledUntilDomainVerified")}</small>
           </div>
         ) : null}
       </section>
@@ -2385,8 +2401,14 @@ function UsersAdminPanel({
                             type="button"
                             className="primary-btn"
                             onClick={() => void sendInvitation(user)}
-                            disabled={!user.email || invitingUserId === user.id}
-                            title={!user.email ? t("auth.emailRequiredToSendInvitation") : ""}
+                            disabled={!user.email || invitingUserId === user.id || invitationSendingDisabled}
+                            title={
+                              invitationSendingDisabled
+                                ? t("auth.emailInvitationsDisabledUntilDomainVerified")
+                                : !user.email
+                                  ? t("auth.emailRequiredToSendInvitation")
+                                  : ""
+                            }
                           >
                             {invitingUserId === user.id ? t("auth.sendingInvitation") : t("auth.sendInvitation")}
                           </button>
