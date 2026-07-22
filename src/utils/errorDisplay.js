@@ -21,6 +21,20 @@ export function extractErrorDetails(error) {
   }
 }
 
+export function sanitizeErrorDetails(error) {
+  const details = typeof error === "string" ? error : extractErrorDetails(error);
+  if (!details) return "";
+
+  return details
+    .replace(/(service[_ -]?role[_ -]?key\s*[:=]\s*)([^,\s]+)/gi, "$1[redacted]")
+    .replace(/(anon[_ -]?key\s*[:=]\s*)([^,\s]+)/gi, "$1[redacted]")
+    .replace(/(publishable[_ -]?key\s*[:=]\s*)([^,\s]+)/gi, "$1[redacted]")
+    .replace(/(api[_ -]?key\s*[:=]\s*)([^,\s]+)/gi, "$1[redacted]")
+    .replace(/(token\s*[:=]\s*)([^,\s]+)/gi, "$1[redacted]")
+    .replace(/(secret\s*[:=]\s*)([^,\s]+)/gi, "$1[redacted]")
+    .replace(/(password\s*[:=]\s*)([^,\s]+)/gi, "$1[redacted]");
+}
+
 export function buildUserFacingError(error, fallbackMessage, options = {}) {
   const rawDetails = extractErrorDetails(error);
   const normalized = rawDetails.toLowerCase();

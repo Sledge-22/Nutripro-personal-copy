@@ -9,6 +9,7 @@ export function LoginPage({
   onLogin,
   loading = false,
   error = "",
+  errorDetails = "",
   info = "",
 }) {
   const { t, language } = useLanguage();
@@ -87,6 +88,12 @@ export function LoginPage({
 
         {info ? <small className="field-note">{info}</small> : null}
         {error ? <small className="field-note danger-text">{error}</small> : null}
+        {errorDetails ? (
+          <details className="field-note login-error-details">
+            <summary>{language === "es" ? "Detalles técnicos" : "Technical details"}</summary>
+            <pre>{errorDetails}</pre>
+          </details>
+        ) : null}
         <button type="button" className="text-link-btn" onClick={() => window.alert(forgotPasswordHelp)}>
           {forgotPasswordLabel}
         </button>
