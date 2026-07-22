@@ -63,7 +63,7 @@ import {
   updateCommunityComment,
 } from "../services/communityService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
-import { buildUserFacingError, extractErrorDetails } from "../utils/errorDisplay.js";
+import { buildUserFacingError, extractErrorDetails, sanitizeErrorDetails } from "../utils/errorDisplay.js";
 
 function getPathname() {
   return window.location.pathname || ROUTES.home;
@@ -274,6 +274,7 @@ export function App() {
   const [authLoading, setAuthLoading] = useState(productionAuthAvailable);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [loginErrorDetails, setLoginErrorDetails] = useState("");
   const [loginInfo, setLoginInfo] = useState("");
   const [authSession, setAuthSession] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
@@ -528,6 +529,7 @@ export function App() {
 
   async function handleAuthLogin({ identifier, password }) {
     setLoginError("");
+    setLoginErrorDetails("");
     setLoginInfo("");
     setAuthLoading(true);
 
@@ -548,6 +550,17 @@ export function App() {
             ? t("auth.inactiveAccountMessage")
             : formatSupabaseError(error, t("auth.signInFailed"));
       setLoginError(translatedError);
+      const technicalDetails = sanitizeErrorDetails(error);
+      const normalizedDetails = technicalDetails.toLowerCase();
+      const isSetupIssue =
+        normalizedDetails.includes("does not exist") ||
+        normalizedDetails.includes("42703") ||
+        normalizedDetails.includes("schema cache") ||
+        normalizedDetails.includes("relation") ||
+        normalizedDetails.includes("column");
+      if (import.meta.env.DEV && isSetupIssue && technicalDetails) {
+        setLoginErrorDetails(technicalDetails);
+      }
     } finally {
       setAuthLoading(false);
     }
@@ -562,6 +575,7 @@ export function App() {
     setCurrentUser(null);
     setAuthSession(null);
     setLoginError("");
+    setLoginErrorDetails("");
     setLoginInfo("");
 
     navigateTo(ROUTES.login, true);
@@ -899,10 +913,21 @@ export function App() {
       return { ok: true };
     } catch (error) {
       console.error("Saving course failed:", error);
+      const errorDetails = extractErrorDetails(error);
+      const normalizedDetails = `${errorDetails}`.toLowerCase();
+      const saveCourseMessage =
+        normalizedDetails.includes("course_classes") &&
+        (normalizedDetails.includes("does not exist") || normalizedDetails.includes("relation"))
+          ? t("admin.courseClassesSetupRequired")
+          : normalizedDetails.includes("class_id") &&
+              normalizedDetails.includes("modules") &&
+              (normalizedDetails.includes("does not exist") || normalizedDetails.includes("column"))
+            ? t("admin.moduleClassLinkingRequired")
+            : buildUserFacingError(error, t("admin.savingCourseFailed"));
       return {
         ok: false,
-        error: buildUserFacingError(error, t("admin.savingCourseFailed")),
-        errorDetails: extractErrorDetails(error),
+        error: saveCourseMessage,
+        errorDetails,
       };
     }
   }
@@ -1115,11 +1140,11 @@ export function App() {
   }
 
   if (authLoading) {
-    return <LoginPage loading error={loginError} info={t("auth.checkingAccess")} onLogin={handleAuthLogin} />;
+    return <LoginPage loading error={loginError} errorDetails={loginErrorDetails} info={t("auth.checkingAccess")} onLogin={handleAuthLogin} />;
   }
 
   if (!authSession?.user || !currentUser) {
-    return <LoginPage onLogin={handleAuthLogin} loading={false} error={loginError} info={loginInfo} />;
+    return <LoginPage onLogin={handleAuthLogin} loading={false} error={loginError} errorDetails={loginErrorDetails} info={loginInfo} />;
   }
 
   const blockedReason = getAccessBlockReason(currentUser);

@@ -528,7 +528,6 @@ function getModuleHasVideo(module) {
 
 function createCourseDraft(course = null) {
   if (!course) {
-    const generalClass = createClassDraft();
     return {
       title: "",
       description: "",
@@ -543,8 +542,8 @@ function createCourseDraft(course = null) {
       imageError: "",
       bulkPdfSelections: [],
       bulkVideoSelections: [],
-      classes: [generalClass],
-      modules: [{ ...createModuleDraft(), classId: generalClass.id, class_id: generalClass.id }],
+      classes: [],
+      modules: [],
     };
   }
 
@@ -827,6 +826,16 @@ function createUserDraft() {
     profile_picture_url: "",
     temporaryPassword: "",
   };
+}
+
+function ensureCourseHasFirstClass(classes = [], language = "es") {
+  if (Array.isArray(classes) && classes.length) {
+    return classes;
+  }
+
+  return [
+    createClassDraft(1, language === "es" ? "Clase 1" : "Class 1"),
+  ];
 }
 
 export function AdminWorkspacePage({
@@ -3857,16 +3866,40 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   const addModule = (classId = null) => {
     setForm((current) => ({
       ...current,
+      classes: ensureCourseHasFirstClass(current.classes, language),
       modules: [
         ...current.modules,
         {
           ...createModuleDraft(current.modules.length + 1),
-          classId: classId || current.classes?.[0]?.id || "",
-          class_id: classId || current.classes?.[0]?.id || "",
+          classId: classId || ensureCourseHasFirstClass(current.classes, language)[0]?.id || "",
+          class_id: classId || ensureCourseHasFirstClass(current.classes, language)[0]?.id || "",
         },
       ],
     }));
     setCollapsedModuleIds((current) => current.filter(Boolean));
+  };
+
+  const ensureFirstClassAndReturnId = () => {
+    const ensuredClasses = ensureCourseHasFirstClass(form.classes, language);
+    const firstClassId = ensuredClasses[0]?.id || "";
+
+    if (!form.classes?.length) {
+      setForm((current) => ({
+        ...current,
+        classes: ensuredClasses,
+      }));
+    }
+
+    return firstClassId;
+  };
+
+  const addModulesToClass = (modulesToAdd = []) => {
+    const targetClassId = ensureFirstClassAndReturnId();
+    return modulesToAdd.map((module) => ({
+      ...module,
+      classId: module.class_id || module.classId || targetClassId,
+      class_id: module.class_id || module.classId || targetClassId,
+    }));
   };
 
   const deleteModule = (moduleId) => {
@@ -4337,7 +4370,8 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
     (form.modules || []).filter((module) => String(module.class_id || module.classId || "") === String(classId));
 
   const applyGeneratedModules = (count) => {
-    const targetClassId = form.classes?.[0]?.id || createClassDraft().id;
+    const ensuredClasses = ensureCourseHasFirstClass(form.classes, language);
+    const targetClassId = ensuredClasses[0]?.id || "";
     const nextModules = createGeneratedModules(count, language).map((module) => ({
       ...module,
       classId: targetClassId,
@@ -4350,6 +4384,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
       setBulkVideoFiles([]);
       setForm((current) => ({
         ...current,
+        classes: ensureCourseHasFirstClass(current.classes, language),
         bulkPdfSelections: [],
         bulkVideoSelections: [],
         modules: nextModules,
@@ -5065,6 +5100,24 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
             </section>
           </div>
 
+          {!classesForRender.length ? (
+            <section className="section-card">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">{t("common.classes")}</span>
+                  <h4>{t("admin.addYourFirstClass")}</h4>
+                  <p>{t("admin.noClassesYet")}</p>
+                </div>
+              </div>
+              <div className="form-actions">
+                <button type="button" className="primary-btn" onClick={addClass}>
+                  <Icon name="plus" />
+                  {t("admin.addClass")}
+                </button>
+              </div>
+            </section>
+          ) : null}
+
           {classesForRender.map((courseClass, classIndex) => {
             const classModules = getModulesForClass(courseClass.id);
             return (
@@ -5522,6 +5575,7 @@ function AssignmentReviewsPage({ currentUser }) {
               <tr>
                 <th>{t("common.student")}</th>
                 <th>{t("common.course")}</th>
+                <th>{t("common.class")}</th>
                 <th>{t("common.module")}</th>
                 <th>{t("common.assignment")}</th>
                 <th>{t("common.status")}</th>
@@ -5533,7 +5587,7 @@ function AssignmentReviewsPage({ currentUser }) {
             <tbody>
               {!submissionsLoading && !submissions.length ? (
                 <tr>
-                  <td colSpan="8">{t("common.noAssignmentSubmissionsYet")}</td>
+                  <td colSpan="9">{t("common.noAssignmentSubmissionsYet")}</td>
                 </tr>
               ) : (
                 submissions.map((submission) => (
@@ -5543,6 +5597,7 @@ function AssignmentReviewsPage({ currentUser }) {
                       <div>{submission.studentEmail || "â€”"}</div>
                     </td>
                     <td data-label={t("common.course")}>{submission.courseTitle || "â€”"}</td>
+                    <td data-label={t("common.class")}>{submission.classTitle || "â€”"}</td>
                     <td data-label={t("common.module")}>{submission.moduleTitle || "â€”"}</td>
                     <td data-label={t("common.assignment")}>{submission.assignmentTitle || "â€”"}</td>
                     <td data-label={t("common.status")}><Status status={submission.status || "submitted"} /></td>
@@ -5581,17 +5636,22 @@ function AssignmentReviewsPage({ currentUser }) {
               <div>
                 <small>{t("common.course")}</small>
                 <strong>{selectedSubmission.courseTitle || "â€”"}</strong>
-                <p>{selectedSubmission.moduleTitle || "â€”"}</p>
+                <p>{selectedSubmission.classTitle || "â€”"}</p>
+              </div>
+              <div>
+                <small>{t("common.module")}</small>
+                <strong>{selectedSubmission.moduleTitle || "â€”"}</strong>
+                <p>{selectedSubmission.status ? t(`status.${selectedSubmission.status}`) : "â€”"}</p>
               </div>
               <div>
                 <small>{t("common.assignment")}</small>
                 <strong>{selectedSubmission.assignmentTitle || "â€”"}</strong>
-                <p>{selectedSubmission.status ? t(`status.${selectedSubmission.status}`) : "â€”"}</p>
+                <p>{selectedSubmission.assignment?.submissionType ? translateSubmissionType(selectedSubmission.assignment?.submissionType || selectedSubmission.assignment?.submission_type) : "â€”"}</p>
               </div>
               <div>
                 <small>{t("common.submittedDate")}</small>
                 <strong>{formatDisplayDate(selectedSubmission.submittedAt || selectedSubmission.submitted_at, language)}</strong>
-                <p>{translateSubmissionType(selectedSubmission.assignment?.submissionType || selectedSubmission.assignment?.submission_type)}</p>
+                <p>{selectedSubmission.status ? t(`status.${selectedSubmission.status}`) : "â€”"}</p>
               </div>
             </div>
 

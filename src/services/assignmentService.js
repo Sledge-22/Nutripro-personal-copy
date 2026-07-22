@@ -81,6 +81,7 @@ function normalizeSubmission(row, context = {}) {
 
   const assignment = normalizeAssignment(context.assignment);
   const module = context.module ?? null;
+  const courseClass = context.courseClass ?? null;
   const course = context.course ?? null;
   const student = context.student ?? null;
   const grade = row.grade === null || row.grade === undefined || row.grade === "" ? null : Number(row.grade);
@@ -119,6 +120,8 @@ function normalizeSubmission(row, context = {}) {
     assignmentInstructions: assignment?.instructions ?? "",
     moduleId: assignment?.moduleId ?? module?.id ?? null,
     moduleTitle: module?.title ?? "",
+    classId: module?.class_id ?? module?.classId ?? courseClass?.id ?? null,
+    classTitle: courseClass?.title ?? "",
     courseId: module?.courseId ?? course?.id ?? null,
     courseTitle: course?.title ?? "",
     studentName: student?.name ?? "",
@@ -241,6 +244,14 @@ async function hydrateSubmissions(rows = []) {
     : [];
 
   const moduleMap = new Map(moduleRows.map((module) => [String(module.id), module]));
+  const classIds = Array.from(new Set(moduleRows.map((module) => module.class_id ?? module.classId).filter(Boolean)));
+  const classRows = classIds.length
+    ? await supabase.from("course_classes").select("id,title").in("id", classIds).then(({ data, error }) => {
+        if (error) throw error;
+        return data ?? [];
+      })
+    : [];
+  const classMap = new Map(classRows.map((courseClass) => [String(courseClass.id), courseClass]));
   const courseIds = Array.from(new Set(moduleRows.map((module) => module.course_id ?? module.courseId).filter(Boolean)));
 
   const courseRows = courseIds.length
@@ -256,10 +267,11 @@ async function hydrateSubmissions(rows = []) {
   return rows.map((row) => {
     const assignment = assignmentMap.get(String(row.assignment_id ?? row.assignmentId));
     const module = assignment ? moduleMap.get(String(assignment.module_id ?? assignment.moduleId)) : null;
+    const courseClass = module ? classMap.get(String(module.class_id ?? module.classId)) : null;
     const course = module ? courseMap.get(String(module.course_id ?? module.courseId)) : null;
     const student = userMap.get(String(row.student_id ?? row.studentId));
 
-    return normalizeSubmission(row, { assignment, module, course, student });
+    return normalizeSubmission(row, { assignment, module, courseClass, course, student });
   });
 }
 
@@ -272,6 +284,10 @@ function hydrateMockSubmission(submission) {
   return normalizeSubmission(submission, {
     assignment: assignmentEntry?.module?.assignment ?? null,
     module: assignmentEntry?.module ?? null,
+    courseClass:
+      assignmentEntry?.course?.classes?.find(
+        (entry) => String(entry.id) === String(assignmentEntry?.module?.class_id ?? assignmentEntry?.module?.classId),
+      ) ?? null,
     course: assignmentEntry?.course ?? null,
     student,
   });
@@ -574,17 +590,27 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
         String(submission.student_id ?? submission.studentId) === String(normalizedStudentId),
     );
 
-    if (existingSubmission) {
+    if (existingSubmission && normalizeSubmissionStatus(existingSubmission.status) === "approved") {
       throw new Error("This assignment has already been submitted. Resubmission is not allowed.");
     }
 
-    const nextSubmission = {
-      id: createMockId(submissions),
-      ...payload,
-      created_at: submittedAt,
-    };
+    const nextSubmission = existingSubmission
+      ? {
+          ...existingSubmission,
+          ...payload,
+          created_at: existingSubmission.created_at ?? submittedAt,
+        }
+      : {
+          id: createMockId(submissions),
+          ...payload,
+          created_at: submittedAt,
+        };
 
-    const nextSubmissions = [...submissions, nextSubmission];
+    const nextSubmissions = existingSubmission
+      ? submissions.map((submission) =>
+          String(submission.id) === String(existingSubmission.id) ? nextSubmission : submission,
+        )
+      : [...submissions, nextSubmission];
 
     setMockAssignmentSubmissions(nextSubmissions);
     const hydratedSubmission = hydrateMockSubmission(nextSubmission);
@@ -610,11 +636,22 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
     throw existingError;
   }
 
-  if ((existingRows ?? []).length) {
+  const existingSubmission = (existingRows ?? [])[0] ?? null;
+
+  if (existingSubmission && normalizeSubmissionStatus(existingSubmission.status) === "approved") {
     throw new Error("This assignment has already been submitted. Resubmission is not allowed.");
   }
 
-  const { data, error } = await supabase.from("assignment_submissions").insert([payload]).select("*").single();
+  const mutation = existingSubmission
+    ? supabase
+        .from("assignment_submissions")
+        .update(payload)
+        .eq("id", existingSubmission.id)
+        .select("*")
+        .single()
+    : supabase.from("assignment_submissions").insert([payload]).select("*").single();
+
+  const { data, error } = await mutation;
   if (error) {
     console.error("Failed to create assignment submission in Supabase:", error);
     throw error;
