@@ -36,6 +36,36 @@ const VIDEO_ACCEPT = ".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm";
 const NO_PDF_SELECTED = "No PDF selected";
 const NO_VIDEO_SELECTED = "No video selected";
 
+function getRandomPasswordCharacter(characters) {
+  const values = new Uint32Array(1);
+  window.crypto.getRandomValues(values);
+  return characters[values[0] % characters.length];
+}
+
+function generateTemporaryPassword(length = 16) {
+  const uppercase = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lowercase = "abcdefghijkmnopqrstuvwxyz";
+  const numbers = "23456789";
+  const symbols = "!@#$%^&*?";
+  const all = uppercase + lowercase + numbers + symbols;
+  const password = [
+    getRandomPasswordCharacter(uppercase),
+    getRandomPasswordCharacter(lowercase),
+    getRandomPasswordCharacter(numbers),
+    getRandomPasswordCharacter(symbols),
+    ...Array.from({ length: Math.max(14, Math.min(18, length)) - 4 }, () => getRandomPasswordCharacter(all)),
+  ];
+
+  for (let index = password.length - 1; index > 0; index -= 1) {
+    const values = new Uint32Array(1);
+    window.crypto.getRandomValues(values);
+    const swapIndex = values[0] % (index + 1);
+    [password[index], password[swapIndex]] = [password[swapIndex], password[index]];
+  }
+
+  return password.join("");
+}
+
 function formatFileSize(bytes) {
   const normalizedBytes = Number(bytes);
   if (!Number.isFinite(normalizedBytes) || normalizedBytes <= 0) return "";
@@ -685,6 +715,7 @@ function createUserDraft() {
     country: "",
     bio: "",
     profile_picture_url: "",
+    temporaryPassword: "",
   };
 }
 
@@ -1817,7 +1848,7 @@ function UsersAdminPanel({
     }
   };
 
-  const createUser = async (mode = "demo") => {
+  const createUser = async ({ mode = "demo", sendInvitationAfterCreate = false } = {}) => {
     setSaving(true);
     setMessage("");
     setError("");
@@ -1826,24 +1857,39 @@ function UsersAdminPanel({
     setIsSimulationMode(false);
 
     try {
+      const nextTemporaryPassword = createDraftState.temporaryPassword || generateTemporaryPassword();
       const result = await onCreateUser(
         {
           ...createDraftState,
+          temporaryPassword: nextTemporaryPassword,
           language,
         },
-        { productionOnboardingTest: mode === "production" },
+        {
+          productionOnboardingTest: mode === "production",
+          productionCreate: mode === "production",
+        },
       );
+
+      if (sendInvitationAfterCreate) {
+        await onSendUserInvitation(result?.user ?? createDraftState, {
+          language,
+          invitedBy: currentUser?.name || "",
+          temporaryPassword: nextTemporaryPassword,
+          inviteUrl: `${window.location.origin}/login`,
+        });
+      }
+
       setCreateDraftState(createUserDraft());
       setMessage(
         mode === "production"
-          ? result?.emailSent
-            ? t("auth.temporaryPasswordEmailSent")
-            : t("auth.emailSimulationMode")
+          ? sendInvitationAfterCreate
+            ? t("auth.userCreatedAndInvitationSent")
+            : t("auth.userCreatedSuccessfully")
           : t("auth.userCreatedSuccessfully"),
       );
-      setTemporaryPassword(result?.temporaryPassword || "");
-      setPasswordOwner(result?.user?.email || result?.user?.name || "");
-      setIsSimulationMode(Boolean(result?.simulationMode));
+      setTemporaryPassword(nextTemporaryPassword);
+      setPasswordOwner(result?.user?.email || result?.user?.name || createDraftState.email || "");
+      setIsSimulationMode(false);
     } catch (createError) {
       console.error("Creating the admin-managed user failed:", createError);
       const details = `${createError?.message ?? ""}`.toLowerCase();
@@ -1856,7 +1902,7 @@ function UsersAdminPanel({
           details.includes("not authenticated") ||
           details.includes("authorization") ||
           details.includes("supabase function"));
-      setError(isFunctionIssue ? t("auth.productionFunctionNotConfigured") : createError.message || t("auth.userCreateFailed"));
+      setError(isFunctionIssue ? t("auth.productionCreateFunctionNotDeployed") : createError.message || t("auth.unableToCreateProductionUser"));
     } finally {
       setSaving(false);
     }
@@ -1946,9 +1992,25 @@ function UsersAdminPanel({
   };
 
   const copyTemporaryPassword = async () => {
-    if (!temporaryPassword) return;
-    await navigator.clipboard.writeText(temporaryPassword);
-    setMessage(t("auth.passwordCopied"));
+    const valueToCopy = createDraftState.temporaryPassword || temporaryPassword;
+    if (!valueToCopy) return;
+    try {
+      await navigator.clipboard.writeText(valueToCopy);
+      setMessage(t("auth.passwordCopied"));
+    } catch (copyError) {
+      console.error("Copying the temporary password failed:", copyError);
+      setError(t("auth.copyPasswordFailed"));
+    }
+  };
+
+  const handleGenerateTemporaryPassword = () => {
+    const nextPassword = generateTemporaryPassword();
+    setCreateDraftState((current) => ({ ...current, temporaryPassword: nextPassword }));
+    setTemporaryPassword(nextPassword);
+    setPasswordOwner(createDraftState.email || createDraftState.name || "");
+    setIsSimulationMode(false);
+    setMessage(t("auth.temporaryPasswordGenerated"));
+    setError("");
   };
 
   const requestDeleteUser = (user) => {
@@ -2080,7 +2142,7 @@ function UsersAdminPanel({
           </label>
           <label>
             {t("auth.username")}
-            <input value={createDraftState.username} onChange={(event) => setCreateDraftState((current) => ({ ...current, username: event.target.value }))} />
+            <input value={createDraftState.username} onChange={(event) => setCreateDraftState((current) => ({ ...current, username: event.target.value }))} required />
           </label>
           <label>
             {t("auth.role")}
@@ -2118,22 +2180,34 @@ function UsersAdminPanel({
             {t("common.profilePicture")}
             <input value={createDraftState.profile_picture_url} onChange={(event) => setCreateDraftState((current) => ({ ...current, profile_picture_url: event.target.value }))} placeholder="https://..." />
           </label>
+          <label className="wide-field">
+            {t("auth.temporaryPassword")}
+            <input
+              value={createDraftState.temporaryPassword}
+              onChange={(event) => setCreateDraftState((current) => ({ ...current, temporaryPassword: event.target.value }))}
+            />
+          </label>
 
           <div className="form-actions">
-            <button type="button" className="primary-btn" disabled={saving} onClick={() => void createUser("demo")}>
-              {saving ? t("common.saving") : t("auth.saveUser")}
+            <button type="button" className="secondary-btn" disabled={saving} onClick={() => handleGenerateTemporaryPassword()}>
+              {t("auth.generateTemporaryPassword")}
             </button>
-            {showAuthTestTools ? (
-              <button type="button" className="secondary-btn" disabled={saving} onClick={() => void createUser("production")}>
-                {t("auth.createProductionUser")}
-              </button>
-            ) : null}
+            <button type="button" className="secondary-btn" disabled={!createDraftState.temporaryPassword} onClick={() => void copyTemporaryPassword()}>
+              {t("auth.copyPassword")}
+            </button>
+            <button type="button" className="primary-btn" disabled={saving} onClick={() => void createUser({ mode: "production", sendInvitationAfterCreate: false })}>
+              {saving ? t("common.saving") : t("auth.createProductionUser")}
+            </button>
+            <button type="button" className="secondary-btn" disabled={saving} onClick={() => void createUser({ mode: "production", sendInvitationAfterCreate: true })}>
+              {t("auth.createUserAndSendInvitation")}
+            </button>
           </div>
         </form>
 
         {message ? <small className="field-note">{message}</small> : null}
         {error ? <small className="field-note danger-text">{error}</small> : null}
         <small className="field-note">{t("admin.authDeletionHelperNote")}</small>
+        <small className="field-note">{t("auth.temporaryPasswordSecurityNote")}</small>
 
         {temporaryPassword ? (
           <div className="credential-card">

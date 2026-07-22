@@ -617,13 +617,25 @@ export function App() {
     });
     void recordAdminAuditLog({
       adminUser: currentUser,
-      action: "user_created",
+      action: options.productionCreate ? "production_user_created" : "user_created",
       targetType: "user",
       targetId: result?.user?.id ?? "",
       targetEmail: result?.user?.email ?? payload?.email ?? "",
       details: {
         role: normalizeRoleKey(result?.user?.roleKey ?? payload?.role),
         status: normalizeStatusKey(result?.user?.statusKey ?? payload?.status),
+        username: result?.user?.username ?? payload?.username ?? "",
+        must_change_password: true,
+      },
+    });
+    void recordAdminAuditLog({
+      adminUser: currentUser,
+      action: "user_required_password_change",
+      targetType: "user",
+      targetId: result?.user?.id ?? "",
+      targetEmail: result?.user?.email ?? payload?.email ?? "",
+      details: {
+        reason: options.productionCreate ? "production_user_created" : "user_created",
       },
     });
     const nextUsers = await getUsers();

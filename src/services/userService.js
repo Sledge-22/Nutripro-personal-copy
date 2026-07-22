@@ -9,7 +9,7 @@ const DEMO_STUDENT_ROLE = "student";
 const DEMO_STUDENT_STATUS = "active";
 const DEMO_ADMIN_EMAIL = "admin@nutripro.demo";
 const LEGACY_DEMO_STUDENT_EMAIL = "student@nutripro.demo";
-const DEFAULT_ADMIN_USER_FUNCTION = "admin-user-management";
+const DEFAULT_ADMIN_USER_FUNCTION = "admin-create-production-user";
 const DEFAULT_SEND_INVITATION_FUNCTION = "send-invitation-email";
 const ADMIN_USER_FUNCTION =
   import.meta.env.VITE_SUPABASE_ADMIN_FUNCTION_NAME?.trim() || DEFAULT_ADMIN_USER_FUNCTION;
@@ -375,7 +375,12 @@ async function invokeAdminUserFunction(body) {
 
   if (error) {
     console.error("Admin user function invocation failed:", error);
-    const nextError = new Error("Production auth function call failed.");
+    const nextError = new Error(
+      error.message ||
+      error.details ||
+      error.hint ||
+      "Production auth function call failed.",
+    );
     nextError.code = "PRODUCTION_AUTH_FUNCTION_ERROR";
     nextError.cause = error;
     throw nextError;
@@ -383,7 +388,13 @@ async function invokeAdminUserFunction(body) {
 
   if (data?.error) {
     console.error("Admin user function returned an application error:", data.error);
-    const nextError = new Error("Production auth function call failed.");
+    const nextError = new Error(
+      data.error?.message ||
+      data.error?.details ||
+      data.error?.hint ||
+      data.error ||
+      "Production auth function call failed.",
+    );
     nextError.code = "PRODUCTION_AUTH_FUNCTION_ERROR";
     nextError.cause = data.error;
     throw nextError;
@@ -1026,24 +1037,23 @@ export async function createAdminUser(payload = {}, options = {}) {
   };
 
   if (productionAuthEnabled) {
-    if (!normalizedPayload.name || !normalizedPayload.email) {
-      throw new Error("Name and email are required.");
+    if (!normalizedPayload.name || !normalizedPayload.email || !normalizedPayload.username) {
+      throw new Error("Name, email, and username are required.");
     }
 
     const response = await invokeAdminUserFunction({
       action: "create-user",
       user: {
         ...normalizedPayload,
-        username: null,
       },
       language: normalizedPayload.language,
     });
 
     return {
       user: normalizeUser(response.user ?? {}),
-      emailSent: Boolean(response.emailSent),
-      simulationMode: Boolean(response.simulationMode),
-      temporaryPassword: response.temporaryPassword ?? "",
+      emailSent: false,
+      simulationMode: false,
+      temporaryPassword: "",
     };
   }
 
