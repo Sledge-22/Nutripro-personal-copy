@@ -23,9 +23,31 @@ import {
   isGoogleDriveUrl,
   isVimeoUrl,
 } from "../utils/mediaLinks.js";
+import { buildAdminErrorState, buildUserFacingError } from "../utils/errorDisplay.js";
 
 function createId() {
   return Date.now() + Math.floor(Math.random() * 100000);
+}
+
+function AdminErrorMessage({ error, detailsLabel = "Details" }) {
+  if (!error) return null;
+
+  const normalizedError =
+    typeof error === "string"
+      ? { message: error, details: "" }
+      : { message: error.message || "", details: error.details || "" };
+
+  return (
+    <div className="admin-error-stack">
+      {normalizedError.message ? <small className="field-note danger-text">{normalizedError.message}</small> : null}
+      {normalizedError.details ? (
+        <details className="admin-error-details">
+          <summary>{detailsLabel}</summary>
+          <pre>{normalizedError.details}</pre>
+        </details>
+      ) : null}
+    </div>
+  );
 }
 
 const COURSE_DRAFT_STORAGE_KEY = "nutripro-course-builder-draft-v2";
@@ -788,7 +810,7 @@ export function AdminWorkspacePage({
   }
 
   if (pathname === "/admin/assignment-reviews") {
-    return <AssignmentReviewsPage />;
+    return <AssignmentReviewsPage currentUser={currentUser} />;
   }
 
   if (pathname === "/admin/certificates") {
@@ -904,21 +926,103 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
         paused: "Pausado",
         complete: "Completo",
         needsReview: "Requiere revisión",
-        checklist: [
-          ["Production login works", "El login de producción funciona", "complete"],
-          ["Student route protection works", "La protección de rutas de estudiante funciona", "complete"],
-          ["Admin route protection works", "La protección de rutas de administrador funciona", "complete"],
-          ["GDPR consent is active", "El consentimiento GDPR está activo", "complete"],
-          ["Privacy Policy page exists", "La página de Política de privacidad existe", "complete"],
-          ["Audit Logs are recording actions", "Los registros de auditoría están registrando acciones", "complete"],
-          ["GDPR Data Requests are available", "Las solicitudes de datos GDPR están disponibles", "complete"],
-          ["User status controls work", "Los controles de estado de usuario funcionan", "complete"],
-          ["Student enrollment queries use student_id", "Las consultas de inscripción de estudiantes usan student_id", "complete"],
-          ["Email domain is verified", "El dominio de correo está verificado", "paused"],
-          ["Invitation emails are enabled", "Los correos de invitación están habilitados", "paused"],
-          ["Supabase RLS policies reviewed", "Las políticas RLS de Supabase fueron revisadas", "review"],
-          ["Storage bucket policies reviewed", "Las políticas de buckets de almacenamiento fueron revisadas", "review"],
-          ["Mobile layout tested", "El diseño móvil fue probado", "review"],
+        checklistSections: [
+          {
+            key: "authentication",
+            title: "Autenticación",
+            items: [
+              ["production-login", "El login de producción funciona", "complete"],
+              ["student-route-protection", "La protección de rutas de estudiante funciona", "complete"],
+              ["admin-route-protection", "La protección de rutas de administrador funciona", "complete"],
+            ],
+          },
+          {
+            key: "user-management",
+            title: "Gestión de usuarios",
+            items: [
+              ["user-status-controls", "Los controles de estado de usuario funcionan", "complete"],
+              ["user-invites-manual", "La creación manual de usuarios está lista para pruebas", "review"],
+            ],
+          },
+          {
+            key: "gdpr-privacy",
+            title: "GDPR y privacidad",
+            items: [
+              ["gdpr-consent", "El consentimiento GDPR está activo", "complete"],
+              ["privacy-policy", "La página de Política de privacidad existe", "complete"],
+              ["gdpr-requests", "Las solicitudes de datos GDPR están disponibles", "complete"],
+            ],
+          },
+          {
+            key: "audit-logs",
+            title: "Registros de auditoría",
+            items: [
+              ["audit-recording", "Los registros de auditoría están registrando acciones", "complete"],
+              ["audit-export", "La exportación de registros de auditoría fue revisada", "review"],
+            ],
+          },
+          {
+            key: "rls-security",
+            title: "RLS y seguridad",
+            items: [
+              ["rls-reviewed", "Las políticas RLS de Supabase fueron revisadas", "review"],
+              ["private-data-review", "La exposición de datos privados fue revisada", "review"],
+            ],
+          },
+          {
+            key: "storage-buckets",
+            title: "Buckets de almacenamiento",
+            items: [
+              ["bucket-policies", "Las políticas de buckets de almacenamiento fueron revisadas", "review"],
+              ["bucket-uploads", "Las subidas de PDFs, videos y adjuntos fueron probadas", "review"],
+            ],
+          },
+          {
+            key: "course-workflow",
+            title: "Flujo de cursos",
+            items: [
+              ["course-create-publish", "La creación, edición y publicación de cursos funciona", "review"],
+              ["student-enrollments", "Las consultas de inscripción de estudiantes usan student_id", "complete"],
+            ],
+          },
+          {
+            key: "assignments",
+            title: "Tareas",
+            items: [
+              ["assignment-submission", "La entrega de tareas funciona de extremo a extremo", "review"],
+              ["assignment-grading", "La revisión y calificación de tareas fue validada", "review"],
+            ],
+          },
+          {
+            key: "certificates",
+            title: "Certificados",
+            items: [
+              ["certificate-generation", "La generación de certificados fue validada", "review"],
+              ["certificate-eligibility", "La elegibilidad de certificados fue revisada", "review"],
+            ],
+          },
+          {
+            key: "community-moderation",
+            title: "Moderación de la comunidad",
+            items: [
+              ["community-moderation", "La moderación de publicaciones y archivos fue revisada", "review"],
+            ],
+          },
+          {
+            key: "mobile-testing",
+            title: "Pruebas móviles",
+            items: [
+              ["mobile-layout", "El diseño móvil fue probado", "review"],
+            ],
+          },
+          {
+            key: "email-domain",
+            title: "Correo y dominio",
+            items: [
+              ["email-domain-verified", "El dominio de correo está verificado", "paused"],
+              ["invitation-emails-enabled", "Los correos de invitación están habilitados", "paused"],
+            ],
+          },
         ],
       }
     : {
@@ -952,21 +1056,103 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
         paused: "Paused",
         complete: "Complete",
         needsReview: "Needs review",
-        checklist: [
-          ["Production login works", "Production login works", "complete"],
-          ["Student route protection works", "Student route protection works", "complete"],
-          ["Admin route protection works", "Admin route protection works", "complete"],
-          ["GDPR consent is active", "GDPR consent is active", "complete"],
-          ["Privacy Policy page exists", "Privacy Policy page exists", "complete"],
-          ["Audit Logs are recording actions", "Audit Logs are recording actions", "complete"],
-          ["GDPR Data Requests are available", "GDPR Data Requests are available", "complete"],
-          ["User status controls work", "User status controls work", "complete"],
-          ["Student enrollment queries use student_id", "Student enrollment queries use student_id", "complete"],
-          ["Email domain is verified", "Email domain is verified", "paused"],
-          ["Invitation emails are enabled", "Invitation emails are enabled", "paused"],
-          ["Supabase RLS policies reviewed", "Supabase RLS policies reviewed", "review"],
-          ["Storage bucket policies reviewed", "Storage bucket policies reviewed", "review"],
-          ["Mobile layout tested", "Mobile layout tested", "review"],
+        checklistSections: [
+          {
+            key: "authentication",
+            title: "Authentication",
+            items: [
+              ["production-login", "Production login works", "complete"],
+              ["student-route-protection", "Student route protection works", "complete"],
+              ["admin-route-protection", "Admin route protection works", "complete"],
+            ],
+          },
+          {
+            key: "user-management",
+            title: "User Management",
+            items: [
+              ["user-status-controls", "User status controls work", "complete"],
+              ["user-invites-manual", "Manual production user creation is ready for testing", "review"],
+            ],
+          },
+          {
+            key: "gdpr-privacy",
+            title: "GDPR/privacy",
+            items: [
+              ["gdpr-consent", "GDPR consent is active", "complete"],
+              ["privacy-policy", "Privacy Policy page exists", "complete"],
+              ["gdpr-requests", "GDPR Data Requests are available", "complete"],
+            ],
+          },
+          {
+            key: "audit-logs",
+            title: "Audit logs",
+            items: [
+              ["audit-recording", "Audit Logs are recording actions", "complete"],
+              ["audit-export", "Audit log export has been reviewed", "review"],
+            ],
+          },
+          {
+            key: "rls-security",
+            title: "RLS/security",
+            items: [
+              ["rls-reviewed", "Supabase RLS policies reviewed", "review"],
+              ["private-data-review", "Private data exposure review completed", "review"],
+            ],
+          },
+          {
+            key: "storage-buckets",
+            title: "Storage buckets",
+            items: [
+              ["bucket-policies", "Storage bucket policies reviewed", "review"],
+              ["bucket-uploads", "PDF, video, and attachment uploads tested", "review"],
+            ],
+          },
+          {
+            key: "course-workflow",
+            title: "Course workflow",
+            items: [
+              ["course-create-publish", "Course creation, editing, and publishing work", "review"],
+              ["student-enrollments", "Student enrollment queries use student_id", "complete"],
+            ],
+          },
+          {
+            key: "assignments",
+            title: "Assignments",
+            items: [
+              ["assignment-submission", "Assignment submission works end to end", "review"],
+              ["assignment-grading", "Assignment review and grading have been validated", "review"],
+            ],
+          },
+          {
+            key: "certificates",
+            title: "Certificates",
+            items: [
+              ["certificate-generation", "Certificate generation has been validated", "review"],
+              ["certificate-eligibility", "Certificate eligibility has been reviewed", "review"],
+            ],
+          },
+          {
+            key: "community-moderation",
+            title: "Community moderation",
+            items: [
+              ["community-moderation", "Post and attachment moderation has been reviewed", "review"],
+            ],
+          },
+          {
+            key: "mobile-testing",
+            title: "Mobile testing",
+            items: [
+              ["mobile-layout", "Mobile layout tested", "review"],
+            ],
+          },
+          {
+            key: "email-domain",
+            title: "Email/domain setup",
+            items: [
+              ["email-domain-verified", "Email domain is verified", "paused"],
+              ["invitation-emails-enabled", "Invitation emails are enabled", "paused"],
+            ],
+          },
         ],
       };
   const statusLabels = {
@@ -1100,7 +1286,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
 
       const loadAuditLogs = async () => {
       setLoadingAuditLogs(true);
-      setAuditLogsError("");
+      setAuditLogsError(null);
 
       try {
         const logs = await getAdminAuditLogs({ limit: 50 });
@@ -1109,8 +1295,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
         console.error("Loading admin audit logs failed:", error);
         if (isMounted) {
           setAuditLogs([]);
-          const exactError = error?.message || error?.details || error?.hint || t("admin.auditLogsLoadFailed");
-          setAuditLogsError(`${t("admin.auditLogsLoadFailed")}: ${exactError}`);
+          setAuditLogsError(buildAdminErrorState(error, t("admin.auditLogsLoadFailed")));
         }
       } finally {
         if (isMounted) setLoadingAuditLogs(false);
@@ -1129,7 +1314,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
 
       const loadGdprRequests = async () => {
         setLoadingGdprRequests(true);
-        setGdprError("");
+        setGdprError(null);
 
         try {
           const nextRequests = await getGdprDataRequests({
@@ -1142,7 +1327,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
           console.error("Loading GDPR data requests failed:", error);
           if (isMounted) {
             setGdprRequests([]);
-            setGdprError(error?.message || t("admin.gdprLoadFailed"));
+            setGdprError(buildAdminErrorState(error, t("admin.gdprLoadFailed")));
           }
         } finally {
           if (isMounted) setLoadingGdprRequests(false);
@@ -1178,7 +1363,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
     const handleCreateGdprRequest = async (event) => {
       event.preventDefault();
       setSubmittingRequest(true);
-      setGdprError("");
+      setGdprError(null);
       setGdprMessage("");
 
       try {
@@ -1205,7 +1390,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
         await refreshGdprRequests();
       } catch (error) {
         console.error("Creating GDPR data request failed:", error);
-        setGdprError(error?.message || t("admin.gdprCreateFailed"));
+        setGdprError(buildAdminErrorState(error, t("admin.gdprCreateFailed")));
       } finally {
         setSubmittingRequest(false);
       }
@@ -1213,7 +1398,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
 
     const handleUpdateRequestStatus = async (request, nextStatus) => {
       setUpdatingRequestId(request.id);
-      setGdprError("");
+      setGdprError(null);
       setGdprMessage("");
 
       try {
@@ -1270,7 +1455,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
         );
       } catch (error) {
         console.error("Updating GDPR request status failed:", error);
-        setGdprError(error?.message || t("admin.gdprUpdateFailed"));
+        setGdprError(buildAdminErrorState(error, t("admin.gdprUpdateFailed")));
       } finally {
         setUpdatingRequestId("");
       }
@@ -1278,7 +1463,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
 
     const handleExportUserData = async (userEmail) => {
       setExportingEmail(userEmail);
-      setGdprError("");
+      setGdprError(null);
       setGdprMessage("");
 
       try {
@@ -1298,7 +1483,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
         setGdprMessage(t("admin.gdprExportReady"));
       } catch (error) {
         console.error("Exporting GDPR user data failed:", error);
-        setGdprError(error?.message || t("admin.gdprExportFailed"));
+        setGdprError(buildAdminErrorState(error, t("admin.gdprExportFailed")));
       } finally {
         setExportingEmail("");
       }
@@ -1307,12 +1492,12 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
     const handleDeactivateUserForRequest = async (request) => {
       const matchedUser = findUserByEmail(request.userEmail);
       if (!matchedUser) {
-        setGdprError(t("admin.gdprUserNotFound"));
+        setGdprError({ message: t("admin.gdprUserNotFound"), details: "" });
         return;
       }
 
       setUpdatingRequestId(request.id);
-      setGdprError("");
+      setGdprError(null);
       setGdprMessage("");
 
       try {
@@ -1348,7 +1533,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
         setGdprMessage(t("admin.gdprUserDeactivated"));
       } catch (error) {
         console.error("Completing the GDPR deactivation flow failed:", error);
-        setGdprError(error?.message || t("admin.gdprDeactivateFailed"));
+        setGdprError(buildAdminErrorState(error, t("admin.gdprDeactivateFailed")));
       } finally {
         setUpdatingRequestId("");
       }
@@ -1472,13 +1657,22 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
           </div>
         </div>
         <div className="gdpr-request-list">
-          {settingsCopy.checklist.map(([key, label, status]) => (
-            <article key={key} className="gdpr-request-item">
+          {settingsCopy.checklistSections.map((section) => (
+            <article key={section.key} className="gdpr-request-item">
               <div className="gdpr-request-head">
                 <div>
-                  <strong>{label}</strong>
+                  <strong>{section.title}</strong>
                 </div>
-                <span className="subtle-badge users-badge">{statusLabels[status]}</span>
+              </div>
+              <div className="user-assignment-checklist">
+                {section.items.map(([key, label, status]) => (
+                  <label key={key} className="user-assignment-option">
+                    <div>
+                      <strong>{label}</strong>
+                    </div>
+                    <span className="subtle-badge users-badge">{statusLabels[status]}</span>
+                  </label>
+                ))}
               </div>
             </article>
           ))}
@@ -1538,7 +1732,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
                 </div>
               ) : null}
               {gdprMessage ? <small className="field-note">{gdprMessage}</small> : null}
-              {gdprError ? <small className="field-note danger-text">{gdprError}</small> : null}
+              {gdprError ? <AdminErrorMessage error={gdprError} detailsLabel={t("common.details")} /> : null}
             </form>
 
             <div className="gdpr-requests-panel">
@@ -1668,14 +1862,14 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
         </div>
 
         {loadingAuditLogs ? <small className="field-note">{t("common.loading")}</small> : null}
-        {!loadingAuditLogs && auditLogsError ? <small className="field-note danger-text">{auditLogsError}</small> : null}
+        {!loadingAuditLogs && auditLogsError ? <AdminErrorMessage error={auditLogsError} detailsLabel={t("common.details")} /> : null}
         {!loadingAuditLogs && !auditLogsError && !auditLogs.length ? (
           <small className="field-note">{t("admin.noAuditLogsYet")}</small>
         ) : null}
 
         {!loadingAuditLogs && auditLogs.length ? (
           <div className="table-wrap">
-            <table>
+            <table className="mobile-card-table">
               <thead>
                 <tr>
                   <th>{t("admin.time")}</th>
@@ -1688,15 +1882,15 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
               <tbody>
                 {auditLogs.map((log) => (
                   <tr key={log.id}>
-                    <td>{log.createdAt ? new Date(log.createdAt).toLocaleString(language) : "—"}</td>
-                    <td className="audit-email-cell">{log.adminEmail || "—"}</td>
-                    <td><span className="status submitted audit-action-badge">{log.action}</span></td>
-                    <td className="audit-email-cell">
+                    <td data-label={t("admin.time")}>{log.createdAt ? new Date(log.createdAt).toLocaleString(language) : "—"}</td>
+                    <td className="audit-email-cell" data-label={t("admin.adminLabel")}>{log.adminEmail || "—"}</td>
+                    <td data-label={t("admin.action")}><span className="status submitted audit-action-badge">{log.action}</span></td>
+                    <td className="audit-email-cell" data-label={t("admin.target")}>
                       <strong>{log.targetType || "—"}</strong>
                       <br />
                       <span>{log.targetEmail || log.targetId || "—"}</span>
                     </td>
-                    <td className="audit-details-cell">{summarizeAuditDetails(log)}</td>
+                    <td className="audit-details-cell" data-label={t("admin.details")}>{summarizeAuditDetails(log)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1751,7 +1945,7 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
       setMessage(t("admin.userSaved"));
     } catch (saveError) {
       console.error("Saving the admin user edit failed:", saveError);
-      setError(saveError.message || t("admin.savingUserFailed"));
+      setError(buildAdminErrorState(saveError, t("admin.savingUserFailed")));
     }
   };
 
@@ -1782,11 +1976,11 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
       </div>
 
       {message ? <small className="field-note">{message}</small> : null}
-      {error ? <small className="field-note danger-text">{error}</small> : null}
+      {error ? <AdminErrorMessage error={error} detailsLabel={t("common.details")} /> : null}
         <small className="field-note">{t("admin.authDeletionHelperNote")}</small>
 
       <div className="table-wrap">
-        <table>
+        <table className="mobile-card-table">
           <thead>
             <tr>
               <th>{t("admin.name")}</th>
@@ -1803,9 +1997,9 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
               const isEditing = editingUserId === user.id;
               return (
                 <tr key={user.id}>
-                  <td>{isEditing ? <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /> : <strong>{user.name}</strong>}</td>
-                  <td>{user.email}</td>
-                  <td>
+                  <td data-label={t("admin.name")}>{isEditing ? <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /> : <strong>{user.name}</strong>}</td>
+                  <td data-label={t("admin.email")}>{user.email}</td>
+                  <td data-label={t("admin.role")}>
                     {isEditing ? (
                       <select value={draft.role} onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value }))}>
                         <option value="admin">{t("roles.Admin")}</option>
@@ -1815,7 +2009,7 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
                       <span className="subtle-badge">{user.role}</span>
                     )}
                   </td>
-                  <td>
+                  <td data-label={t("common.status")}>
                     {isEditing ? (
                       <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
                         <option value="active">{t("status.active")}</option>
@@ -1826,7 +2020,7 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
                       <Status status={user.status} />
                     )}
                   </td>
-                  <td>
+                  <td data-label={t("common.country")}>
                     {isEditing ? (
                       <select value={draft.country} onChange={(event) => setDraft((current) => ({ ...current, country: event.target.value }))}>
                         <option value="">{t("common.selectCountry")}</option>
@@ -1850,8 +2044,8 @@ function UsersAdminPage({ users, onUpdateUserStatus, onUpdateUser, onDeleteUser 
                       ) : "â€”"
                     )}
                   </td>
-                  <td>{user.created_at || user.createdAt ? formatDisplayDate(user.created_at || user.createdAt, language) : "â€”"}</td>
-                  <td>
+                  <td data-label={t("admin.createdAt")}>{user.created_at || user.createdAt ? formatDisplayDate(user.created_at || user.createdAt, language) : "â€”"}</td>
+                  <td data-label={t("admin.actions")}>
                     <div className="table-actions">
                       {isEditing ? (
                         <>
@@ -2049,7 +2243,7 @@ function UsersAdminPanel({
       setMessage(t("admin.userSaved"));
     } catch (saveError) {
       console.error("Saving the admin user edit failed:", saveError);
-      setError(saveError.message || t("admin.savingUserFailed"));
+      setError(buildAdminErrorState(saveError, t("admin.savingUserFailed")));
     } finally {
       setSaving(false);
     }
@@ -2089,11 +2283,7 @@ function UsersAdminPanel({
         } catch (inviteError) {
           console.error("Sending the production invitation after user creation failed:", inviteError);
           invitationFailed = true;
-          setError(
-            inviteError?.message
-              ? `${t("auth.unableToSendInvitation")} ${inviteError.message}`.trim()
-              : t("auth.unableToSendInvitation"),
-          );
+          setError(buildAdminErrorState(inviteError, t("auth.unableToSendInvitation")));
         }
       }
 
@@ -2122,7 +2312,15 @@ function UsersAdminPanel({
           details.includes("not authenticated") ||
           details.includes("authorization") ||
           details.includes("supabase function"));
-      setError(isFunctionIssue ? t("auth.productionCreateFunctionNotDeployed") : createError.message || t("auth.unableToCreateProductionUser"));
+      setError(
+        buildAdminErrorState(
+          createError,
+          isFunctionIssue ? t("auth.productionCreateFunctionNotDeployed") : t("auth.unableToCreateProductionUser"),
+          {
+            edgeFunctionMessage: t("auth.productionCreateFunctionNotDeployed"),
+          },
+        ),
+      );
     } finally {
       setSaving(false);
     }
@@ -2165,7 +2363,15 @@ function UsersAdminPanel({
           details.includes("not authenticated") ||
           details.includes("authorization") ||
           details.includes("supabase function"));
-      setError(isFunctionIssue ? t("auth.productionFunctionNotConfigured") : resetError.message || t("auth.passwordResetFailed"));
+      setError(
+        buildAdminErrorState(
+          resetError,
+          isFunctionIssue ? t("auth.productionFunctionNotConfigured") : t("auth.passwordResetFailed"),
+          {
+            edgeFunctionMessage: t("auth.productionFunctionNotConfigured"),
+          },
+        ),
+      );
     } finally {
       setResettingUserId(null);
     }
@@ -2173,7 +2379,7 @@ function UsersAdminPanel({
 
   const sendInvitation = async (user, options = {}) => {
     if (!user?.email) {
-      setError(t("auth.emailRequiredToSendInvitation"));
+      setError({ message: t("auth.emailRequiredToSendInvitation"), details: "" });
       return;
     }
 
@@ -2192,8 +2398,7 @@ function UsersAdminPanel({
       setMessage(t("auth.invitationSentSuccessfully"));
     } catch (inviteError) {
       console.error("Sending invitation failed:", inviteError);
-      const failureMessage = `${t("auth.unableToSendInvitation")} ${getErrorMessage(inviteError)}`.trim();
-      setError(failureMessage);
+      setError(buildAdminErrorState(inviteError, t("auth.unableToSendInvitation")));
     } finally {
       setInvitingUserId(null);
     }
@@ -2219,7 +2424,7 @@ function UsersAdminPanel({
       setMessage(t("auth.passwordCopied"));
     } catch (copyError) {
       console.error("Copying the temporary password failed:", copyError);
-      setError(t("auth.copyPasswordFailed"));
+      setError({ message: t("auth.copyPasswordFailed"), details: "" });
     }
   };
 
@@ -2254,8 +2459,8 @@ function UsersAdminPanel({
       console.error("Deleting the admin-managed user failed:", deleteError);
       setError(
         deleteError?.code === "PROTECTED_DEMO_USER"
-          ? protectedDemoDeleteMessage
-          : deleteError?.message || t("common.userDeleteFailed"),
+          ? { message: protectedDemoDeleteMessage, details: "" }
+          : buildAdminErrorState(deleteError, t("common.userDeleteFailed")),
       );
     } finally {
       setDeletingUserId(null);
@@ -2294,12 +2499,10 @@ function UsersAdminPanel({
       console.error("Updating the admin-managed user status failed:", statusError);
       setError(
         statusError?.code === "PROTECTED_DEMO_USER"
-          ? protectedDemoFieldMessage
+          ? { message: protectedDemoFieldMessage, details: "" }
           : statusError?.code === "SELF_ADMIN_STATUS_BLOCK"
-            ? selfAdminStatusBlockedMessage
-          : `${statusUpdateFailedLabel}: ${
-              statusError?.message || "No user record was updated. Check email matching or RLS."
-            }`.trim(),
+            ? { message: selfAdminStatusBlockedMessage, details: "" }
+            : buildAdminErrorState(statusError, statusUpdateFailedLabel),
       );
     } finally {
       setStatusUpdatingUserId(null);
@@ -2321,7 +2524,7 @@ function UsersAdminPanel({
 
       const result = await onSetStudentCourseAssignments(selectedStudentId, assignmentDraftCourseIds);
       if (!result?.ok) {
-        throw new Error(result?.error || t("admin.savingAssignmentsFailed"));
+        throw { message: result?.error || t("admin.savingAssignmentsFailed"), details: result?.errorDetails || "" };
       }
 
       if (addedAssignments.length && !removedAssignments.length) {
@@ -2333,7 +2536,7 @@ function UsersAdminPanel({
       }
     } catch (assignmentError) {
       console.error("Saving the course assignments failed:", assignmentError);
-      setError(assignmentError.message || t("admin.savingAssignmentsFailed"));
+      setError(buildAdminErrorState(assignmentError, t("admin.savingAssignmentsFailed")));
     } finally {
       setSavingAssignments(false);
     }
@@ -2431,7 +2634,7 @@ function UsersAdminPanel({
         </form>
 
         {message ? <small className="field-note">{message}</small> : null}
-        {error ? <small className="field-note danger-text">{error}</small> : null}
+        {error ? <AdminErrorMessage error={error} detailsLabel={t("common.details")} /> : null}
         <small className="field-note">{t("admin.authDeletionHelperNote")}</small>
         <small className="field-note">{t("auth.temporaryPasswordSecurityNote")}</small>
         <small className="field-note">{t("auth.emailInvitationsDisabledUntilDomainVerified")}</small>
@@ -4248,7 +4451,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
       });
 
       if (result?.ok === false) {
-        setSaveError(result.error || t("admin.savingCourseFailed"));
+        setSaveError({ message: result.error || t("admin.savingCourseFailed"), details: result.errorDetails || "" });
         return;
       }
 
@@ -4268,7 +4471,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
       reset();
     } catch (error) {
       console.error("Course save failed:", error);
-      setSaveError(error?.message || t("admin.savingCourseFailed"));
+      setSaveError(buildAdminErrorState(error, t("admin.savingCourseFailed")));
     } finally {
       setIsPublishing(false);
       setPublishProgress("");
@@ -4530,7 +4733,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
           t={t}
         />
 
-        {saveError && <small className="field-note danger-text">{saveError}</small>}
+        {saveError && <AdminErrorMessage error={saveError} detailsLabel={t("common.details")} />}
         {saveMessage && <small className="field-note">{saveMessage}</small>}
         {draftMessage && <small className="field-note">{draftMessage}</small>}
         {draftWarning && <small className="field-note danger-text">{draftWarning}</small>}
@@ -4983,7 +5186,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   );
 }
 
-function AssignmentReviewsPage() {
+function AssignmentReviewsPage({ currentUser }) {
   const { t, language, translateSubmissionType } = useLanguage();
   const [submissions, setSubmissions] = useState([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
@@ -5007,7 +5210,7 @@ function AssignmentReviewsPage() {
       setSelectedSubmissionId(rows.some((submission) => submission.id === keepSelectedId) ? keepSelectedId : rows[0]?.id ?? null);
     } catch (error) {
       console.error("Loading assignment submissions failed:", error);
-      setSubmissionsError(error.message || t("common.loadingSubmissions"));
+      setSubmissionsError(buildAdminErrorState(error, t("common.loadingSubmissions")));
     } finally {
       setSubmissionsLoading(false);
     }
@@ -5051,7 +5254,38 @@ function AssignmentReviewsPage() {
         reviewForm.adminFeedback,
         gradeValue,
       );
+      await recordAdminAuditLog({
+        adminUser: currentUser,
+        action: "assignment_reviewed",
+        targetType: "assignment_submission",
+        targetId: reviewedSubmission?.id ?? selectedSubmission.id,
+        targetEmail: reviewedSubmission?.studentEmail ?? selectedSubmission.studentEmail ?? "",
+        details: {
+          assignment_id: reviewedSubmission?.assignmentId ?? selectedSubmission.assignmentId ?? "",
+          assignment_title: reviewedSubmission?.assignmentTitle ?? selectedSubmission.assignmentTitle ?? "",
+          course_id: reviewedSubmission?.courseId ?? selectedSubmission.courseId ?? "",
+          course_title: reviewedSubmission?.courseTitle ?? selectedSubmission.courseTitle ?? "",
+          module_id: reviewedSubmission?.moduleId ?? selectedSubmission.moduleId ?? "",
+          module_title: reviewedSubmission?.moduleTitle ?? selectedSubmission.moduleTitle ?? "",
+          status: reviewForm.status,
+          grade: gradeValue,
+        },
+      });
       const certificateOutcome = reviewedSubmission?.certificateOutcome;
+      if (certificateOutcome?.generated && certificateOutcome?.certificate) {
+        await recordAdminAuditLog({
+          adminUser: currentUser,
+          action: "certificate_issued",
+          targetType: "certificate",
+          targetId: certificateOutcome.certificate.id ?? "",
+          targetEmail: reviewedSubmission?.studentEmail ?? selectedSubmission.studentEmail ?? "",
+          details: {
+            course_id: reviewedSubmission?.courseId ?? selectedSubmission.courseId ?? "",
+            course_title: reviewedSubmission?.courseTitle ?? selectedSubmission.courseTitle ?? "",
+            source: "assignment_review",
+          },
+        });
+      }
       setReviewMessage(
         certificateOutcome?.generated
           ? t("admin.assignmentGradedCertificateGenerated")
@@ -5060,7 +5294,7 @@ function AssignmentReviewsPage() {
       await loadSubmissions(selectedSubmission.id);
     } catch (error) {
       console.error("Saving assignment review failed:", error);
-      setReviewError(error.message || t("admin.savingReviewFailed"));
+      setReviewError(buildAdminErrorState(error, t("admin.savingReviewFailed")));
     } finally {
       setReviewSavingId(null);
     }
@@ -5079,12 +5313,12 @@ function AssignmentReviewsPage() {
         </div>
 
         {submissionsLoading && <small className="field-note">{t("common.loadingSubmissions")}</small>}
-        {submissionsError && <small className="field-note danger-text">{submissionsError}</small>}
+        {submissionsError && <AdminErrorMessage error={submissionsError} detailsLabel={t("common.details")} />}
         {reviewMessage && <small className="field-note">{reviewMessage}</small>}
-        {reviewError && <small className="field-note danger-text">{reviewError}</small>}
+        {reviewError && <AdminErrorMessage error={reviewError} detailsLabel={t("common.details")} />}
 
         <div className="table-wrap">
-          <table>
+          <table className="mobile-card-table">
             <thead>
               <tr>
                 <th>{t("common.student")}</th>
@@ -5105,17 +5339,17 @@ function AssignmentReviewsPage() {
               ) : (
                 submissions.map((submission) => (
                   <tr key={submission.id}>
-                    <td>
+                    <td data-label={t("common.student")}>
                       <strong>{submission.studentName || t("common.student")}</strong>
                       <div>{submission.studentEmail || "â€”"}</div>
                     </td>
-                    <td>{submission.courseTitle || "â€”"}</td>
-                    <td>{submission.moduleTitle || "â€”"}</td>
-                    <td>{submission.assignmentTitle || "â€”"}</td>
-                    <td><Status status={submission.status || "submitted"} /></td>
-                    <td>{submission.grade === null || submission.grade === undefined ? t("common.notGradedYet") : `${submission.grade}/100`}</td>
-                    <td>{formatDisplayDate(submission.submittedAt || submission.submitted_at, language)}</td>
-                    <td>
+                    <td data-label={t("common.course")}>{submission.courseTitle || "â€”"}</td>
+                    <td data-label={t("common.module")}>{submission.moduleTitle || "â€”"}</td>
+                    <td data-label={t("common.assignment")}>{submission.assignmentTitle || "â€”"}</td>
+                    <td data-label={t("common.status")}><Status status={submission.status || "submitted"} /></td>
+                    <td data-label={t("common.grade")}>{submission.grade === null || submission.grade === undefined ? t("common.notGradedYet") : `${submission.grade}/100`}</td>
+                    <td data-label={t("common.submittedDate")}>{formatDisplayDate(submission.submittedAt || submission.submitted_at, language)}</td>
+                    <td data-label={t("common.review")}>
                       <button onClick={() => { setSelectedSubmissionId(submission.id); setReviewMessage(""); setReviewError(""); }}>
                         {t("admin.reviewButton")}
                       </button>
@@ -5281,7 +5515,7 @@ function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCer
       setMessage(t("admin.certificateGenerated"));
     } catch (generationError) {
       console.error("Certificate generation failed:", generationError);
-      setError(generationError?.message || t("admin.unableToGenerateCertificate"));
+      setError(buildAdminErrorState(generationError, t("admin.unableToGenerateCertificate")));
     } finally {
       setGenerating(false);
     }
@@ -5340,7 +5574,7 @@ function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCer
         </label>
 
         {message ? <small className="field-note">{message}</small> : null}
-        {error ? <small className="field-note danger-text">{error}</small> : null}
+        {error ? <AdminErrorMessage error={error} detailsLabel={t("common.details")} /> : null}
 
         <button className="primary-btn" type="submit" disabled={!canGenerate}>
           <Icon name="certificate" />
@@ -5373,7 +5607,7 @@ function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCer
           <span className="count-badge">{t("admin.totalCount", { count: certificates.length })}</span>
         </div>
         <div className="table-wrap">
-          <table>
+          <table className="mobile-card-table">
             <thead>
               <tr>
                 <th>{t("common.student")}</th>
@@ -5386,11 +5620,11 @@ function CertificatesGeneratorPage({ users, courses, certificates, onGenerateCer
             <tbody>
               {certificates.map((certificate) => (
                 <tr key={certificate.id}>
-                  <td><strong>{certificate.student}</strong></td>
-                  <td>{certificate.course}</td>
-                  <td><code>{certificate.number}</code></td>
-                  <td>{certificate.issueDate}</td>
-                  <td><Status status={certificate.status} /></td>
+                  <td data-label={t("common.student")}><strong>{certificate.student}</strong></td>
+                  <td data-label={t("common.course")}>{certificate.course}</td>
+                  <td data-label={t("admin.certificateNumber")}><code>{certificate.number}</code></td>
+                  <td data-label={t("admin.issueDate")}>{certificate.issueDate}</td>
+                  <td data-label={t("common.status")}><Status status={certificate.status} /></td>
                 </tr>
               ))}
             </tbody>
