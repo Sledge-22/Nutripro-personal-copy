@@ -872,9 +872,175 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
     ? "Administra los controles generales del sitio y las preferencias administrativas."
     : "Manage site-wide controls and administrative preferences.";
   const comingSoon = language === "es" ? "Próximamente" : "Coming soon";
-  const comingSoonText = language === "es"
-    ? "Próximamente en esta sección."
-    : "Coming soon in this section.";
+  const settingsCopy = language === "es"
+    ? {
+        adminEyebrow: "ADMINISTRACIÓN",
+        siteEyebrow: "CONFIGURACIÓN DEL SITIO",
+        controlsTitle: "Centro de control",
+        controlsText: "Revisa qué ya está listo, qué sigue pausado y qué requiere configuración antes del lanzamiento.",
+        launchTitle: "Lista de preparación para lanzamiento",
+        accountTitle: "Account & Invitations",
+        accountDescription: "La creación de cuentas se puede probar manualmente. Las invitaciones por correo están pausadas hasta que se verifique un dominio de envío.",
+        privacyDescription: "Registra solicitudes de GDPR/privacidad y exporta datos de usuario de forma segura.",
+        auditDescription: "Revisa acciones administrativas y exporta registros de actividad como CSV.",
+        securityTitle: "Security Review",
+        securityDescription: "Revisa borradores de políticas RLS de Supabase y tareas pendientes de seguridad de base de datos.",
+        brandingTitle: "Branding",
+        brandingDescription: "Gestiona logo, texto de inicio, colores y marca de certificados.",
+        certificatesTitle: "Certificates",
+        certificatesDescription: "Genera y gestiona certificados de finalización de cursos.",
+        moderationTitle: "Community Moderation",
+        moderationDescription: "Revisa publicaciones eliminadas, restaura contenido y gestiona la seguridad de la comunidad.",
+        openUserManagement: "Abrir gestión de usuarios",
+        viewSetupNotes: "Ver notas de configuración",
+        openPrivacyRequests: "Abrir solicitudes de privacidad",
+        openAuditLogs: "Abrir registros de auditoría",
+        viewSecurityChecklist: "Ver checklist de seguridad",
+        openCertificates: "Abrir certificados",
+        openModeration: "Abrir moderación",
+        openBrandingSoon: "Próximamente",
+        ready: "Listo",
+        needsSetup: "Requiere configuración",
+        paused: "Pausado",
+        complete: "Completo",
+        needsReview: "Requiere revisión",
+        checklist: [
+          ["Production login works", "El login de producción funciona", "complete"],
+          ["Student route protection works", "La protección de rutas de estudiante funciona", "complete"],
+          ["Admin route protection works", "La protección de rutas de administrador funciona", "complete"],
+          ["GDPR consent is active", "El consentimiento GDPR está activo", "complete"],
+          ["Privacy Policy page exists", "La página de Política de privacidad existe", "complete"],
+          ["Audit Logs are recording actions", "Los registros de auditoría están registrando acciones", "complete"],
+          ["GDPR Data Requests are available", "Las solicitudes de datos GDPR están disponibles", "complete"],
+          ["User status controls work", "Los controles de estado de usuario funcionan", "complete"],
+          ["Student enrollment queries use student_id", "Las consultas de inscripción de estudiantes usan student_id", "complete"],
+          ["Email domain is verified", "El dominio de correo está verificado", "paused"],
+          ["Invitation emails are enabled", "Los correos de invitación están habilitados", "paused"],
+          ["Supabase RLS policies reviewed", "Las políticas RLS de Supabase fueron revisadas", "review"],
+          ["Storage bucket policies reviewed", "Las políticas de buckets de almacenamiento fueron revisadas", "review"],
+          ["Mobile layout tested", "El diseño móvil fue probado", "review"],
+        ],
+      }
+    : {
+        adminEyebrow: "ADMINISTRATION",
+        siteEyebrow: "SITE SETTINGS",
+        controlsTitle: "Control center",
+        controlsText: "Review what is ready, what is paused, and what still needs setup before launch.",
+        launchTitle: "Launch readiness checklist",
+        accountTitle: "Account & Invitations",
+        accountDescription: "Account creation can be tested manually. Email invitations are paused until a sending domain is verified.",
+        privacyDescription: "Track GDPR/privacy requests and export user data safely.",
+        auditDescription: "Review admin actions and export activity logs as CSV.",
+        securityTitle: "Security Review",
+        securityDescription: "Review Supabase RLS policy drafts and remaining database security tasks.",
+        brandingTitle: "Branding",
+        brandingDescription: "Manage logo, homepage copy, colors, and certificate branding.",
+        certificatesTitle: "Certificates",
+        certificatesDescription: "Generate and manage course completion certificates.",
+        moderationTitle: "Community Moderation",
+        moderationDescription: "Review removed posts, restore content, and manage community safety.",
+        openUserManagement: "Open User Management",
+        viewSetupNotes: "View setup notes",
+        openPrivacyRequests: "Open Privacy Requests",
+        openAuditLogs: "Open Audit Logs",
+        viewSecurityChecklist: "View security checklist",
+        openCertificates: "Open Certificates",
+        openModeration: "Open Moderation",
+        openBrandingSoon: "Coming soon",
+        ready: "Ready",
+        needsSetup: "Needs setup",
+        paused: "Paused",
+        complete: "Complete",
+        needsReview: "Needs review",
+        checklist: [
+          ["Production login works", "Production login works", "complete"],
+          ["Student route protection works", "Student route protection works", "complete"],
+          ["Admin route protection works", "Admin route protection works", "complete"],
+          ["GDPR consent is active", "GDPR consent is active", "complete"],
+          ["Privacy Policy page exists", "Privacy Policy page exists", "complete"],
+          ["Audit Logs are recording actions", "Audit Logs are recording actions", "complete"],
+          ["GDPR Data Requests are available", "GDPR Data Requests are available", "complete"],
+          ["User status controls work", "User status controls work", "complete"],
+          ["Student enrollment queries use student_id", "Student enrollment queries use student_id", "complete"],
+          ["Email domain is verified", "Email domain is verified", "paused"],
+          ["Invitation emails are enabled", "Invitation emails are enabled", "paused"],
+          ["Supabase RLS policies reviewed", "Supabase RLS policies reviewed", "review"],
+          ["Storage bucket policies reviewed", "Storage bucket policies reviewed", "review"],
+          ["Mobile layout tested", "Mobile layout tested", "review"],
+        ],
+      };
+  const statusLabels = {
+    ready: settingsCopy.ready,
+    paused: settingsCopy.paused,
+    setup: settingsCopy.needsSetup,
+    soon: comingSoon,
+    complete: settingsCopy.complete,
+    review: settingsCopy.needsReview,
+  };
+  const scrollToSettingsSection = (sectionId) => {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const settingsCards = [
+    {
+      key: "account",
+      icon: "community",
+      title: settingsCopy.accountTitle,
+      text: settingsCopy.accountDescription,
+      status: "paused",
+      actions: [
+        { label: settingsCopy.openUserManagement, onClick: () => navigateTo("/admin/users") },
+        { label: settingsCopy.viewSetupNotes, onClick: () => scrollToSettingsSection("launch-readiness-checklist") },
+      ],
+    },
+    {
+      key: "privacy",
+      icon: "dashboard",
+      title: t("admin.gdprPanelTitle"),
+      text: settingsCopy.privacyDescription,
+      status: "ready",
+      actions: [{ label: settingsCopy.openPrivacyRequests, onClick: () => scrollToSettingsSection("privacy-requests-section") }],
+    },
+    {
+      key: "audit",
+      icon: "dashboard",
+      title: t("admin.auditLogs"),
+      text: settingsCopy.auditDescription,
+      status: "ready",
+      actions: [{ label: settingsCopy.openAuditLogs, onClick: () => scrollToSettingsSection("audit-logs-section") }],
+    },
+    {
+      key: "security",
+      icon: "dashboard",
+      title: settingsCopy.securityTitle,
+      text: settingsCopy.securityDescription,
+      status: "setup",
+      actions: [{ label: settingsCopy.viewSecurityChecklist, onClick: () => scrollToSettingsSection("launch-readiness-checklist") }],
+    },
+    {
+      key: "branding",
+      icon: "courses",
+      title: settingsCopy.brandingTitle,
+      text: settingsCopy.brandingDescription,
+      status: "soon",
+      actions: [{ label: settingsCopy.openBrandingSoon, disabled: true }],
+    },
+    {
+      key: "certificates",
+      icon: "certificate",
+      title: settingsCopy.certificatesTitle,
+      text: settingsCopy.certificatesDescription,
+      status: "ready",
+      actions: [{ label: settingsCopy.openCertificates, onClick: () => navigateTo("/admin/certificates") }],
+    },
+    {
+      key: "moderation",
+      icon: "users",
+      title: settingsCopy.moderationTitle,
+      text: settingsCopy.moderationDescription,
+      status: "ready",
+      actions: [{ label: settingsCopy.openModeration, onClick: () => navigateTo("/admin/community") }],
+    },
+  ];
   const requestTypeOptions = [
     { value: "access_export", label: t("admin.gdprRequestTypeAccessExport") },
     { value: "correction", label: t("admin.gdprRequestTypeCorrection") },
@@ -1255,7 +1421,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
       <section className="section-card">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">{language === "es" ? "ADMINISTRACIÓN" : "ADMINISTRATION"}</span>
+            <span className="eyebrow">{settingsCopy.adminEyebrow}</span>
             <h2>{pageTitle}</h2>
             <p>{pageText}</p>
           </div>
@@ -1264,21 +1430,61 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
       <section className="section-card">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">{language === "es" ? "CONFIGURACIÓN DEL SITIO" : "SITE SETTINGS"}</span>
-            <h2>{language === "es" ? "Controles administrativos" : "Administrative controls"}</h2>
-            <p>{pageText}</p>
+            <span className="eyebrow">{settingsCopy.siteEyebrow}</span>
+            <h2>{settingsCopy.controlsTitle}</h2>
+            <p>{settingsCopy.controlsText}</p>
           </div>
         </div>
         <div className="overview-grid">
-          <OverviewCard icon="community" title={(language === "es" ? "Correo e invitaciones" : "Email & Invitations") + " · " + comingSoon} text={comingSoonText} />
-          <OverviewCard icon="courses" title={(language === "es" ? "Marca" : "Branding") + " · " + comingSoon} text={comingSoonText} />
-          <OverviewCard icon="certificate" title={(language === "es" ? "Certificados" : "Certificates") + " · " + comingSoon} text={comingSoonText} />
-          <OverviewCard icon="users" title={(language === "es" ? "Moderación de comunidad" : "Community Moderation") + " · " + comingSoon} text={comingSoonText} />
-            <OverviewCard icon="dashboard" title={t("admin.gdprPanelTitle")} text={t("admin.gdprPanelText")} />
-            <OverviewCard icon="dashboard" title={(language === "es" ? "Seguridad" : "Security") + " · " + comingSoon} text={comingSoonText} />
+          {settingsCards.map((card) => (
+            <article key={card.key} className="credential-card">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">{card.title}</span>
+                  <h3>{card.title}</h3>
+                  <p>{card.text}</p>
+                </div>
+                <span className="subtle-badge users-badge">{statusLabels[card.status]}</span>
+              </div>
+              <div className="form-actions compact">
+                {card.actions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    className="secondary-btn"
+                    disabled={action.disabled}
+                    onClick={action.onClick}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section className="section-card" id="launch-readiness-checklist">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{settingsCopy.launchTitle}</span>
+            <h2>{settingsCopy.launchTitle}</h2>
+            <p>{settingsCopy.controlsText}</p>
           </div>
-        </section>
-        <section className="section-card gdpr-section-card">
+        </div>
+        <div className="gdpr-request-list">
+          {settingsCopy.checklist.map(([key, label, status]) => (
+            <article key={key} className="gdpr-request-item">
+              <div className="gdpr-request-head">
+                <div>
+                  <strong>{label}</strong>
+                </div>
+                <span className="subtle-badge users-badge">{statusLabels[status]}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+        <section className="section-card gdpr-section-card" id="privacy-requests-section">
           <div className="section-heading">
             <div>
               <span className="eyebrow">{t("admin.gdprPanelTitle")}</span>
@@ -1446,7 +1652,7 @@ function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
             </div>
           </div>
         </section>
-        <section className="section-card">
+        <section className="section-card" id="audit-logs-section">
         <div className="section-heading">
           <div>
             <span className="eyebrow">{t("admin.auditLogs")}</span>
