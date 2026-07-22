@@ -33,6 +33,15 @@ Frontend query hygiene completed
   - student/course-related enrollment reads
   - auth/profile user lookups
 
+GDPR request workflow status
+
+- GDPR request tracker exists in Admin Settings → Privacy & Data Requests.
+- User data export exists as a JSON download for admin-handled requests.
+- Deletion/anonymization is tracked for manual review only in the current version.
+- Hard deletion is not automated yet.
+- Supabase Auth deletion remains a manual task or a future Edge Function workflow.
+- Audit logs record GDPR request actions without exporting sensitive payload contents.
+
 Manual Supabase / RLS review still required
 
 - Frontend route protection improves the user experience, but Supabase Row Level Security policies or secure Edge Functions are still needed for production-grade enforcement.

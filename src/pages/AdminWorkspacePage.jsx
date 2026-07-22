@@ -4,9 +4,15 @@ import { Icon, OverviewCard, Stat, Status, Welcome } from "../components/ui.jsx"
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
 import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
 import { getSubmissionsForAdmin, reviewSubmission } from "../services/assignmentService.js";
+import { recordAdminAuditLog, getAdminAuditLogs } from "../services/auditLogService.js";
 import { deleteCourseDraft, getCourseDrafts, markCourseDraftPublished, saveCourseDraft } from "../services/courseDraftService.js";
+import {
+  createGdprDataRequest,
+  exportUserDataBundle,
+  getGdprDataRequests,
+  updateGdprDataRequest,
+} from "../services/gdprDataRequestService.js";
 import { uploadCourseImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
-import { getAdminAuditLogs } from "../services/auditLogService.js";
 import { normalizeCountrySelection } from "../data/countries.js";
 import { getProfileCountryOptions } from "../data/profileCountries.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
@@ -765,9 +771,15 @@ export function AdminWorkspacePage({
     );
   }
 
-  if (pathname === "/admin/settings") {
-    return <AdminSettingsPage />;
-  }
+    if (pathname === "/admin/settings") {
+    return (
+      <AdminSettingsPage
+        users={users}
+        currentUser={currentUser}
+        onUpdateUserStatus={onUpdateUserStatus}
+      />
+    );
+    }
 
   return <AdminDashboardPage users={users} courses={courses} certificates={certificates} currentUser={currentUser} />;
 }
@@ -806,11 +818,24 @@ function AdminDashboardPage({ users, courses, certificates, currentUser }) {
   );
 }
 
-function AdminSettingsPage() {
+function AdminSettingsPage({ users = [], currentUser, onUpdateUserStatus }) {
   const { language, t } = useLanguage();
   const [auditLogs, setAuditLogs] = useState([]);
   const [loadingAuditLogs, setLoadingAuditLogs] = useState(true);
   const [auditLogsError, setAuditLogsError] = useState("");
+  const [gdprRequests, setGdprRequests] = useState([]);
+  const [loadingGdprRequests, setLoadingGdprRequests] = useState(true);
+  const [gdprError, setGdprError] = useState("");
+  const [gdprMessage, setGdprMessage] = useState("");
+  const [submittingRequest, setSubmittingRequest] = useState(false);
+  const [updatingRequestId, setUpdatingRequestId] = useState("");
+  const [exportingEmail, setExportingEmail] = useState("");
+  const [filters, setFilters] = useState({ status: "all", requestType: "all", userEmailSearch: "" });
+  const [requestDraft, setRequestDraft] = useState({
+    userEmail: "",
+    requestType: "access_export",
+    notes: "",
+  });
   const pageTitle = language === "es" ? "Configuración" : "Settings";
   const pageText = language === "es"
     ? "Administra los controles generales del sitio y las preferencias administrativas."
@@ -819,6 +844,24 @@ function AdminSettingsPage() {
   const comingSoonText = language === "es"
     ? "Próximamente en esta sección."
     : "Coming soon in this section.";
+  const requestTypeOptions = [
+    { value: "access_export", label: t("admin.gdprRequestTypeAccessExport") },
+    { value: "correction", label: t("admin.gdprRequestTypeCorrection") },
+    { value: "deactivation", label: t("admin.gdprRequestTypeDeactivation") },
+    { value: "deletion_anonymization", label: t("admin.gdprRequestTypeDeletionAnonymization") },
+  ];
+  const requestStatusOptions = [
+    { value: "open", label: t("admin.gdprStatusOpen") },
+    { value: "in_progress", label: t("admin.gdprStatusInProgress") },
+    { value: "completed", label: t("admin.gdprStatusCompleted") },
+    { value: "rejected", label: t("admin.gdprStatusRejected") },
+  ];
+  const findUserByEmail = (email) =>
+    users.find((user) => `${user?.email ?? ""}`.trim().toLowerCase() === `${email ?? ""}`.trim().toLowerCase()) ?? null;
+  const formatRequestType = (requestType) =>
+    requestTypeOptions.find((entry) => entry.value === requestType)?.label ?? requestType;
+  const formatRequestStatus = (status) =>
+    requestStatusOptions.find((entry) => entry.value === status)?.label ?? status;
 
   const sanitizeExportDetails = (details) => {
     if (!details || typeof details !== "object" || Array.isArray(details)) return {};
@@ -855,10 +898,10 @@ function AdminSettingsPage() {
     return `"${safeValue.replace(/"/g, '""')}"`;
   };
 
-  useEffect(() => {
-    let isMounted = true;
+    useEffect(() => {
+      let isMounted = true;
 
-    const loadAuditLogs = async () => {
+      const loadAuditLogs = async () => {
       setLoadingAuditLogs(true);
       setAuditLogsError("");
 
@@ -879,10 +922,240 @@ function AdminSettingsPage() {
 
     void loadAuditLogs();
 
-    return () => {
-      isMounted = false;
+      return () => {
+        isMounted = false;
+      };
+    }, [t]);
+
+    useEffect(() => {
+      let isMounted = true;
+
+      const loadGdprRequests = async () => {
+        setLoadingGdprRequests(true);
+        setGdprError("");
+
+        try {
+          const nextRequests = await getGdprDataRequests({
+            status: filters.status === "all" ? "" : filters.status,
+            requestType: filters.requestType === "all" ? "" : filters.requestType,
+            userEmailSearch: filters.userEmailSearch,
+          });
+          if (isMounted) setGdprRequests(nextRequests);
+        } catch (error) {
+          console.error("Loading GDPR data requests failed:", error);
+          if (isMounted) {
+            setGdprRequests([]);
+            setGdprError(error?.message || t("admin.gdprLoadFailed"));
+          }
+        } finally {
+          if (isMounted) setLoadingGdprRequests(false);
+        }
+      };
+
+      void loadGdprRequests();
+
+      return () => {
+        isMounted = false;
+      };
+    }, [filters, t]);
+
+    const downloadJson = (fileName, data) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
     };
-  }, [t]);
+
+    const refreshGdprRequests = async () => {
+      const nextRequests = await getGdprDataRequests({
+        status: filters.status === "all" ? "" : filters.status,
+        requestType: filters.requestType === "all" ? "" : filters.requestType,
+        userEmailSearch: filters.userEmailSearch,
+      });
+      setGdprRequests(nextRequests);
+    };
+
+    const handleCreateGdprRequest = async (event) => {
+      event.preventDefault();
+      setSubmittingRequest(true);
+      setGdprError("");
+      setGdprMessage("");
+
+      try {
+        const matchedUser = findUserByEmail(requestDraft.userEmail);
+        const createdRequest = await createGdprDataRequest({
+          userId: matchedUser?.id ?? null,
+          userEmail: requestDraft.userEmail,
+          requestType: requestDraft.requestType,
+          notes: requestDraft.notes,
+        });
+        await recordAdminAuditLog({
+          adminUser: currentUser,
+          action: "gdpr_request_created",
+          targetType: "gdpr_request",
+          targetId: createdRequest?.id ?? "",
+          targetEmail: createdRequest?.userEmail ?? requestDraft.userEmail,
+          details: {
+            request_type: createdRequest?.requestType ?? requestDraft.requestType,
+            status: createdRequest?.status ?? "open",
+          },
+        });
+        setRequestDraft({ userEmail: "", requestType: "access_export", notes: "" });
+        setGdprMessage(t("admin.gdprRequestCreated"));
+        await refreshGdprRequests();
+      } catch (error) {
+        console.error("Creating GDPR data request failed:", error);
+        setGdprError(error?.message || t("admin.gdprCreateFailed"));
+      } finally {
+        setSubmittingRequest(false);
+      }
+    };
+
+    const handleUpdateRequestStatus = async (request, nextStatus) => {
+      setUpdatingRequestId(request.id);
+      setGdprError("");
+      setGdprMessage("");
+
+      try {
+        const updatedRequest = await updateGdprDataRequest(
+          request.id,
+          { status: nextStatus, notes: request.notes },
+          currentUser?.id ?? "",
+        );
+        await recordAdminAuditLog({
+          adminUser: currentUser,
+          action: "gdpr_request_status_updated",
+          targetType: "gdpr_request",
+          targetId: request.id,
+          targetEmail: request.userEmail,
+          details: {
+            request_type: request.requestType,
+            previous_status: request.status,
+            new_status: nextStatus,
+          },
+        });
+        if (nextStatus === "completed") {
+          await recordAdminAuditLog({
+            adminUser: currentUser,
+            action: "gdpr_request_completed",
+            targetType: "gdpr_request",
+            targetId: request.id,
+            targetEmail: request.userEmail,
+            details: {
+              request_type: request.requestType,
+            },
+          });
+        }
+        if (nextStatus === "rejected") {
+          await recordAdminAuditLog({
+            adminUser: currentUser,
+            action: "gdpr_request_rejected",
+            targetType: "gdpr_request",
+            targetId: request.id,
+            targetEmail: request.userEmail,
+            details: {
+              request_type: request.requestType,
+            },
+          });
+        }
+        setGdprMessage(
+          nextStatus === "completed"
+            ? t("admin.gdprRequestCompleted")
+            : nextStatus === "rejected"
+              ? t("admin.gdprRequestRejected")
+              : t("admin.gdprRequestUpdated"),
+        );
+        setGdprRequests((currentRequests) =>
+          currentRequests.map((entry) => (String(entry.id) === String(request.id) ? updatedRequest : entry)),
+        );
+      } catch (error) {
+        console.error("Updating GDPR request status failed:", error);
+        setGdprError(error?.message || t("admin.gdprUpdateFailed"));
+      } finally {
+        setUpdatingRequestId("");
+      }
+    };
+
+    const handleExportUserData = async (userEmail) => {
+      setExportingEmail(userEmail);
+      setGdprError("");
+      setGdprMessage("");
+
+      try {
+        const dataBundle = await exportUserDataBundle(userEmail);
+        const dateStamp = new Date().toISOString().slice(0, 10);
+        const safeEmail = `${userEmail ?? "user"}`.trim().toLowerCase().replace(/[^a-z0-9@._-]+/g, "-");
+        downloadJson(`nutripro-user-data-${safeEmail}-${dateStamp}.json`, dataBundle);
+        await recordAdminAuditLog({
+          adminUser: currentUser,
+          action: "gdpr_user_data_exported",
+          targetType: "user",
+          targetEmail: userEmail,
+          details: {
+            export_format: "json",
+          },
+        });
+        setGdprMessage(t("admin.gdprExportReady"));
+      } catch (error) {
+        console.error("Exporting GDPR user data failed:", error);
+        setGdprError(error?.message || t("admin.gdprExportFailed"));
+      } finally {
+        setExportingEmail("");
+      }
+    };
+
+    const handleDeactivateUserForRequest = async (request) => {
+      const matchedUser = findUserByEmail(request.userEmail);
+      if (!matchedUser) {
+        setGdprError(t("admin.gdprUserNotFound"));
+        return;
+      }
+
+      setUpdatingRequestId(request.id);
+      setGdprError("");
+      setGdprMessage("");
+
+      try {
+        await onUpdateUserStatus(matchedUser, "inactive");
+        await recordAdminAuditLog({
+          adminUser: currentUser,
+          action: "gdpr_user_deactivated",
+          targetType: "user",
+          targetId: matchedUser.id,
+          targetEmail: matchedUser.email,
+          details: {
+            request_id: request.id,
+          },
+        });
+        const updatedRequest = await updateGdprDataRequest(
+          request.id,
+          { status: "completed", notes: request.notes },
+          currentUser?.id ?? "",
+        );
+        await recordAdminAuditLog({
+          adminUser: currentUser,
+          action: "gdpr_request_completed",
+          targetType: "gdpr_request",
+          targetId: request.id,
+          targetEmail: request.userEmail,
+          details: {
+            request_type: request.requestType,
+          },
+        });
+        setGdprRequests((currentRequests) =>
+          currentRequests.map((entry) => (String(entry.id) === String(request.id) ? updatedRequest : entry)),
+        );
+        setGdprMessage(t("admin.gdprUserDeactivated"));
+      } catch (error) {
+        console.error("Completing the GDPR deactivation flow failed:", error);
+        setGdprError(error?.message || t("admin.gdprDeactivateFailed"));
+      } finally {
+        setUpdatingRequestId("");
+      }
+    };
 
   const summarizeAuditDetails = (log) => {
     const details = log?.details ?? {};
@@ -970,11 +1243,179 @@ function AdminSettingsPage() {
           <OverviewCard icon="courses" title={(language === "es" ? "Marca" : "Branding") + " · " + comingSoon} text={comingSoonText} />
           <OverviewCard icon="certificate" title={(language === "es" ? "Certificados" : "Certificates") + " · " + comingSoon} text={comingSoonText} />
           <OverviewCard icon="users" title={(language === "es" ? "Moderación de comunidad" : "Community Moderation") + " · " + comingSoon} text={comingSoonText} />
-          <OverviewCard icon="dashboard" title={(language === "es" ? "Privacidad y uso de datos" : "Privacy & Data Use") + " · " + comingSoon} text={comingSoonText} />
-          <OverviewCard icon="dashboard" title={(language === "es" ? "Seguridad" : "Security") + " · " + comingSoon} text={comingSoonText} />
-        </div>
-      </section>
-      <section className="section-card">
+            <OverviewCard icon="dashboard" title={t("admin.gdprPanelTitle")} text={t("admin.gdprPanelText")} />
+            <OverviewCard icon="dashboard" title={(language === "es" ? "Seguridad" : "Security") + " · " + comingSoon} text={comingSoonText} />
+          </div>
+        </section>
+        <section className="section-card gdpr-section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">{t("admin.gdprPanelTitle")}</span>
+              <h2>{t("admin.gdprPanelTitle")}</h2>
+              <p>{t("admin.gdprPanelText")}</p>
+            </div>
+          </div>
+
+          <div className="gdpr-grid">
+            <form className="gdpr-request-form" onSubmit={(event) => void handleCreateGdprRequest(event)}>
+              <label>
+                {t("admin.gdprUserEmail")}
+                <input
+                  type="email"
+                  value={requestDraft.userEmail}
+                  onChange={(event) => setRequestDraft((current) => ({ ...current, userEmail: event.target.value }))}
+                  placeholder="student@nutripro.test"
+                  required
+                />
+              </label>
+              <label>
+                {t("admin.gdprRequestType")}
+                <select
+                  value={requestDraft.requestType}
+                  onChange={(event) => setRequestDraft((current) => ({ ...current, requestType: event.target.value }))}
+                >
+                  {requestTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t("admin.gdprNotes")}
+                <textarea
+                  rows={4}
+                  value={requestDraft.notes}
+                  onChange={(event) => setRequestDraft((current) => ({ ...current, notes: event.target.value }))}
+                />
+              </label>
+              <div className="form-actions">
+                <button type="submit" className="primary-btn" disabled={submittingRequest}>
+                  <Icon name="dashboard" />
+                  {submittingRequest ? t("common.loading") : t("admin.gdprCreateRequest")}
+                </button>
+              </div>
+              <small className="field-note">{t("admin.gdprHelperText")}</small>
+              {requestDraft.requestType === "deletion_anonymization" ? (
+                <div className="warning-card gdpr-warning-card">
+                  <strong>{t("admin.gdprDeletionWarningTitle")}</strong>
+                  <p>{t("admin.gdprDeletionWarningText")}</p>
+                </div>
+              ) : null}
+              {gdprMessage ? <small className="field-note">{gdprMessage}</small> : null}
+              {gdprError ? <small className="field-note danger-text">{gdprError}</small> : null}
+            </form>
+
+            <div className="gdpr-requests-panel">
+              <div className="gdpr-filters">
+                <label>
+                  {t("admin.gdprStatus")}
+                  <select
+                    value={filters.status}
+                    onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}
+                  >
+                    <option value="all">{t("common.allStatuses")}</option>
+                    {requestStatusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t("admin.gdprRequestType")}
+                  <select
+                    value={filters.requestType}
+                    onChange={(event) => setFilters((current) => ({ ...current, requestType: event.target.value }))}
+                  >
+                    <option value="all">{t("admin.gdprAllRequestTypes")}</option>
+                    {requestTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t("admin.gdprSearchEmail")}
+                  <input
+                    type="search"
+                    value={filters.userEmailSearch}
+                    onChange={(event) => setFilters((current) => ({ ...current, userEmailSearch: event.target.value }))}
+                    placeholder="maya@nutripro.demo"
+                  />
+                </label>
+              </div>
+
+              {loadingGdprRequests ? <small className="field-note">{t("common.loading")}</small> : null}
+              {!loadingGdprRequests && !gdprRequests.length ? (
+                <small className="field-note">{t("admin.gdprNoRequestsYet")}</small>
+              ) : null}
+
+              <div className="gdpr-request-list">
+                {gdprRequests.map((request) => (
+                  <article key={request.id} className="gdpr-request-item">
+                    <div className="gdpr-request-head">
+                      <div>
+                        <strong>{request.userEmail}</strong>
+                        <div className="gdpr-request-meta">
+                          <span className="status submitted">{formatRequestType(request.requestType)}</span>
+                          <span className="status active">{formatRequestStatus(request.status)}</span>
+                          <span>{request.requestedAt ? new Date(request.requestedAt).toLocaleString(language) : "—"}</span>
+                        </div>
+                      </div>
+                      <div className="gdpr-request-actions">
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          disabled={exportingEmail === request.userEmail}
+                          onClick={() => void handleExportUserData(request.userEmail)}
+                        >
+                          {exportingEmail === request.userEmail ? t("common.loading") : t("admin.gdprExportUserData")}
+                        </button>
+                        {request.requestType === "deactivation" ? (
+                          <button
+                            type="button"
+                            className="secondary-btn"
+                            disabled={updatingRequestId === request.id}
+                            onClick={() => void handleDeactivateUserForRequest(request)}
+                          >
+                            {t("admin.gdprDeactivateAccount")}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                    {request.notes ? <p className="gdpr-request-notes">{request.notes}</p> : null}
+                    {request.requestType === "deletion_anonymization" ? (
+                      <small className="field-note">{t("admin.gdprDeletionWarningText")}</small>
+                    ) : null}
+                    <div className="gdpr-request-footer">
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        disabled={updatingRequestId === request.id || request.status === "in_progress"}
+                        onClick={() => void handleUpdateRequestStatus(request, "in_progress")}
+                      >
+                        {t("admin.gdprMarkInProgress")}
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        disabled={updatingRequestId === request.id || request.status === "completed"}
+                        onClick={() => void handleUpdateRequestStatus(request, "completed")}
+                      >
+                        {t("admin.gdprMarkCompleted")}
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-btn"
+                        disabled={updatingRequestId === request.id || request.status === "rejected"}
+                        onClick={() => void handleUpdateRequestStatus(request, "rejected")}
+                      >
+                        {t("admin.gdprRejectRequest")}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+        <section className="section-card">
         <div className="section-heading">
           <div>
             <span className="eyebrow">{t("admin.auditLogs")}</span>
