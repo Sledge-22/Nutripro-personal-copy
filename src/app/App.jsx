@@ -697,19 +697,33 @@ export function App() {
   }
 
   async function handleSendUserInvitation(user, options = {}) {
-    const result = await sendUserInvitation(user, options);
-    void recordAdminAuditLog({
-      adminUser: currentUser,
-      action: "invitation_sent",
-      targetType: "user",
-      targetId: result?.user?.id ?? user?.id ?? "",
-      targetEmail: result?.user?.email ?? user?.email ?? "",
-      details: {
-        invitation_email_id: result?.id || null,
-      },
-    });
-    setUsers(await getUsers());
-    return result;
+    try {
+      const result = await sendUserInvitation(user, options);
+      void recordAdminAuditLog({
+        adminUser: currentUser,
+        action: "invitation_sent",
+        targetType: "user",
+        targetId: result?.user?.id ?? user?.id ?? "",
+        targetEmail: result?.user?.email ?? user?.email ?? "",
+        details: {
+          invitation_email_id: result?.id || null,
+        },
+      });
+      setUsers(await getUsers());
+      return result;
+    } catch (error) {
+      void recordAdminAuditLog({
+        adminUser: currentUser,
+        action: "invitation_send_failed",
+        targetType: "user",
+        targetId: user?.id ?? "",
+        targetEmail: user?.email ?? "",
+        details: {
+          error_message: error?.message || "Invitation send failed",
+        },
+      });
+      throw error;
+    }
   }
 
   async function handleSaveCourse(course, editingId, options = {}) {

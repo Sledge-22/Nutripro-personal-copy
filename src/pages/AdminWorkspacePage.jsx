@@ -1870,21 +1870,34 @@ function UsersAdminPanel({
         },
       );
 
+      let invitationFailed = false;
       if (sendInvitationAfterCreate) {
-        await onSendUserInvitation(result?.user ?? createDraftState, {
-          language,
-          invitedBy: currentUser?.name || "",
-          temporaryPassword: nextTemporaryPassword,
-          inviteUrl: `${window.location.origin}/login`,
-        });
+        try {
+          await onSendUserInvitation(result?.user ?? createDraftState, {
+            language,
+            invitedBy: currentUser?.name || "",
+            temporaryPassword: nextTemporaryPassword,
+            inviteUrl: `${window.location.origin}/login`,
+          });
+        } catch (inviteError) {
+          console.error("Sending the production invitation after user creation failed:", inviteError);
+          invitationFailed = true;
+          setError(
+            inviteError?.message
+              ? `${t("auth.unableToSendInvitation")} ${inviteError.message}`.trim()
+              : t("auth.unableToSendInvitation"),
+          );
+        }
       }
 
       setCreateDraftState(createUserDraft());
       setMessage(
         mode === "production"
           ? sendInvitationAfterCreate
-            ? t("auth.userCreatedAndInvitationSent")
-            : t("auth.userCreatedSuccessfully")
+            ? invitationFailed
+              ? t("auth.userCreatedInvitationOptionalWarning")
+              : t("auth.userCreatedAndInvitationSent")
+            : t("auth.userCreatedInvitationOptionalWarning")
           : t("auth.userCreatedSuccessfully"),
       );
       setTemporaryPassword(nextTemporaryPassword);
