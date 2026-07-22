@@ -243,6 +243,47 @@ function createGeneratedModules(count, language = "es") {
   }));
 }
 
+function createClassDraft(sortOrder = 1, title = "General") {
+  return {
+    id: createId(),
+    sortOrder,
+    sort_order: sortOrder,
+    title,
+    description: "",
+    status: "published",
+  };
+}
+
+function groupCourseClasses(course = null) {
+  const modules = Array.isArray(course?.modules) ? course.modules : [];
+  const sourceClasses = Array.isArray(course?.classes) ? course.classes : [];
+  const mappedClasses = sourceClasses.map((entry, index) => ({
+    id: entry.id || createId(),
+    sortOrder: entry.sortOrder ?? entry.sort_order ?? index + 1,
+    sort_order: entry.sortOrder ?? entry.sort_order ?? index + 1,
+    title: entry.title || "General",
+    description: entry.description || "",
+    status: entry.status || "published",
+  }));
+
+  const hasGeneralModules = modules.some((module) => !(module.class_id || module.classId));
+  if (hasGeneralModules) {
+    mappedClasses.push(createClassDraft(mappedClasses.length + 1, "General"));
+  }
+
+  if (!mappedClasses.length) {
+    mappedClasses.push(createClassDraft(1, "General"));
+  }
+
+  const seen = new Set();
+  return mappedClasses.filter((entry) => {
+    const key = `${entry.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function createCollapsedModuleIds(modules = [], shouldCollapse = false) {
   if (!shouldCollapse) return [];
   return modules.slice(1).map((module) => module.id);
@@ -269,6 +310,8 @@ function createAssignmentDraft() {
 function createModuleDraft(sortOrder = 1) {
   return {
     id: createId(),
+    classId: "",
+    class_id: "",
     sortOrder,
     title: "",
     description: "",
@@ -345,6 +388,8 @@ function restoreModuleDraft(module = {}, index = 0) {
     ...baseModule,
     ...module,
     id: module.id || baseModule.id,
+    classId: module.class_id || module.classId || "",
+    class_id: module.class_id || module.classId || "",
     sortOrder: module.sortOrder ?? module.sort_order ?? index + 1,
     pdfUrl: restoredPdfUrl,
     pdf_url: restoredPdfUrl,
@@ -402,6 +447,22 @@ function restoreCourseDraft(draft = {}) {
   const modules = Array.isArray(draft.modules) && draft.modules.length
     ? draft.modules.map((module, index) => restoreModuleDraft(module, index))
     : [createModuleDraft()];
+  const classes = Array.isArray(draft.classes) && draft.classes.length
+    ? draft.classes.map((entry, index) => ({
+        ...createClassDraft(index + 1, entry?.title || "General"),
+        ...entry,
+        id: entry?.id || createId(),
+        sortOrder: entry?.sortOrder ?? entry?.sort_order ?? index + 1,
+        sort_order: entry?.sortOrder ?? entry?.sort_order ?? index + 1,
+      }))
+    : [createClassDraft()];
+
+  const fallbackClassId = classes[0]?.id || "";
+  const normalizedModules = modules.map((module) => ({
+    ...module,
+    classId: module.class_id || module.classId || fallbackClassId,
+    class_id: module.class_id || module.classId || fallbackClassId,
+  }));
 
   return {
     ...createCourseDraft(),
@@ -410,7 +471,8 @@ function restoreCourseDraft(draft = {}) {
     imageError: "",
     bulkPdfSelections: Array.isArray(draft.bulkPdfSelections) ? draft.bulkPdfSelections : [],
     bulkVideoSelections: Array.isArray(draft.bulkVideoSelections) ? draft.bulkVideoSelections : [],
-    modules,
+    classes,
+    modules: normalizedModules,
   };
 }
 
@@ -419,6 +481,9 @@ function createSerializableCourseDraft(form) {
     ...form,
     imageUploading: false,
     imageError: "",
+    classes: (form.classes || []).map((entry) => ({
+      ...entry,
+    })),
     modules: (form.modules || []).map((module) => ({
       ...module,
       pdfFile: null,
@@ -463,6 +528,7 @@ function getModuleHasVideo(module) {
 
 function createCourseDraft(course = null) {
   if (!course) {
+    const generalClass = createClassDraft();
     return {
       title: "",
       description: "",
@@ -477,9 +543,13 @@ function createCourseDraft(course = null) {
       imageError: "",
       bulkPdfSelections: [],
       bulkVideoSelections: [],
-      modules: [createModuleDraft()],
+      classes: [generalClass],
+      modules: [{ ...createModuleDraft(), classId: generalClass.id, class_id: generalClass.id }],
     };
   }
+
+  const classes = groupCourseClasses(course);
+  const fallbackClassId = classes[0]?.id || "";
 
   return {
     title: course.title,
@@ -495,8 +565,11 @@ function createCourseDraft(course = null) {
     imageError: "",
     bulkPdfSelections: [],
     bulkVideoSelections: [],
+    classes,
     modules: (course.modules || []).map((module, index) => ({
       id: module.id || createId(),
+      classId: module.class_id || module.classId || fallbackClassId,
+      class_id: module.class_id || module.classId || fallbackClassId,
       sortOrder: module.sortOrder ?? index + 1,
       title: module.title || "",
       description: module.description || "",
@@ -572,6 +645,18 @@ function createCourseDraft(course = null) {
 }
 
 function buildCoursePayload(form, editingId, existingCourse) {
+  const classes = (form.classes || [])
+    .filter((entry) => `${entry.title ?? ""}`.trim())
+    .map((entry, index) => ({
+      id: entry.id,
+      sortOrder: entry.sortOrder ?? entry.sort_order ?? index + 1,
+      sort_order: entry.sortOrder ?? entry.sort_order ?? index + 1,
+      title: `${entry.title ?? ""}`.trim(),
+      description: `${entry.description ?? ""}`.trim(),
+      status: entry.status || "published",
+    }));
+
+  const fallbackClassId = classes[0]?.id || null;
   return {
     id: editingId || createId(),
     title: form.title.trim(),
@@ -582,6 +667,7 @@ function buildCoursePayload(form, editingId, existingCourse) {
     imageStoragePath: form.image_storage_path || form.imageStoragePath || "",
     image_storage_path: form.image_storage_path || form.imageStoragePath || "",
     owners: Array.from(new Set((Array.isArray(form.selectedStudentIds) ? form.selectedStudentIds : []).map((studentId) => `${studentId}`))),
+    classes,
     modules: form.modules
       .filter((module) => module.title.trim())
       .map((module, index) => {
@@ -628,6 +714,8 @@ function buildCoursePayload(form, editingId, existingCourse) {
 
         return {
           id: module.id,
+          classId: module.class_id || module.classId || fallbackClassId,
+          class_id: module.class_id || module.classId || fallbackClassId,
           sortOrder: index + 1,
           title: module.title.trim(),
           description: module.description.trim(),
@@ -3715,6 +3803,13 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
     }));
   };
 
+  const updateClass = (classId, updater) => {
+    setForm((current) => ({
+      ...current,
+      classes: (current.classes || []).map((entry) => (entry.id === classId ? updater(entry) : entry)),
+    }));
+  };
+
   const updateAssignment = (moduleId, updater) => {
     updateModule(moduleId, (module) => ({
       ...module,
@@ -3732,10 +3827,44 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
     }));
   };
 
-  const addModule = () => {
+  const addClass = () => {
     setForm((current) => ({
       ...current,
-      modules: [...current.modules, createModuleDraft(current.modules.length + 1)],
+      classes: [
+        ...(current.classes || []),
+        createClassDraft(
+          (current.classes || []).length + 1,
+          language === "es" ? `Clase ${(current.classes || []).length + 1}` : `Class ${(current.classes || []).length + 1}`,
+        ),
+      ],
+    }));
+  };
+
+  const deleteClass = (classId) => {
+    setForm((current) => {
+      const remainingClasses = (current.classes || [])
+        .filter((entry) => entry.id !== classId)
+        .map((entry, index) => ({ ...entry, sortOrder: index + 1, sort_order: index + 1 }));
+      const nextClasses = remainingClasses.length ? remainingClasses : [createClassDraft()];
+      return {
+        ...current,
+        classes: nextClasses,
+        modules: current.modules.filter((module) => String(module.class_id || module.classId || "") !== String(classId)),
+      };
+    });
+  };
+
+  const addModule = (classId = null) => {
+    setForm((current) => ({
+      ...current,
+      modules: [
+        ...current.modules,
+        {
+          ...createModuleDraft(current.modules.length + 1),
+          classId: classId || current.classes?.[0]?.id || "",
+          class_id: classId || current.classes?.[0]?.id || "",
+        },
+      ],
     }));
     setCollapsedModuleIds((current) => current.filter(Boolean));
   };
@@ -4201,9 +4330,19 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   const previewAssignedStudents = studentOptions.filter((student) =>
     (previewCourse.owners || []).some((studentId) => String(student.id) === String(studentId)),
   );
+  const previewClasses = Array.isArray(previewCourse.classes) ? previewCourse.classes : [];
+  const classesForRender = Array.isArray(form.classes) ? form.classes : [];
+
+  const getModulesForClass = (classId) =>
+    (form.modules || []).filter((module) => String(module.class_id || module.classId || "") === String(classId));
 
   const applyGeneratedModules = (count) => {
-    const nextModules = createGeneratedModules(count, language);
+    const targetClassId = form.classes?.[0]?.id || createClassDraft().id;
+    const nextModules = createGeneratedModules(count, language).map((module) => ({
+      ...module,
+      classId: targetClassId,
+      class_id: targetClassId,
+    }));
     const shouldCollapse = count > 12;
 
     window.requestAnimationFrame(() => {
@@ -4745,8 +4884,8 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
         <div className="builder-stack">
           <div className="builder-header">
             <div>
-              <span className="eyebrow">{t("admin.modules")}</span>
-              <h3>{t("admin.moduleFiles")}</h3>
+              <span className="eyebrow">{t("common.classes")}</span>
+              <h3>{t("admin.classBuilderTitle")}</h3>
             </div>
             <div className="row-actions builder-actions">
               {(form.modules || []).length > 1 ? (
@@ -4759,9 +4898,9 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
                   </button>
                 </>
               ) : null}
-              <button type="button" className="secondary-btn" onClick={addModule}>
+              <button type="button" className="secondary-btn" onClick={addClass}>
                 <Icon name="plus" />
-                {t("admin.addModule")}
+                {t("admin.addClass")}
               </button>
             </div>
           </div>
@@ -4926,23 +5065,70 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
             </section>
           </div>
 
-          {form.modules.map((module, index) => (
-            <ModuleEditor
-              key={module.id}
-              module={module}
-              index={index}
-              t={t}
-              collapsed={collapsedModuleIds.includes(module.id)}
-              toggleCollapsed={toggleCollapsed}
-              updateModule={updateModule}
-              updateAssignment={updateAssignment}
-              deleteModule={deleteModule}
-              enableAssignment={enableAssignment}
-              disableAssignment={disableAssignment}
-              uploadPdf={uploadPdf}
-              uploadVideo={uploadVideo}
-            />
-          ))}
+          {classesForRender.map((courseClass, classIndex) => {
+            const classModules = getModulesForClass(courseClass.id);
+            return (
+              <section key={courseClass.id} className="section-card">
+                <div className="builder-header">
+                  <div className="class-builder-fields">
+                    <span className="eyebrow">{t("common.class")}</span>
+                    <input
+                      value={courseClass.title}
+                      onChange={(event) =>
+                        updateClass(courseClass.id, (currentClass) => ({
+                          ...currentClass,
+                          title: event.target.value,
+                        }))}
+                      placeholder={t("admin.classTitle")}
+                    />
+                    <textarea
+                      rows="2"
+                      value={courseClass.description}
+                      onChange={(event) =>
+                        updateClass(courseClass.id, (currentClass) => ({
+                          ...currentClass,
+                          description: event.target.value,
+                        }))}
+                      placeholder={t("admin.classDescription")}
+                    />
+                  </div>
+                  <div className="row-actions builder-actions">
+                    <button type="button" className="secondary-btn" onClick={() => addModule(courseClass.id)}>
+                      <Icon name="plus" />
+                      {t("admin.addModule")}
+                    </button>
+                    {classesForRender.length > 1 ? (
+                      <button type="button" className="secondary-btn danger-text" onClick={() => deleteClass(courseClass.id)}>
+                        {t("common.delete")}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <small className="field-note">{t("admin.modulesInThisClass")}</small>
+                {classModules.length ? (
+                  classModules.map((module, index) => (
+                    <ModuleEditor
+                      key={module.id}
+                      module={module}
+                      index={index}
+                      t={t}
+                      collapsed={collapsedModuleIds.includes(module.id)}
+                      toggleCollapsed={toggleCollapsed}
+                      updateModule={updateModule}
+                      updateAssignment={updateAssignment}
+                      deleteModule={deleteModule}
+                      enableAssignment={enableAssignment}
+                      disableAssignment={disableAssignment}
+                      uploadPdf={uploadPdf}
+                      uploadVideo={uploadVideo}
+                    />
+                  ))
+                ) : (
+                  <p className="empty-copy">{t("admin.noModulesInClass")}</p>
+                )}
+              </section>
+            );
+          })}
         </div>
 
         <div className="form-actions">
@@ -4998,30 +5184,42 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
             )}
             <div className="preview-tree">
               {previewCourse.modules.length ? (
-                previewCourse.modules.map((module) => (
-                  <article className="preview-module" key={module.id}>
-                    <h4>{module.title}</h4>
-                    <p>{module.description}</p>
-                    <div className="preview-items">
-                      <div className="preview-item">
-                        <span className="subtle-badge">PDF</span>
-                        <strong>{module.pdfLabel}</strong>
-                      </div>
-                      <div className="preview-item">
-                        <span className="subtle-badge">Video</span>
-                        <strong>{module.video.uploadLabel !== "No video selected" ? module.video.uploadLabel : module.video_url || module.videoUrl || module.video.link || t("common.noVideoSelected")}</strong>
-                      </div>
-                      <div className="preview-item">
-                        <span className="subtle-badge">{t("common.assignment")}</span>
-                        <strong>
-                          {module.requiresAssignment || module.requires_assignment
-                            ? module.assignment?.title || t("admin.noAssignmentAdded")
-                            : t("common.noAssignmentRequired")}
-                        </strong>
-                      </div>
-                    </div>
-                  </article>
-                ))
+                previewClasses.map((courseClass) => {
+                  const classModules = previewCourse.modules.filter(
+                    (module) => String(module.class_id || module.classId || "") === String(courseClass.id),
+                  );
+
+                  return (
+                    <article className="preview-module" key={courseClass.id}>
+                      <h4>{courseClass.title}</h4>
+                      <p>{courseClass.description}</p>
+                      {classModules.map((module) => (
+                        <div className="preview-items" key={module.id}>
+                          <div className="preview-item">
+                            <span className="subtle-badge">{t("common.module")}</span>
+                            <strong>{module.title}</strong>
+                          </div>
+                          <div className="preview-item">
+                            <span className="subtle-badge">PDF</span>
+                            <strong>{module.pdfLabel}</strong>
+                          </div>
+                          <div className="preview-item">
+                            <span className="subtle-badge">Video</span>
+                            <strong>{module.video.uploadLabel !== "No video selected" ? module.video.uploadLabel : module.video_url || module.videoUrl || module.video.link || t("common.noVideoSelected")}</strong>
+                          </div>
+                          <div className="preview-item">
+                            <span className="subtle-badge">{t("common.assignment")}</span>
+                            <strong>
+                              {module.requiresAssignment || module.requires_assignment
+                                ? module.assignment?.title || t("admin.noAssignmentAdded")
+                                : t("common.noAssignmentRequired")}
+                            </strong>
+                          </div>
+                        </div>
+                      ))}
+                    </article>
+                  );
+                })
               ) : (
                 <p className="empty-copy">{t("admin.moduleFiles")}</p>
               )}
@@ -5053,6 +5251,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
                     <Status status={course.status || "published"} />
                   </div>
                   <p>{course.description}</p>
+                  <span>{(course.classes ?? []).length} {t("common.classes").toLowerCase()}</span>
                   <span>{(course.modules ?? []).length} {t("common.modules").toLowerCase()}</span>
                   <span>{(course.modules ?? []).filter((module) => module.pdf_url || module.pdfUrl || module.pdfLabel !== "No PDF selected").length} PDFs</span>
                   <span>{(course.modules ?? []).filter((module) => module.video_url || module.videoUrl || module.video?.url || module.video?.link).length} videos</span>

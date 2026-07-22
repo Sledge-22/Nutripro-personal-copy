@@ -63,6 +63,7 @@ import {
   updateCommunityComment,
 } from "../services/communityService.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+import { buildUserFacingError, extractErrorDetails } from "../utils/errorDisplay.js";
 
 function getPathname() {
   return window.location.pathname || ROUTES.home;
@@ -75,12 +76,7 @@ function navigateTo(pathname, replace = false) {
 }
 
 function formatSupabaseError(error, fallbackMessage) {
-  if (!error) return fallbackMessage;
-  if (typeof error === "string") return error;
-
-  const parts = [error.message, error.details, error.hint].filter(Boolean);
-  if (error.code) parts.push(`Code: ${error.code}`);
-  return parts.length ? parts.join(" ") : fallbackMessage;
+  return buildUserFacingError(error, fallbackMessage);
 }
 
 function isValidUuid(value) {
@@ -124,6 +120,119 @@ function normalizeStatusKey(value) {
 function normalizeCourseStatusKey(value) {
   const normalizedStatus = `${value ?? ""}`.trim().toLowerCase();
   return ["draft", "published", "archived"].includes(normalizedStatus) ? normalizedStatus : "draft";
+}
+
+function normalizeClassAuditSnapshot(courseClasses = []) {
+  return Array.isArray(courseClasses)
+    ? courseClasses
+        .map((courseClass) => ({
+          id: `${courseClass?.id ?? courseClass?.clientId ?? ""}`.trim(),
+          title: `${courseClass?.title ?? ""}`.trim(),
+          description: `${courseClass?.description ?? ""}`.trim(),
+          sortOrder: Number(courseClass?.sortOrder ?? courseClass?.sort_order ?? 0) || 0,
+          status: normalizeCourseStatusKey(courseClass?.status),
+        }))
+        .filter((courseClass) => courseClass.id)
+    : [];
+}
+
+function recordCourseClassAuditLogs({ adminUser, existingCourse, savedCourse }) {
+  const previousClasses = normalizeClassAuditSnapshot(existingCourse?.classes);
+  const nextClasses = normalizeClassAuditSnapshot(savedCourse?.classes);
+
+  const previousById = new Map(previousClasses.map((courseClass) => [courseClass.id, courseClass]));
+  const nextById = new Map(nextClasses.map((courseClass) => [courseClass.id, courseClass]));
+
+  nextClasses.forEach((courseClass) => {
+    const previousClass = previousById.get(courseClass.id);
+    if (!previousClass) {
+      void recordAdminAuditLog({
+        adminUser,
+        action: "class_created",
+        targetType: "class",
+        targetId: courseClass.id,
+        details: {
+          course_id: savedCourse?.id ?? existingCourse?.id ?? "",
+          course_title: savedCourse?.title ?? existingCourse?.title ?? "",
+          class_title: courseClass.title,
+          status: courseClass.status,
+          sort_order: courseClass.sortOrder,
+        },
+      });
+      return;
+    }
+
+    const titleChanged = previousClass.title !== courseClass.title;
+    const descriptionChanged = previousClass.description !== courseClass.description;
+    const sortOrderChanged = previousClass.sortOrder !== courseClass.sortOrder;
+    const statusChanged = previousClass.status !== courseClass.status;
+
+    if (sortOrderChanged) {
+      void recordAdminAuditLog({
+        adminUser,
+        action: "class_reordered",
+        targetType: "class",
+        targetId: courseClass.id,
+        details: {
+          course_id: savedCourse?.id ?? existingCourse?.id ?? "",
+          course_title: savedCourse?.title ?? existingCourse?.title ?? "",
+          class_title: courseClass.title,
+          previous_sort_order: previousClass.sortOrder,
+          new_sort_order: courseClass.sortOrder,
+        },
+      });
+    }
+
+    if (statusChanged && courseClass.status === "archived") {
+      void recordAdminAuditLog({
+        adminUser,
+        action: "class_archived",
+        targetType: "class",
+        targetId: courseClass.id,
+        details: {
+          course_id: savedCourse?.id ?? existingCourse?.id ?? "",
+          course_title: savedCourse?.title ?? existingCourse?.title ?? "",
+          class_title: courseClass.title,
+          previous_status: previousClass.status,
+          new_status: courseClass.status,
+        },
+      });
+      return;
+    }
+
+    if (titleChanged || descriptionChanged || statusChanged) {
+      void recordAdminAuditLog({
+        adminUser,
+        action: "class_updated",
+        targetType: "class",
+        targetId: courseClass.id,
+        details: {
+          course_id: savedCourse?.id ?? existingCourse?.id ?? "",
+          course_title: savedCourse?.title ?? existingCourse?.title ?? "",
+          previous_title: previousClass.title,
+          new_title: courseClass.title,
+          previous_status: previousClass.status,
+          new_status: courseClass.status,
+        },
+      });
+    }
+  });
+
+  previousClasses.forEach((courseClass) => {
+    if (nextById.has(courseClass.id)) return;
+    void recordAdminAuditLog({
+      adminUser,
+      action: "class_deleted",
+      targetType: "class",
+      targetId: courseClass.id,
+      details: {
+        course_id: savedCourse?.id ?? existingCourse?.id ?? "",
+        course_title: savedCourse?.title ?? existingCourse?.title ?? "",
+        class_title: courseClass.title,
+        previous_status: courseClass.status,
+      },
+    });
+  });
 }
 
 function pathMatchesRole(pathname, role) {
@@ -278,7 +387,13 @@ export function App() {
       setProgressState(nextProgressResult.status === "fulfilled" ? nextProgressResult.value : initialStudentProgress);
       setStudentCoursesError(
         nextStudentCoursesResult.status === "rejected"
-          ? `${language === "es" ? "No se pudieron cargar tus inscripciones de cursos" : "Unable to load your course enrollments"}: ${formatSupabaseError(nextStudentCoursesResult.reason, "Unknown error")}`
+          ? buildUserFacingError(
+              nextStudentCoursesResult.reason,
+              language === "es" ? "No se pudieron cargar tus inscripciones de cursos." : "Unable to load your course enrollments.",
+              {
+                setupMessage: t("auth.databaseSetupRequired"),
+              },
+            )
           : "",
       );
 
@@ -305,7 +420,11 @@ export function App() {
       }
     } catch (error) {
       console.error("Loading the authenticated Nutripro workspace failed:", error);
-      setLoginError(formatSupabaseError(error, t("auth.loadingProfileFailed")));
+      setLoginError(
+        buildUserFacingError(error, t("auth.loadingProfileFailed"), {
+          setupMessage: t("auth.databaseSetupRequired"),
+        }),
+      );
       setCurrentUser(null);
       setAuthSession(null);
       void signOut().catch((signOutError) => {
@@ -336,7 +455,13 @@ export function App() {
     } else {
       console.error("Refreshing student courses failed:", ownedCoursesResult.reason);
       setStudentCoursesError(
-        `${language === "es" ? "No se pudieron cargar tus inscripciones de cursos" : "Unable to load your course enrollments"}: ${formatSupabaseError(ownedCoursesResult.reason, "Unknown error")}`,
+        buildUserFacingError(
+          ownedCoursesResult.reason,
+          language === "es" ? "No se pudieron cargar tus inscripciones de cursos." : "Unable to load your course enrollments.",
+          {
+            setupMessage: t("auth.databaseSetupRequired"),
+          },
+        ),
       );
     }
   }
@@ -762,13 +887,23 @@ export function App() {
         });
       }
 
+      recordCourseClassAuditLogs({
+        adminUser: currentUser,
+        existingCourse,
+        savedCourse,
+      });
+
       void refreshCourses().catch((refreshError) => {
         console.error("Refreshing courses after save failed:", refreshError);
       });
       return { ok: true };
     } catch (error) {
       console.error("Saving course failed:", error);
-      return { ok: false, error: formatSupabaseError(error, t("admin.savingCourseFailed")) };
+      return {
+        ok: false,
+        error: buildUserFacingError(error, t("admin.savingCourseFailed")),
+        errorDetails: extractErrorDetails(error),
+      };
     }
   }
 
@@ -820,7 +955,8 @@ export function App() {
       console.error("Saving student course assignments failed:", error);
       return {
         ok: false,
-        error: formatSupabaseError(error, t("admin.savingAssignmentsFailed")),
+        error: buildUserFacingError(error, t("admin.savingAssignmentsFailed")),
+        errorDetails: extractErrorDetails(error),
       };
     }
   }
@@ -917,7 +1053,7 @@ export function App() {
       return { ok: true, profile: savedProfile };
     } catch (error) {
       console.error("Updating the student profile failed:", error);
-      return { ok: false, error: formatSupabaseError(error, t("student.savingProfileFailed")) };
+      return { ok: false, error: buildUserFacingError(error, t("student.savingProfileFailed")) };
     }
   }
   async function handleUpdateProgress(updates) {

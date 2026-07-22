@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
+import { deleteCourseClassesByIds, getClassesByCourse, syncClassesForCourse } from "./courseClassService.js";
 import { setCourseStudentAssignments } from "./enrollmentService.js";
 import { cloneMockValue, createMockId, getMockCourses, setMockCourses } from "./mockStore.js";
 import { getModulesByCourse, replaceModulesForCourse } from "./moduleService.js";
@@ -35,6 +36,8 @@ function normalizeOwners(owners = []) {
 function normalizeModules(modules = []) {
   return modules.map((module, index) => ({
     id: module.id ?? Date.now() + index,
+    classId: module.class_id ?? module.classId ?? "",
+    class_id: module.class_id ?? module.classId ?? "",
     sortOrder: module.sortOrder ?? index + 1,
     title: module.title ?? "",
     description: module.description ?? "",
@@ -187,7 +190,74 @@ function normalizeModules(modules = []) {
   }));
 }
 
-function normalizeCourse(row, owners = [], modules = []) {
+function normalizeClassStatus(status) {
+  if (status === "draft" || status === "published" || status === "archived") return status;
+  return "draft";
+}
+
+function buildGeneralClass(courseId, modules = []) {
+  return {
+    id: `general-${courseId || "course"}`,
+    courseId: courseId,
+    course_id: courseId,
+    title: "General",
+    description: "",
+    sortOrder: 9999,
+    sort_order: 9999,
+    status: "published",
+    modules,
+    isFallback: true,
+  };
+}
+
+function normalizeClasses(classes = [], courseId, modules = []) {
+  const mappedClasses = (Array.isArray(classes) ? classes : []).map((entry, index) => ({
+    id: entry.id,
+    courseId: entry.course_id ?? entry.courseId ?? courseId,
+    course_id: entry.course_id ?? entry.courseId ?? courseId,
+    title: entry.title ?? "",
+    description: entry.description ?? "",
+    sortOrder: entry.sort_order ?? entry.sortOrder ?? index + 1,
+    sort_order: entry.sort_order ?? entry.sortOrder ?? index + 1,
+    status: normalizeClassStatus(entry.status),
+  }));
+
+  const modulesByClass = new Map();
+  const unclassedModules = [];
+
+  (modules ?? []).forEach((module) => {
+    const classId = module.class_id ?? module.classId ?? "";
+    if (!classId) {
+      unclassedModules.push(module);
+      return;
+    }
+
+    const list = modulesByClass.get(String(classId)) ?? [];
+    list.push(module);
+    modulesByClass.set(String(classId), list);
+  });
+
+  const normalized = mappedClasses.map((courseClass) => ({
+    ...courseClass,
+    modules: (modulesByClass.get(String(courseClass.id)) ?? []).sort(
+      (left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0),
+    ),
+  }));
+
+  if (unclassedModules.length) {
+    normalized.push(buildGeneralClass(courseId, unclassedModules));
+  }
+
+  if (!normalized.length && modules.length) {
+    return [buildGeneralClass(courseId, modules)];
+  }
+
+  return normalized.sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0));
+}
+
+function normalizeCourse(row, owners = [], modules = [], classes = []) {
+  const normalizedModules = Array.isArray(modules) ? modules : [];
+  const normalizedClasses = normalizeClasses(classes, row.id, normalizedModules);
   return {
     id: row.id,
     title: row.title ?? "",
@@ -198,7 +268,8 @@ function normalizeCourse(row, owners = [], modules = []) {
     imageStoragePath: row.image_storage_path ?? row.imageStoragePath ?? "",
     image_storage_path: row.image_storage_path ?? row.imageStoragePath ?? "",
     owners,
-    modules: Array.isArray(modules) ? modules : [],
+    classes: normalizedClasses,
+    modules: normalizedModules,
   };
 }
 
@@ -225,7 +296,8 @@ async function attachRelations(courses = []) {
 
   for (const course of courses) {
     const modules = await getModulesByCourse(course.id);
-    enriched.push(normalizeCourse(course, ownersForCourse(course.id, enrollments), modules));
+    const classes = await getClassesByCourse(course.id);
+    enriched.push(normalizeCourse(course, ownersForCourse(course.id, enrollments), modules, classes));
   }
 
   return enriched;
@@ -245,6 +317,34 @@ function buildCourseRow(course) {
     image_url: course.image_url ?? course.imageUrl ?? null,
     image_storage_path: course.image_storage_path ?? course.imageStoragePath ?? null,
   };
+}
+
+function normalizeCourseClassesInput(course, modules = []) {
+  if (Array.isArray(course?.classes) && course.classes.length) {
+    return course.classes.map((entry, index) => ({
+      id: entry.id ?? null,
+      title: `${entry.title ?? ""}`.trim() || "General",
+      description: `${entry.description ?? ""}`.trim(),
+      sortOrder: entry.sortOrder ?? entry.sort_order ?? index + 1,
+      sort_order: entry.sortOrder ?? entry.sort_order ?? index + 1,
+      status: normalizeClassStatus(entry.status),
+    }));
+  }
+
+  if (modules.length) {
+    return [
+      {
+        id: null,
+        title: "General",
+        description: "",
+        sortOrder: 1,
+        sort_order: 1,
+        status: "published",
+      },
+    ];
+  }
+
+  return [];
 }
 
 async function runCourseMutationWithFallback(operation, payload, attempt = 0) {
@@ -288,6 +388,7 @@ export async function createCourse(course, options = {}) {
     status,
     owners: normalizeOwners(course.owners),
     modules: normalizeModules(course.modules),
+    classes: normalizeCourseClassesInput(course, normalizeModules(course.modules)),
   };
 
   if (!isSupabaseConfigured) {
@@ -297,7 +398,8 @@ export async function createCourse(course, options = {}) {
     return created;
   }
 
-  const { owners, modules, ...courseRow } = payload;
+  const { owners, modules, classes, ...courseRow } = payload;
+  console.log("Course classes right before create:", classes);
   console.log("Course modules right before create:", modules);
   const data = await runCourseMutationWithFallback(
     (nextPayload) => supabase.from("courses").insert(nextPayload).select("*").single(),
@@ -305,9 +407,18 @@ export async function createCourse(course, options = {}) {
   );
   console.log("Created course response:", data);
 
+  const { savedClasses } = await syncClassesForCourse(data.id, classes);
+  const classIdMap = new Map(savedClasses.map((courseClass) => [String(courseClass.clientId ?? ""), courseClass.id]));
+  const firstSavedClassId = savedClasses[0]?.id ?? null;
+  const nextModules = modules.map((module) => ({
+    ...module,
+    classId: classIdMap.get(String(module.class_id ?? module.classId ?? "")) ?? module.class_id ?? module.classId ?? firstSavedClassId,
+    class_id: classIdMap.get(String(module.class_id ?? module.classId ?? "")) ?? module.class_id ?? module.classId ?? firstSavedClassId,
+  }));
+
   let savedModules = [];
   try {
-    savedModules = await replaceModulesForCourse(data.id, modules, { onProgress: options.onProgress });
+    savedModules = await replaceModulesForCourse(data.id, nextModules, { onProgress: options.onProgress });
   } catch (moduleError) {
     console.error("Module insert error:", moduleError);
     throw moduleError;
@@ -321,7 +432,7 @@ export async function createCourse(course, options = {}) {
     throw enrollmentError;
   }
 
-  return normalizeCourse(data, owners, savedModules);
+  return normalizeCourse(data, owners, savedModules, savedClasses);
 }
 
 export async function updateCourse(courseId, updates, options = {}) {
@@ -331,6 +442,7 @@ export async function updateCourse(courseId, updates, options = {}) {
     status,
     owners: normalizeOwners(updates.owners),
     modules: normalizeModules(updates.modules),
+    classes: normalizeCourseClassesInput(updates, normalizeModules(updates.modules)),
   };
 
   if (!isSupabaseConfigured) {
@@ -340,7 +452,8 @@ export async function updateCourse(courseId, updates, options = {}) {
     return nextCourses.find((course) => String(course.id) === String(courseId)) ?? null;
   }
 
-  const { owners, modules, ...courseRow } = payload;
+  const { owners, modules, classes, ...courseRow } = payload;
+  console.log("Course classes right before update:", classes);
   console.log("Course modules right before update:", modules);
   const data = await runCourseMutationWithFallback(
     (nextPayload) =>
@@ -349,12 +462,25 @@ export async function updateCourse(courseId, updates, options = {}) {
   );
   console.log("Updated course response:", data);
 
+  const { savedClasses, removedClassIds } = await syncClassesForCourse(courseId, classes);
+  const classIdMap = new Map(savedClasses.map((courseClass) => [String(courseClass.clientId ?? ""), courseClass.id]));
+  const firstSavedClassId = savedClasses[0]?.id ?? null;
+  const nextModules = modules.map((module) => ({
+    ...module,
+    classId: classIdMap.get(String(module.class_id ?? module.classId ?? "")) ?? module.class_id ?? module.classId ?? firstSavedClassId,
+    class_id: classIdMap.get(String(module.class_id ?? module.classId ?? "")) ?? module.class_id ?? module.classId ?? firstSavedClassId,
+  }));
+
   let savedModules = [];
   try {
-    savedModules = await replaceModulesForCourse(courseId, modules, { onProgress: options.onProgress });
+    savedModules = await replaceModulesForCourse(courseId, nextModules, { onProgress: options.onProgress });
   } catch (moduleError) {
     console.error("Module insert error:", moduleError);
     throw moduleError;
+  }
+
+  if (removedClassIds.length) {
+    await deleteCourseClassesByIds(removedClassIds);
   }
 
   try {
@@ -365,7 +491,7 @@ export async function updateCourse(courseId, updates, options = {}) {
     throw enrollmentError;
   }
 
-  return normalizeCourse(data, owners, savedModules);
+  return normalizeCourse(data, owners, savedModules, savedClasses);
 }
 
 export async function deleteCourse(courseId) {
@@ -384,6 +510,12 @@ export async function deleteCourse(courseId) {
   if (moduleDeleteError) {
     console.error("Failed to delete modules in Supabase:", moduleDeleteError);
     throw moduleDeleteError;
+  }
+
+  const { error: classDeleteError } = await supabase.from("course_classes").delete().eq("course_id", courseId);
+  if (classDeleteError) {
+    console.error("Failed to delete course classes in Supabase:", classDeleteError);
+    throw classDeleteError;
   }
 
   const { error } = await supabase.from("courses").delete().eq("id", courseId);
@@ -449,7 +581,8 @@ export async function getStudentCourses(studentId) {
   const result = [];
   for (const course of courseRows ?? []) {
     const modules = await getModulesByCourse(course.id);
-    result.push(normalizeCourse(course, ownersForCourse(course.id, allEnrollments), modules));
+    const classes = await getClassesByCourse(course.id);
+    result.push(normalizeCourse(course, ownersForCourse(course.id, allEnrollments), modules, classes));
   }
   return result;
 }
@@ -549,7 +682,8 @@ export async function getStudentCourseAccess(studentId, courseId) {
   }
 
   const modules = await getModulesByCourse(courseRow.id);
-  const normalizedCourse = normalizeCourse(courseRow, [studentId], modules);
+  const classes = await getClassesByCourse(courseRow.id);
+  const normalizedCourse = normalizeCourse(courseRow, [studentId], modules, classes);
 
   if (normalizeCourseStatus(courseRow.status) !== "published") {
     console.error("Student course access failed because the selected course is not published:", courseRow.status);
@@ -601,8 +735,9 @@ export async function updateCourseStatus(courseId, status) {
   console.log("Updated course status response:", data);
 
   const modules = await getModulesByCourse(courseId);
+  const classes = await getClassesByCourse(courseId);
   const enrollments = await fetchEnrollmentRows();
-  return normalizeCourse(data, ownersForCourse(courseId, enrollments), modules);
+  return normalizeCourse(data, ownersForCourse(courseId, enrollments), modules, classes);
 }
 
 export async function publishCourse(courseId) {
@@ -612,4 +747,3 @@ export async function publishCourse(courseId) {
 export async function unpublishCourse(courseId) {
   return updateCourseStatus(courseId, "draft");
 }
-

@@ -12,6 +12,7 @@ const OPTIONAL_MODULE_COLUMNS = [
 const MODULE_SELECT_COLUMNS = [
   "id",
   "course_id",
+  "class_id",
   "sort_order",
   "title",
   "description",
@@ -89,6 +90,8 @@ function mapModuleRow(module) {
   return {
     id: module.id,
     courseId: module.course_id ?? module.courseId,
+    classId: module.class_id ?? module.classId ?? "",
+    class_id: module.class_id ?? module.classId ?? "",
     sortOrder: module.sort_order ?? module.sortOrder ?? 0,
     title: module.title ?? "",
     description: module.description ?? "",
@@ -177,6 +180,7 @@ function toModuleRow(courseId, module, index, allowOptionalColumns = true) {
 
   const row = {
     course_id: courseId,
+    class_id: module.class_id ?? module.classId ?? null,
     title: module.title ?? "",
     description: module.description ?? "",
     sort_order: module.sortOrder ?? index,
@@ -250,6 +254,7 @@ export async function getModulesByCourse(courseId) {
       .from("modules")
       .select(MODULE_SELECT_COLUMNS)
       .eq("course_id", selectedCourseId)
+      .order("class_id", { ascending: true, nullsFirst: true })
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true });
 

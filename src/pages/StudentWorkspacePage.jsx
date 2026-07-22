@@ -11,6 +11,7 @@ import { uploadAssignmentFile, uploadProfilePicture } from "../services/storageS
 import { normalizeCountrySelection } from "../data/countries.js";
 import { getProfileCountryOptions } from "../data/profileCountries.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+import { buildUserFacingError } from "../utils/errorDisplay.js";
 import {
   getEmbeddablePdfUrl,
   getEmbeddableVideoUrl,
@@ -27,6 +28,25 @@ function goTo(pathname) {
 
 function getCourseModules(course) {
   return Array.isArray(course?.modules) ? course.modules : [];
+}
+
+function getCourseClasses(course) {
+  const classes = Array.isArray(course?.classes) ? course.classes : [];
+  const modules = getCourseModules(course);
+
+  if (classes.length) return classes;
+  if (!modules.length) return [];
+
+  return [
+    {
+      id: `general-${course?.id || "course"}`,
+      title: "General",
+      description: "",
+      sortOrder: 1,
+      modules,
+      isFallback: true,
+    },
+  ];
 }
 
 function firstFilledValue(...values) {
@@ -448,7 +468,7 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
       setMessage(result?.message || t("student.profileSaved"));
     } catch (saveError) {
       console.error("Saving student profile failed:", saveError);
-      setError(saveError.message || t("student.savingProfileFailed"));
+      setError(buildUserFacingError(saveError, t("student.savingProfileFailed")));
     } finally {
       setSaving(false);
     }
@@ -470,7 +490,7 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
       setMessage(t("student.profilePictureReady"));
     } catch (uploadError) {
       console.error("Uploading the student profile picture failed:", uploadError);
-      setError(uploadError.message || t("student.profilePictureUploadFailed"));
+      setError(buildUserFacingError(uploadError, t("student.profilePictureUploadFailed")));
     } finally {
       setUploading(false);
     }
@@ -505,7 +525,7 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
       setPasswordMessage(t("auth.passwordUpdated"));
     } catch (changeError) {
       console.error("Changing the profile password failed:", changeError);
-      setPasswordError(changeError.message || t("auth.passwordChangeFailed"));
+      setPasswordError(buildUserFacingError(changeError, t("auth.passwordChangeFailed")));
     } finally {
       setPasswordSaving(false);
     }
@@ -647,12 +667,13 @@ function OwnedCoursesPage({ courses, progressFor, studentCoursesError = "" }) {
         {courses.map((course, index) => {
           const progress = progressFor(course);
           const modules = getCourseModules(course);
+          const classes = getCourseClasses(course);
 
           return (
             <article className="owned-card" key={course.id}>
               <CourseCover course={course} index={index} />
               <div className="owned-body">
-                <span className="eyebrow">{t("dashboard.modulesCount", { count: modules.length })}</span>
+                <span className="eyebrow">{`${classes.length} ${t("common.classes").toLowerCase()} · ${modules.length} ${t("common.modules").toLowerCase()}`}</span>
                 <h3>{course.title}</h3>
                 <p>{course.description}</p>
                 <div className="progress-label">
@@ -681,6 +702,7 @@ function OwnedCoursesPage({ courses, progressFor, studentCoursesError = "" }) {
 function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, progress }) {
   const { t, language, translateSubmissionType } = useLanguage();
   const modules = getCourseModules(course);
+  const courseClasses = getCourseClasses(course);
   const [activeModuleId, setActiveModuleId] = useState(modules[0]?.id || null);
   const [viewError, setViewError] = useState("");
   const [assignmentState, setAssignmentState] = useState({
@@ -761,7 +783,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
         if (!cancelled) {
           setAssignmentState({
             loading: false,
-            error: error.message || "Loading the assignment submission failed.",
+            error: buildUserFacingError(error, t("common.loadingSubmissions")),
             submission: null,
             selectedFile: null,
             selectedFileName: "",
@@ -841,9 +863,9 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const moduleDone = activeModule ? completed[`module-${activeModule.id}`] : false;
   const pdfAvailable = Boolean(pdfSource);
   const videoAvailable = Boolean(videoSource);
-  const pdfRequirementMet = !hasPdfRequirement || pdfAvailable;
-  const videoRequirementMet = !hasVideoRequirement || videoAvailable;
-  const assignmentRequirementMet = !hasAssignmentRequirement || hasSubmission;
+  const pdfRequirementMet = !hasPdfRequirement || (pdfAvailable && pdfSeen);
+  const videoRequirementMet = !hasVideoRequirement || (videoAvailable && videoSeen);
+  const assignmentRequirementMet = !hasAssignmentRequirement || assignmentApprovedForCompletion;
   const canComplete = pdfRequirementMet && videoRequirementMet && assignmentRequirementMet;
 
   const markSeen = (key) => {
@@ -858,7 +880,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const handleAssignmentSubmit = async () => {
     if (!activeAssignment?.id || !studentId) return;
 
-    if (hasSubmission) {
+    if (assignmentStatus === "approved") {
       setAssignmentState((current) => ({
         ...current,
         submitError: t("common.resubmissionNotAllowed"),
@@ -922,7 +944,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
       setAssignmentState((current) => ({
         ...current,
         uploading: false,
-        submitError: error.message || t("errors.submittingAssignmentFailed"),
+        submitError: buildUserFacingError(error, t("errors.submittingAssignmentFailed")),
         submitMessage: "",
       }));
     }
@@ -957,12 +979,18 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     );
   }
 
-  const isAssignmentLocked = hasSubmission;
+  const isAssignmentLocked = assignmentStatus === "approved";
   const assignmentButtonLabel = assignmentState.uploading
     ? t("common.submitting")
     : !hasSubmission
       ? t("common.submitAssignment")
-      : assignmentStatus === "approved" ? t("common.assignmentApprovedButton") : t("common.assignmentAlreadySubmitted");
+      : assignmentStatus === "needs_revision"
+        ? t("common.resubmitAssignment")
+        : assignmentStatus === "rejected"
+          ? t("common.resubmitAssignment")
+          : assignmentStatus === "approved"
+            ? t("common.assignmentApprovedButton")
+            : t("common.updateSubmission");
 
   return (
     <>
@@ -987,27 +1015,36 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
         <aside className="module-list">
           <div className="module-title">
             <span className="eyebrow">{t("common.courseModules")}</span>
-            <h3>{t("dashboard.modulesCount", { count: modules.length }).toLowerCase()}</h3>
+            <h3>{`${courseClasses.length} ${t("common.classes").toLowerCase()} · ${modules.length} ${t("common.modules").toLowerCase()}`}</h3>
           </div>
 
-          {modules.map((module, index) => (
-            <div className="module" key={module.id}>
-              <button
-                className={activeModule?.id === module.id ? "active" : ""}
-                onClick={() => {
-                  setActiveModuleId(module.id);
-                  setViewError("");
-                }}
-              >
-                <span className={`lesson-icon ${completed[`module-${module.id}`] ? "done" : ""}`}>
-                  {completed[`module-${module.id}`] ? <Icon name="check" size={14} /> : <span>{index + 1}</span>}
-                </span>
-                <span>
-                  <strong>{module.title}</strong>
-                  <small>{module.description}</small>
-                </span>
-                <Icon name="chevron" size={16} />
-              </button>
+          {courseClasses.map((courseClass) => (
+            <div key={courseClass.id} className="module-class-group">
+              <div className="module-title">
+                <span className="eyebrow">{t("common.class")}</span>
+                <h4>{courseClass.title}</h4>
+                {courseClass.description ? <p>{courseClass.description}</p> : null}
+              </div>
+              {(courseClass.modules || []).map((module, index) => (
+                <div className="module" key={module.id}>
+                  <button
+                    className={activeModule?.id === module.id ? "active" : ""}
+                    onClick={() => {
+                      setActiveModuleId(module.id);
+                      setViewError("");
+                    }}
+                  >
+                    <span className={`lesson-icon ${completed[`module-${module.id}`] ? "done" : ""}`}>
+                      {completed[`module-${module.id}`] ? <Icon name="check" size={14} /> : <span>{index + 1}</span>}
+                    </span>
+                    <span>
+                      <strong>{module.title}</strong>
+                      <small>{module.description}</small>
+                    </span>
+                    <Icon name="chevron" size={16} />
+                  </button>
+                </div>
+              ))}
             </div>
           ))}
         </aside>
@@ -1232,7 +1269,17 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                 </p>
               </div>
 
-              {assignmentState.submission ? <small className="field-note">{t("common.assignmentLockedAfterSubmit")}</small> : null}
+              {assignmentState.submission ? (
+                <small className="field-note">
+                  {assignmentStatus === "approved"
+                    ? t("common.assignmentApprovedHelp")
+                    : assignmentStatus === "needs_revision"
+                      ? t("common.assignmentNeedsRevisionHelp")
+                      : assignmentStatus === "rejected"
+                        ? t("common.assignmentRejectedHelp")
+                        : t("common.assignmentSubmittedHelp")}
+                </small>
+              ) : null}
 
               <div className="form-actions compact">
                 <button
@@ -1250,10 +1297,10 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
           <div className="progress-steps">
             <span className={pdfRequirementMet ? "subtle-badge" : "count-badge"}>
-              {!hasPdfRequirement ? t("common.noPdfRequired") : pdfAvailable ? t("common.pdfAvailable") : t("common.pdfPending")}
+              {!hasPdfRequirement ? t("common.noPdfRequired") : pdfRequirementMet ? t("common.pdfViewed") : t("common.pdfPending")}
             </span>
             <span className={videoRequirementMet ? "subtle-badge" : "count-badge"}>
-              {!hasVideoRequirement ? t("common.noVideoRequired") : videoAvailable ? t("common.videoAvailable") : t("common.videoPending")}
+              {!hasVideoRequirement ? t("common.noVideoRequired") : videoRequirementMet ? t("common.videoViewed") : t("common.videoPending")}
             </span>
             {hasAssignmentRequirement ? (
               <span className={assignmentRequirementMet ? "subtle-badge" : "count-badge"}>
