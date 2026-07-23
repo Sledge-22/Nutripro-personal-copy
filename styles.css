@@ -412,6 +412,26 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
 .builder-header, .nested-header, .module-editor-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .builder-actions { justify-content: flex-end; }
 .builder-header h3, .module-editor-head h4, .nested-header h5, .preview-shell h3 { margin: 6px 0 0; font-size: 18px; }
+.class-builder-fields {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.class-builder-fields-collapsed {
+  display: grid;
+  gap: 8px;
+}
+.class-builder-fields-collapsed h4 {
+  margin: 0;
+  color: var(--color-text);
+  font: 700 1rem/1.25 var(--font-heading);
+}
+.class-card-summary {
+  gap: 8px;
+}
+.class-builder-body {
+  display: grid;
+  gap: 14px;
+}
 .module-generator-card {
   display: grid;
   gap: 14px;

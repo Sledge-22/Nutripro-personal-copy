@@ -4187,12 +4187,14 @@ function CourseBuilderPage({
   const [saveDetails, setSaveDetails] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [collapsedModuleIds, setCollapsedModuleIds] = useState([]);
+  const [collapsedClassIds, setCollapsedClassIds] = useState([]);
   const [studentAssignmentOpen, setStudentAssignmentOpen] = useState(true);
   const [studentSearch, setStudentSearch] = useState("");
 
   useEffect(() => {
     setForm(createCourseDraft(course));
     setCollapsedModuleIds([]);
+    setCollapsedClassIds([]);
     setSaveError("");
     setSaveDetails("");
     setSaveMessage("");
@@ -4252,6 +4254,7 @@ function CourseBuilderPage({
         ),
       ],
     }));
+    setCollapsedClassIds((current) => current.filter(Boolean));
   };
 
   const deleteClass = (classId) => {
@@ -4262,6 +4265,7 @@ function CourseBuilderPage({
         .map((entry, index) => ({ ...entry, sortOrder: index + 1, sort_order: index + 1 })),
       modules: (current.modules || []).filter((module) => String(module.class_id || module.classId || "") !== String(classId)),
     }));
+    setCollapsedClassIds((current) => current.filter((id) => id !== classId));
   };
 
   const addModule = (classId) => {
@@ -4281,6 +4285,7 @@ function CourseBuilderPage({
         },
       ],
     }));
+    setCollapsedClassIds((current) => current.filter((id) => id !== classId));
   };
 
   const deleteModule = (moduleId) => {
@@ -4299,6 +4304,22 @@ function CourseBuilderPage({
         ? current.filter((id) => id !== moduleId)
         : [...current, moduleId]
     ));
+  };
+
+  const toggleClassCollapsed = (classId) => {
+    setCollapsedClassIds((current) => (
+      current.includes(classId)
+        ? current.filter((id) => id !== classId)
+        : [...current, classId]
+    ));
+  };
+
+  const collapseAllClasses = () => {
+    setCollapsedClassIds((form.classes || []).map((entry) => entry.id));
+  };
+
+  const expandAllClasses = () => {
+    setCollapsedClassIds([]);
   };
 
   const toggleAssignedStudent = (studentId) => {
@@ -4546,10 +4567,18 @@ function CourseBuilderPage({
             <span className="eyebrow">{t("admin.classesInThisCourse")}</span>
             <h3>{t("admin.classesInThisCourse")}</h3>
           </div>
-          <button type="button" className="secondary-btn" onClick={addClass}>
-            <Icon name="plus" />
-            {t("admin.addClass")}
-          </button>
+          <div className="row-actions wrap-actions builder-actions">
+            <button type="button" className="secondary-btn" onClick={collapseAllClasses}>
+              {t("admin.collapseAll")}
+            </button>
+            <button type="button" className="secondary-btn" onClick={expandAllClasses}>
+              {t("admin.expandAll")}
+            </button>
+            <button type="button" className="secondary-btn" onClick={addClass}>
+              <Icon name="plus" />
+              {t("admin.addClass")}
+            </button>
+          </div>
         </div>
 
         {!classesForRender.length ? (
@@ -4569,78 +4598,105 @@ function CourseBuilderPage({
         <div className="builder-stack">
           {classesForRender.map((courseClass) => {
             const classModules = getModulesForClass(courseClass.id);
+            const isCollapsed = collapsedClassIds.includes(courseClass.id);
             return (
               <section key={courseClass.id} className="section-card class-builder-card">
                 <div className="builder-header">
-                  <div className="class-builder-fields">
-                    <span className="eyebrow">{t("common.class")}</span>
-                    <input
-                      value={courseClass.title}
-                      onChange={(event) =>
-                        updateClass(courseClass.id, (currentClass) => ({
-                          ...currentClass,
-                          title: event.target.value,
-                        }))
-                      }
-                      placeholder={t("admin.classTitle")}
-                    />
-                    <textarea
-                      rows="2"
-                      value={courseClass.description}
-                      onChange={(event) =>
-                        updateClass(courseClass.id, (currentClass) => ({
-                          ...currentClass,
-                          description: event.target.value,
-                        }))
-                      }
-                      placeholder={t("admin.classDescription")}
-                    />
-                    <select
-                      value={courseClass.status || "published"}
-                      onChange={(event) =>
-                        updateClass(courseClass.id, (currentClass) => ({
-                          ...currentClass,
-                          status: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="draft">{t("status.draft")}</option>
-                      <option value="published">{t("status.published")}</option>
-                      <option value="archived">{t("status.archived")}</option>
-                    </select>
-                  </div>
+                  {isCollapsed ? (
+                    <div className="class-builder-fields class-builder-fields-collapsed">
+                      <span className="eyebrow">{t("common.class")}</span>
+                      <h4>{courseClass.title || t("admin.classTitle")}</h4>
+                      <div className="row-actions wrap-actions class-card-summary">
+                        <Status status={courseClass.status || "published"} />
+                        <span className="subtle-badge">{t("common.modules")}: {classModules.length}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="class-builder-fields">
+                      <span className="eyebrow">{t("common.class")}</span>
+                      <input
+                        value={courseClass.title}
+                        onChange={(event) =>
+                          updateClass(courseClass.id, (currentClass) => ({
+                            ...currentClass,
+                            title: event.target.value,
+                          }))
+                        }
+                        placeholder={t("admin.classTitle")}
+                      />
+                      <textarea
+                        rows="2"
+                        value={courseClass.description}
+                        onChange={(event) =>
+                          updateClass(courseClass.id, (currentClass) => ({
+                            ...currentClass,
+                            description: event.target.value,
+                          }))
+                        }
+                        placeholder={t("admin.classDescription")}
+                      />
+                      <select
+                        value={courseClass.status || "published"}
+                        onChange={(event) =>
+                          updateClass(courseClass.id, (currentClass) => ({
+                            ...currentClass,
+                            status: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="draft">{t("status.draft")}</option>
+                        <option value="published">{t("status.published")}</option>
+                        <option value="archived">{t("status.archived")}</option>
+                      </select>
+                    </div>
+                  )}
                   <div className="row-actions wrap-actions builder-actions">
-                    <span className="subtle-badge">{t("common.modules")}: {classModules.length}</span>
-                    <button type="button" className="secondary-btn" onClick={() => addModule(courseClass.id)}>
-                      <Icon name="plus" />
-                      {t("admin.addModuleLesson")}
+                    {!isCollapsed ? <span className="subtle-badge">{t("common.modules")}: {classModules.length}</span> : null}
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={() => toggleClassCollapsed(courseClass.id)}
+                      aria-expanded={!isCollapsed}
+                      aria-controls={`class-body-${courseClass.id}`}
+                    >
+                      {isCollapsed ? t("common.expand") : t("common.minimize")}
                     </button>
+                    {!isCollapsed ? (
+                      <button type="button" className="secondary-btn" onClick={() => addModule(courseClass.id)}>
+                        <Icon name="plus" />
+                        {t("admin.addModuleLesson")}
+                      </button>
+                    ) : null}
                     <button type="button" className="secondary-btn danger-text" onClick={() => deleteClass(courseClass.id)}>
                       {t("common.delete")}
                     </button>
                   </div>
                 </div>
 
-                {classModules.length ? (
-                  classModules.map((module, index) => (
-                    <ModuleEditor
-                      key={module.id}
-                      module={module}
-                      index={index}
-                      t={t}
-                      collapsed={collapsedModuleIds.includes(module.id)}
-                      toggleCollapsed={toggleCollapsed}
-                      updateModule={updateModule}
-                      updateAssignment={updateAssignment}
-                      deleteModule={deleteModule}
-                      uploadImage={uploadImage}
-                      uploadPdf={uploadPdf}
-                      uploadVideo={uploadVideo}
-                    />
-                  ))
-                ) : (
-                  <p className="empty-copy">{t("admin.noModulesInClass")}</p>
-                )}
+                {!isCollapsed ? (
+                  <div id={`class-body-${courseClass.id}`} className="class-builder-body">
+                    {classModules.length ? (
+                      classModules.map((module, index) => (
+                        <ModuleEditor
+                          key={module.id}
+                          module={module}
+                          index={index}
+                          t={t}
+                          collapsed={collapsedModuleIds.includes(module.id)}
+                          toggleCollapsed={toggleCollapsed}
+                          updateModule={updateModule}
+                          updateAssignment={updateAssignment}
+                          deleteModule={deleteModule}
+                          uploadImage={uploadImage}
+                          uploadPdf={uploadPdf}
+                          uploadVideo={uploadVideo}
+                        />
+                      ))
+                    ) : (
+                      <p className="empty-copy">{t("admin.noModulesInClass")}</p>
+                    )}
+                  </div>
+                ) : null}
               </section>
             );
           })}
