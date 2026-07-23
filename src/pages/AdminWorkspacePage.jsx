@@ -3954,7 +3954,7 @@ function CourseManagerOverviewPage({ courses = [], studentOptions = [], onDelete
       </div>
 
       {courses.length ? (
-        <div className="course-admin-list course-manager-grid">
+        <div className="course-manager-grid">
           {courses.map((course) => {
             const classCount = Array.isArray(course.classes) ? course.classes.length : 0;
             const moduleCount = Array.isArray(course.modules) ? course.modules.length : 0;
@@ -3963,17 +3963,19 @@ function CourseManagerOverviewPage({ courses = [], studentOptions = [], onDelete
             return (
               <article key={course.id} className="course-manager-card">
                 {course.image_url || course.imageUrl ? (
-                  <div className="admin-course-thumb-wrap">
-                    <img className="admin-course-thumb" src={course.image_url || course.imageUrl} alt={course.title} />
-                  </div>
+                  <img
+                    className="course-manager-card-image"
+                    src={course.image_url || course.imageUrl}
+                    alt={course.title}
+                  />
                 ) : null}
-                <div className="course-info course-card-body">
-                  <div className="row-actions course-card-header">
+                <div className="course-manager-card-content">
+                  <div className="course-manager-card-header">
                     <h3>{course.title}</h3>
                     <Status status={course.status || "draft"} />
                   </div>
-                  <p>{course.description || t("admin.courseDescription")}</p>
-                  <div className="row-actions wrap-actions course-card-meta">
+                  <p className="course-manager-card-description">{course.description || t("admin.courseDescription")}</p>
+                  <div className="course-manager-card-meta">
                     <span className="subtle-badge">{t("common.classes")}: {classCount}</span>
                     <span className="subtle-badge">{t("common.modules")}: {moduleCount}</span>
                     <span className="subtle-badge">{t("admin.studentsSelectedCount", { count: assignedCount })}</span>
@@ -3988,17 +3990,17 @@ function CourseManagerOverviewPage({ courses = [], studentOptions = [], onDelete
                         ))}
                     </div>
                   ) : null}
-                </div>
-                <div className="row-actions wrap-actions course-card-actions">
-                  <button type="button" className="primary-btn" onClick={() => navigateTo(ROUTES.admin.courseBuilder(course.id))}>
-                    {t("admin.openBuilder")}
-                  </button>
-                  <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.courseEdit(course.id))}>
-                    {t("common.edit")}
-                  </button>
-                  <button type="button" className="secondary-btn danger-text" onClick={() => void onDeleteCourse(course.id)}>
-                    {t("common.delete")}
-                  </button>
+                  <div className="course-manager-card-actions">
+                    <button type="button" className="primary-btn" onClick={() => navigateTo(ROUTES.admin.courseBuilder(course.id))}>
+                      {t("admin.openBuilder")}
+                    </button>
+                    <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.courseEdit(course.id))}>
+                      {t("common.edit")}
+                    </button>
+                    <button type="button" className="secondary-btn danger-text" onClick={() => void onDeleteCourse(course.id)}>
+                      {t("common.delete")}
+                    </button>
+                  </div>
                 </div>
               </article>
             );
