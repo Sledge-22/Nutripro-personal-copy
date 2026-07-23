@@ -15,6 +15,7 @@ const icons = {
   plus: <path d="M12 5v14M5 12h14" />,
   play: <path d="m9 7 8 5-8 5V7Z" />,
   check: <path d="m5 12 4 4L19 6" />,
+  lock: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
   chevron: <path d="m9 18 6-6-6-6" />,
   menu: <><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></>,
   close: <><path d="M6 6l12 12" /><path d="M18 6 6 18" /></>,

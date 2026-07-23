@@ -1087,13 +1087,16 @@ export function App() {
       const normalizedDetails = `${errorDetails}`.toLowerCase();
       const saveCourseMessage =
         normalizedDetails.includes("course_classes") &&
-        (normalizedDetails.includes("does not exist") || normalizedDetails.includes("relation"))
-          ? t("admin.courseClassesSetupRequired")
-          : normalizedDetails.includes("class_id") &&
-              normalizedDetails.includes("modules") &&
-              (normalizedDetails.includes("does not exist") || normalizedDetails.includes("column"))
-            ? t("admin.moduleClassLinkingRequired")
-            : buildUserFacingError(error, t("admin.savingCourseFailed"));
+        (normalizedDetails.includes("row-level security") || normalizedDetails.includes("rls"))
+          ? t("admin.courseClassesRlsRequired")
+          : normalizedDetails.includes("course_classes") &&
+              (normalizedDetails.includes("does not exist") || normalizedDetails.includes("relation"))
+            ? t("admin.courseClassesSetupRequired")
+            : normalizedDetails.includes("class_id") &&
+                normalizedDetails.includes("modules") &&
+                (normalizedDetails.includes("does not exist") || normalizedDetails.includes("column"))
+              ? t("admin.moduleClassLinkingRequired")
+              : buildUserFacingError(error, t("admin.savingCourseFailed"));
       return {
         ok: false,
         error: saveCourseMessage,
@@ -1263,7 +1266,10 @@ export function App() {
     const touchedModuleIds = Array.from(
       new Set(
         Object.keys(updates)
-          .map((key) => key.split("-")[1])
+          .map((key) => {
+            const separatorIndex = key.indexOf("-");
+            return separatorIndex >= 0 ? key.slice(separatorIndex + 1) : "";
+          })
           .filter(Boolean),
       ),
     );

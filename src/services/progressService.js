@@ -14,19 +14,22 @@ function mapRowsToProgress(rows) {
 
 function groupProgressUpdates(updates) {
   return Object.entries(updates).reduce((rows, [key, value]) => {
-    const [type, moduleIdValue] = key.split("-");
-    const moduleId = Number(moduleIdValue);
-    if (!moduleId || !["pdf", "video", "module"].includes(type)) return rows;
+    const separatorIndex = key.indexOf("-");
+    const type = separatorIndex >= 0 ? key.slice(0, separatorIndex) : "";
+    const moduleIdValue = separatorIndex >= 0 ? key.slice(separatorIndex + 1) : "";
+    const numericModuleId = Number(moduleIdValue);
+    const moduleId = Number.isNaN(numericModuleId) ? moduleIdValue : numericModuleId;
+    if (!moduleIdValue || !["pdf", "video", "module"].includes(type)) return rows;
 
-    if (!rows[moduleId]) {
-      rows[moduleId] = {
+    if (!rows[moduleIdValue]) {
+      rows[moduleIdValue] = {
         module_id: moduleId,
       };
     }
 
-    if (type === "pdf") rows[moduleId].pdf_completed = Boolean(value);
-    if (type === "video") rows[moduleId].video_completed = Boolean(value);
-    if (type === "module") rows[moduleId].module_completed = Boolean(value);
+    if (type === "pdf") rows[moduleIdValue].pdf_completed = Boolean(value);
+    if (type === "video") rows[moduleIdValue].video_completed = Boolean(value);
+    if (type === "module") rows[moduleIdValue].module_completed = Boolean(value);
     return rows;
   }, {});
 }

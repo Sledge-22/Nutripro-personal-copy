@@ -3938,47 +3938,49 @@ function CourseManagerOverviewPage({ courses = [], studentOptions = [], onDelete
   const { language, t } = useLanguage();
 
   return (
-    <section className="section-card">
-      <div className="section-heading">
+    <section className="np-course-manager-page">
+      <div className="np-course-manager-header">
         <div>
           <span className="eyebrow">{t("common.postCourses")}</span>
-          <h2>{t("admin.courseManager")}</h2>
+          <h1>{t("admin.courseManager")}</h1>
           <p>{language === "es"
             ? "Administra tus cursos y abre el constructor por curso para organizar clases y lecciones."
             : "Manage your courses and open the builder for each course to organize classes and lessons."}</p>
         </div>
-        <button type="button" className="primary-btn" onClick={() => navigateTo(ROUTES.admin.courseCreate)}>
+        <button type="button" className="np-course-manager-create" onClick={() => navigateTo(ROUTES.admin.courseCreate)}>
           <Icon name="plus" />
           {t("admin.createCourse")}
         </button>
       </div>
 
       {courses.length ? (
-        <div className="course-manager-grid">
+        <div className="np-course-grid-v2">
           {courses.map((course) => {
             const classCount = Array.isArray(course.classes) ? course.classes.length : 0;
             const moduleCount = Array.isArray(course.modules) ? course.modules.length : 0;
             const assignedCount = Array.isArray(course.owners) ? course.owners.length : 0;
 
             return (
-              <article key={course.id} className="course-manager-card">
+              <article key={course.id} className="np-course-card-v2">
                 {course.image_url || course.imageUrl ? (
                   <img
-                    className="course-manager-card-image"
+                    className="np-course-card-image-v2"
                     src={course.image_url || course.imageUrl}
                     alt={course.title}
                   />
                 ) : null}
-                <div className="course-manager-card-content">
-                  <div className="course-manager-card-header">
-                    <h3>{course.title}</h3>
-                    <Status status={course.status || "draft"} />
+                <div className="np-course-card-content-v2">
+                  <div className="np-course-card-top-v2">
+                    <h2 className="np-course-card-title-v2">{course.title}</h2>
+                    <div className="np-course-card-status-v2">
+                      <Status status={course.status || "draft"} />
+                    </div>
                   </div>
-                  <p className="course-manager-card-description">{course.description || t("admin.courseDescription")}</p>
-                  <div className="course-manager-card-meta">
-                    <span className="subtle-badge">{t("common.classes")}: {classCount}</span>
-                    <span className="subtle-badge">{t("common.modules")}: {moduleCount}</span>
-                    <span className="subtle-badge">{t("admin.studentsSelectedCount", { count: assignedCount })}</span>
+                  <p className="np-course-card-description-v2">{course.description || t("admin.courseDescription")}</p>
+                  <div className="np-course-card-meta-v2">
+                    <span>{t("common.classes")}: {classCount}</span>
+                    <span>{t("common.modules")}: {moduleCount}</span>
+                    <span>{t("admin.studentsSelectedCount", { count: assignedCount })}</span>
                   </div>
                   {assignedCount ? (
                     <div className="assigned-students-preview">
@@ -3990,14 +3992,14 @@ function CourseManagerOverviewPage({ courses = [], studentOptions = [], onDelete
                         ))}
                     </div>
                   ) : null}
-                  <div className="course-manager-card-actions">
-                    <button type="button" className="primary-btn" onClick={() => navigateTo(ROUTES.admin.courseBuilder(course.id))}>
+                  <div className="np-course-card-actions-v2">
+                    <button type="button" className="np-course-card-button-v2" onClick={() => navigateTo(ROUTES.admin.courseBuilder(course.id))}>
                       {t("admin.openBuilder")}
                     </button>
-                    <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.courseEdit(course.id))}>
+                    <button type="button" className="np-course-card-button-v2" onClick={() => navigateTo(ROUTES.admin.courseEdit(course.id))}>
                       {t("common.edit")}
                     </button>
-                    <button type="button" className="secondary-btn danger-text" onClick={() => void onDeleteCourse(course.id)}>
+                    <button type="button" className="np-course-card-button-v2 np-course-card-button-danger-v2" onClick={() => void onDeleteCourse(course.id)}>
                       {t("common.delete")}
                     </button>
                   </div>

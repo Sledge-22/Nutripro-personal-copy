@@ -20,6 +20,7 @@ import {
   isGoogleDriveUrl,
   isVimeoUrl,
 } from "../utils/mediaLinks.js";
+import { getSequentialLessonStates } from "../utils/sequentialLessonProgress.js";
 
 function goTo(pathname) {
   window.history.pushState({}, "", pathname);
@@ -34,7 +35,22 @@ function getCourseClasses(course) {
   const classes = Array.isArray(course?.classes) ? course.classes : [];
   const modules = getCourseModules(course);
 
-  if (classes.length) return classes;
+  if (classes.length) {
+    return [...classes]
+      .sort(
+        (left, right) =>
+          Number(left?.sort_order ?? left?.sortOrder ?? 0) -
+          Number(right?.sort_order ?? right?.sortOrder ?? 0),
+      )
+      .map((courseClass) => ({
+        ...courseClass,
+        modules: [...(courseClass.modules || [])].sort(
+          (left, right) =>
+            Number(left?.sort_order ?? left?.sortOrder ?? 0) -
+            Number(right?.sort_order ?? right?.sortOrder ?? 0),
+        ),
+      }));
+  }
   if (!modules.length) return [];
 
   return [
@@ -210,11 +226,22 @@ export function StudentWorkspacePage({
   const routeCourseId = isCourseDetailRoute ? `${pathname.split("/").pop() ?? ""}`.trim() : "";
 
   const progressFor = (course) => {
-    const modules = getCourseModules(course);
-    return modules.length
-      ? Math.round((modules.filter((module) => progressState[`module-${module.id}`]).length / modules.length) * 100)
+    const summary = getSequentialLessonStates({
+      classes: getCourseClasses(course),
+      modules: getCourseModules(course),
+      progress: progressState,
+    });
+    return summary.totalCount
+      ? Math.round((summary.completedCount / summary.totalCount) * 100)
       : 0;
   };
+
+  const lessonSummaryFor = (course) =>
+    getSequentialLessonStates({
+      classes: getCourseClasses(course),
+      modules: getCourseModules(course),
+      progress: progressState,
+    });
 
   useEffect(() => {
     if (!isCourseDetailRoute) return undefined;
@@ -354,13 +381,13 @@ export function StudentWorkspacePage({
   }
 
   if (pathname === ROUTES.student.courses) {
-    return <OwnedCoursesPage courses={ownedCourses} progressFor={progressFor} studentCoursesError={studentCoursesError} />;
+    return <OwnedCoursesPage courses={ownedCourses} progressFor={progressFor} lessonSummaryFor={lessonSummaryFor} studentCoursesError={studentCoursesError} />;
   }
 
-  return <StudentDashboardPage courses={ownedCourses} certificates={studentCertificates} progressFor={progressFor} studentCoursesError={studentCoursesError} />;
+  return <StudentDashboardPage courses={ownedCourses} certificates={studentCertificates} progressFor={progressFor} lessonSummaryFor={lessonSummaryFor} studentCoursesError={studentCoursesError} />;
 }
 
-function StudentDashboardPage({ courses, certificates, progressFor, studentCoursesError = "" }) {
+function StudentDashboardPage({ courses, certificates, progressFor, lessonSummaryFor, studentCoursesError = "" }) {
   const { t } = useLanguage();
   const average = courses.length
     ? Math.round(courses.reduce((sum, course) => sum + progressFor(course), 0) / courses.length)
@@ -383,14 +410,24 @@ function StudentDashboardPage({ courses, certificates, progressFor, studentCours
           </div>
         </div>
         <div className="mini-course-grid">
-          {courses.map((course, index) => (
-            <article key={course.id}>
-              <div className="course-index">{String(index + 1).padStart(2, "0")}</div>
-              <h3>{course.title}</h3>
-              <Progress value={progressFor(course)} />
-              <span>{t("dashboard.completePercent", { value: progressFor(course) })}</span>
-            </article>
-          ))}
+          {courses.map((course, index) => {
+            const summary = lessonSummaryFor(course);
+            return (
+              <article key={course.id}>
+                <div className="course-index">{String(index + 1).padStart(2, "0")}</div>
+                <h3>{course.title}</h3>
+                <Progress value={progressFor(course)} />
+                <span>{t("common.lessonsCompletedCount", { completed: summary.completedCount, total: summary.totalCount })}</span>
+                <span>
+                  {summary.courseComplete
+                    ? t("common.courseComplete")
+                    : summary.nextLesson
+                      ? t("common.nextLessonLabel", { title: summary.nextLesson.title })
+                      : t("common.noCourseYet")}
+                </span>
+              </article>
+            );
+          })}
         </div>
       </section>
     </>
@@ -650,7 +687,7 @@ function StudentProfilePage({ profile, onUpdateProfile }) {
   );
 }
 
-function OwnedCoursesPage({ courses, progressFor, studentCoursesError = "" }) {
+function OwnedCoursesPage({ courses, progressFor, lessonSummaryFor, studentCoursesError = "" }) {
   const { t } = useLanguage();
 
   return (
@@ -668,6 +705,7 @@ function OwnedCoursesPage({ courses, progressFor, studentCoursesError = "" }) {
           const progress = progressFor(course);
           const modules = getCourseModules(course);
           const classes = getCourseClasses(course);
+          const summary = lessonSummaryFor(course);
 
           return (
             <article className="owned-card" key={course.id}>
@@ -681,6 +719,16 @@ function OwnedCoursesPage({ courses, progressFor, studentCoursesError = "" }) {
                   <strong>{progress}%</strong>
                 </div>
                 <Progress value={progress} />
+                <div className="course-lesson-summary">
+                  <strong>{t("common.lessonsCompletedCount", { completed: summary.completedCount, total: summary.totalCount })}</strong>
+                  <span>
+                    {summary.courseComplete
+                      ? t("common.courseComplete")
+                      : summary.nextLesson
+                        ? t("common.nextLessonLabel", { title: summary.nextLesson.title })
+                        : t("common.noCourseYet")}
+                  </span>
+                </div>
                 <button
                   className="primary-btn"
                   onClick={() => {
@@ -705,6 +753,9 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const courseClasses = getCourseClasses(course);
   const [activeModuleId, setActiveModuleId] = useState(modules[0]?.id || null);
   const [viewError, setViewError] = useState("");
+  const [blockedLessonId, setBlockedLessonId] = useState("");
+  const [courseSubmissions, setCourseSubmissions] = useState(new Map());
+  const [courseSubmissionsLoaded, setCourseSubmissionsLoaded] = useState(false);
   const [assignmentState, setAssignmentState] = useState({
     loading: false,
     error: "",
@@ -721,6 +772,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   useEffect(() => {
     setActiveModuleId(modules[0]?.id || null);
     setViewError("");
+    setBlockedLessonId("");
   }, [course?.id, modules]);
 
   const activeModule = modules.find((module) => module.id === activeModuleId) || modules[0] || null;
@@ -728,6 +780,101 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     activeModule?.requiresAssignment ?? activeModule?.requires_assignment ?? Boolean(activeModule?.assignment?.id);
   const activeAssignment = assignmentRequired ? activeModule?.assignment ?? null : null;
   const localizedAssignment = getLocalizedAssignmentCopy(activeAssignment, language);
+  const sequentialState = getSequentialLessonStates({
+    classes: courseClasses,
+    modules,
+    progress: completed,
+    submissions: courseSubmissionsLoaded ? courseSubmissions : null,
+  });
+  const activeLessonState = activeModule
+    ? sequentialState.lessonStates.get(String(activeModule.id))
+    : null;
+  const activeLessonIndex = activeLessonState?.index ?? -1;
+  const nextLessonState =
+    activeLessonIndex >= 0
+      ? sequentialState.lessonStates.get(
+          String(sequentialState.orderedLessons[activeLessonIndex + 1]?.id ?? ""),
+        )
+      : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    const assignments = modules
+      .map((module) => module?.assignment)
+      .filter((assignment) => assignment?.id);
+
+    setCourseSubmissionsLoaded(false);
+
+    const loadCourseSubmissions = async () => {
+      try {
+        const rows = await Promise.all(
+          assignments.map(async (assignment) => [
+            String(assignment.id),
+            await getStudentSubmission(assignment.id, studentId),
+          ]),
+        );
+        if (!cancelled) {
+          setCourseSubmissions(new Map(rows));
+          setCourseSubmissionsLoaded(true);
+        }
+      } catch (error) {
+        console.error("Failed to load submissions for sequential lesson access:", error);
+        if (!cancelled) {
+          setCourseSubmissions(new Map());
+          setCourseSubmissionsLoaded(true);
+        }
+      }
+    };
+
+    void loadCourseSubmissions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [course?.id, studentId]);
+
+  useEffect(() => {
+    if (!courseSubmissionsLoaded) return;
+
+    const requestedLessonId = new URLSearchParams(window.location.search).get("lesson");
+    if (!requestedLessonId) return;
+
+    const requestedState = sequentialState.lessonStates.get(String(requestedLessonId));
+    if (!requestedState || requestedState.isLocked) {
+      console.warn("Blocked direct access to locked lesson:", {
+        courseId: course?.id,
+        lessonId: requestedLessonId,
+        reason: requestedState?.lockReason ?? "missing-lesson",
+      });
+      setBlockedLessonId(String(requestedLessonId));
+      setActiveModuleId(sequentialState.nextLesson?.id ?? modules[0]?.id ?? null);
+      return;
+    }
+
+    setBlockedLessonId("");
+    setActiveModuleId(requestedState.lesson.id);
+  }, [course?.id, courseSubmissionsLoaded]);
+
+  const selectLesson = (module) => {
+    const lessonState = sequentialState.lessonStates.get(String(module?.id));
+    if (!lessonState?.isUnlocked) {
+      setViewError(
+        lessonState?.lockReason === "previous-class"
+          ? t("common.lessonLockedPreviousClass")
+          : t("common.lessonLockedPreviousLesson"),
+      );
+      return;
+    }
+
+    setBlockedLessonId("");
+    setActiveModuleId(module.id);
+    setViewError("");
+    window.history.replaceState(
+      {},
+      "",
+      `${ROUTES.student.courseDetail(course.id)}?lesson=${encodeURIComponent(module.id)}`,
+    );
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -766,6 +913,11 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
         const submission = await getStudentSubmission(activeAssignment.id, studentId);
 
         if (!cancelled) {
+          setCourseSubmissions((current) => {
+            const next = new Map(current);
+            next.set(String(activeAssignment.id), submission);
+            return next;
+          });
           setAssignmentState({
             loading: false,
             error: "",
@@ -873,8 +1025,8 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   };
 
   const toggleModule = () => {
-    if (!activeModule || !canComplete) return;
-    void onUpdateProgress({ [`module-${activeModule.id}`]: !completed[`module-${activeModule.id}`] });
+    if (!activeModule || !activeLessonState?.isUnlocked || !canComplete || moduleDone) return;
+    void onUpdateProgress({ [`module-${activeModule.id}`]: true });
   };
 
   const handleAssignmentSubmit = async () => {
@@ -939,6 +1091,11 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
         submitError: "",
         uploading: false,
       });
+      setCourseSubmissions((current) => {
+        const next = new Map(current);
+        next.set(String(activeAssignment.id), savedSubmission);
+        return next;
+      });
     } catch (error) {
       console.error("Submitting the assignment failed:", error);
       setAssignmentState((current) => ({
@@ -992,6 +1149,46 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
             ? t("common.assignmentApprovedButton")
             : t("common.updateSubmission");
 
+  if (blockedLessonId) {
+    const blockedState = sequentialState.lessonStates.get(String(blockedLessonId));
+    const blockedReason =
+      blockedState?.lockReason === "previous-class"
+        ? t("common.lessonLockedPreviousClass")
+        : t("common.lessonLockedPreviousLesson");
+
+    return (
+      <>
+        <button
+          className="back-button"
+          onClick={() => {
+            setBlockedLessonId("");
+            setActiveModuleId(sequentialState.nextLesson?.id ?? modules[0]?.id ?? null);
+            window.history.replaceState({}, "", ROUTES.student.courseDetail(course.id));
+          }}
+        >
+          ← {t("common.backToCourse")}
+        </button>
+        <section className="section-card lesson-access-denied">
+          <span className="lesson-lock-icon"><Icon name="lock" size={24} /></span>
+          <span className="eyebrow">{t("common.lessonLocked")}</span>
+          <h2>{blockedState?.lesson?.title || t("common.lessonLocked")}</h2>
+          <p>{blockedReason}</p>
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => {
+              setBlockedLessonId("");
+              setActiveModuleId(sequentialState.nextLesson?.id ?? modules[0]?.id ?? null);
+              window.history.replaceState({}, "", ROUTES.student.courseDetail(course.id));
+            }}
+          >
+            {t("common.backToCourse")}
+          </button>
+        </section>
+      </>
+    );
+  }
+
   return (
     <>
       <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
@@ -1007,6 +1204,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
         <div className="hero-progress">
           <strong>{progress}%</strong>
           <span>{t("common.courseProgress")}</span>
+          <span>{t("common.lessonsCompletedCount", { completed: sequentialState.completedCount, total: sequentialState.totalCount })}</span>
           <Progress value={progress} />
         </div>
       </div>
@@ -1025,26 +1223,50 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                 <h4>{courseClass.title}</h4>
                 {courseClass.description ? <p>{courseClass.description}</p> : null}
               </div>
-              {(courseClass.modules || []).map((module, index) => (
-                <div className="module" key={module.id}>
-                  <button
-                    className={activeModule?.id === module.id ? "active" : ""}
-                    onClick={() => {
-                      setActiveModuleId(module.id);
-                      setViewError("");
-                    }}
-                  >
-                    <span className={`lesson-icon ${completed[`module-${module.id}`] ? "done" : ""}`}>
-                      {completed[`module-${module.id}`] ? <Icon name="check" size={14} /> : <span>{index + 1}</span>}
-                    </span>
-                    <span>
-                      <strong>{module.title}</strong>
-                      <small>{module.description}</small>
-                    </span>
-                    <Icon name="chevron" size={16} />
-                  </button>
-                </div>
-              ))}
+              {(courseClass.modules || []).map((module) => {
+                const lessonState = sequentialState.lessonStates.get(String(module.id));
+                const isLocked = Boolean(lessonState?.isLocked);
+                const lockReason =
+                  lessonState?.lockReason === "previous-class"
+                    ? t("common.lessonLockedPreviousClass")
+                    : t("common.lessonLockedPreviousLesson");
+
+                return (
+                  <div className={`module ${isLocked ? "is-locked" : ""}`} key={module.id}>
+                    <button
+                      className={[
+                        activeModule?.id === module.id ? "active" : "",
+                        lessonState?.isComplete ? "is-complete" : "",
+                      ].filter(Boolean).join(" ")}
+                      disabled={isLocked}
+                      aria-disabled={isLocked}
+                      title={isLocked ? lockReason : undefined}
+                      onClick={() => selectLesson(module)}
+                    >
+                      <span className={`lesson-icon ${lessonState?.isComplete ? "done" : isLocked ? "locked" : ""}`}>
+                        {lessonState?.isComplete
+                          ? <Icon name="check" size={14} />
+                          : isLocked
+                            ? <Icon name="lock" size={13} />
+                            : <span>{(lessonState?.index ?? 0) + 1}</span>}
+                      </span>
+                      <span>
+                        <strong>{module.title}</strong>
+                        <small>
+                          {isLocked
+                            ? lockReason
+                            : lessonState?.isComplete
+                              ? t("common.lessonCompleted")
+                              : lessonState?.isUnlocked
+                                ? t("common.lessonUnlocked")
+                                : module.description}
+                        </small>
+                      </span>
+                      {isLocked ? <Icon name="lock" size={15} /> : <Icon name="chevron" size={16} />}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           ))}
         </aside>
@@ -1362,11 +1584,22 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
           <button
             className={moduleDone ? "complete-btn done" : "complete-btn"}
             onClick={toggleModule}
-            disabled={!activeModule || !canComplete}
+            disabled={!activeModule || !activeLessonState?.isUnlocked || !canComplete || moduleDone}
           >
             <Icon name="check" />
             {moduleDone ? t("common.moduleMarkedComplete") : t("common.markModuleComplete")}
           </button>
+          {nextLessonState?.isUnlocked ? (
+            <button
+              type="button"
+              className="secondary-btn next-lesson-button"
+              onClick={() => selectLesson(nextLessonState.lesson)}
+            >
+              {t("common.nextLesson")} <Icon name="arrow" size={16} />
+            </button>
+          ) : sequentialState.courseComplete ? (
+            <p className="course-complete-message">{t("common.courseComplete")}</p>
+          ) : null}
         </section>
       </div>
     </>

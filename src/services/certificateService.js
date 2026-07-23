@@ -11,6 +11,7 @@ import {
 import { getStudentEnrollments } from "./enrollmentService.js";
 import { getModulesByCourse } from "./moduleService.js";
 import { getStudentProgress } from "./progressService.js";
+import { getSequentialLessonStates } from "../utils/sequentialLessonProgress.js";
 
 const OPTIONAL_CERTIFICATE_COLUMNS = ["student_name", "course_title", "issue_date", "issued_at"];
 
@@ -284,11 +285,15 @@ export async function maybeGenerateCertificate(studentId, courseId) {
   const submissionMap = new Map(submissionRows.map((submission) => [String(submission.assignment_id ?? submission.assignmentId), submission]));
 
   let waitingForGrading = false;
-  const everyModuleComplete = modules.every((module) => {
+  modules.forEach((module) => {
     const eligibility = evaluateModuleEligibility({ module, progressState, assignmentMap, submissionMap });
     if (eligibility.waitingForGrading) waitingForGrading = true;
-    return eligibility.complete;
   });
+  const everyModuleComplete = getSequentialLessonStates({
+    modules,
+    progress: progressState,
+    submissions: submissionRows,
+  }).courseComplete;
 
   if (!everyModuleComplete) {
     return { generated: false, existing: null, waitingForGrading, incomplete: true };
