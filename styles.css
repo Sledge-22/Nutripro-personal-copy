@@ -1597,6 +1597,81 @@ code {
   gap: 14px;
 }
 
+.course-manager-card {
+  grid-template-columns: 1fr;
+  align-content: start;
+  min-width: 0;
+  padding: 18px;
+}
+
+.course-manager-card .admin-course-thumb-wrap {
+  margin-bottom: 0;
+}
+
+.course-manager-card .admin-course-thumb {
+  width: 100%;
+  height: 140px;
+  max-height: none;
+  object-fit: cover;
+  border-radius: 16px;
+  display: block;
+}
+
+.course-card-body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.course-card-header {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.course-card-header h3,
+.course-manager-card .course-info h3 {
+  margin: 0;
+  min-width: 0;
+  font-size: 1.05rem;
+  line-height: 1.25;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.course-manager-card .course-info p {
+  margin: 0;
+  font-size: .95rem;
+  line-height: 1.55;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.course-card-meta {
+  gap: 8px;
+}
+
+.course-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: auto;
+  min-width: 0;
+}
+
+.course-card-actions button,
+.course-card-actions a {
+  width: auto;
+  min-width: max-content;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 0.75rem 1rem;
+  white-space: nowrap;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+  flex: 0 0 auto;
+}
+
 .wrap-actions {
   flex-wrap: wrap;
 }
@@ -2080,6 +2155,14 @@ select:focus {
   .course-admin-list article,
   .post-list article {
     grid-template-columns: 1fr;
+  }
+  .course-card-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .course-card-actions button,
+  .course-card-actions a {
+    width: 100%;
   }
   .course-admin-list .row-actions {
     grid-column: auto;

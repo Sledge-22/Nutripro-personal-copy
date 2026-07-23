@@ -3967,13 +3967,13 @@ function CourseManagerOverviewPage({ courses = [], studentOptions = [], onDelete
                     <img className="admin-course-thumb" src={course.image_url || course.imageUrl} alt={course.title} />
                   </div>
                 ) : null}
-                <div className="course-info">
-                  <div className="row-actions">
+                <div className="course-info course-card-body">
+                  <div className="row-actions course-card-header">
                     <h3>{course.title}</h3>
                     <Status status={course.status || "draft"} />
                   </div>
                   <p>{course.description || t("admin.courseDescription")}</p>
-                  <div className="row-actions wrap-actions">
+                  <div className="row-actions wrap-actions course-card-meta">
                     <span className="subtle-badge">{t("common.classes")}: {classCount}</span>
                     <span className="subtle-badge">{t("common.modules")}: {moduleCount}</span>
                     <span className="subtle-badge">{t("admin.studentsSelectedCount", { count: assignedCount })}</span>
@@ -3989,7 +3989,7 @@ function CourseManagerOverviewPage({ courses = [], studentOptions = [], onDelete
                     </div>
                   ) : null}
                 </div>
-                <div className="row-actions wrap-actions">
+                <div className="row-actions wrap-actions course-card-actions">
                   <button type="button" className="primary-btn" onClick={() => navigateTo(ROUTES.admin.courseBuilder(course.id))}>
                     {t("admin.openBuilder")}
                   </button>
