@@ -118,6 +118,30 @@ async function uploadToBucket(bucket, file, pathPrefix, options = {}) {
   };
 }
 
+async function ensureAuthenticatedUpload(bucket, storagePath) {
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error) {
+    console.error("[Storage] auth check failed before upload", {
+      bucket,
+      storagePath,
+      error,
+    });
+    throw new Error("You must be logged in as an active admin to upload course images.");
+  }
+
+  const authUserId = data?.user?.id || "";
+  console.log("[Storage] authenticated upload check", {
+    authUserId,
+    bucket,
+    storagePath,
+  });
+
+  if (!authUserId) {
+    throw new Error("You must be logged in as an active admin to upload course images.");
+  }
+}
+
 export async function uploadModulePdf(file, moduleId = "module") {
   return uploadToBucket(PDF_BUCKET, file, "pdfs");
 }
@@ -135,6 +159,12 @@ export async function uploadProfilePicture(file) {
 }
 
 export async function uploadCourseImage(file) {
+  const fileName = file?.name || "upload-placeholder";
+  const safeName = sanitizeFileName(fileName);
+  const storagePath = `courses/${Date.now()}-${safeName}`;
+
+  await ensureAuthenticatedUpload(COURSE_IMAGE_BUCKET, storagePath);
+
   return uploadToBucket(COURSE_IMAGE_BUCKET, file, "courses");
 }
 
