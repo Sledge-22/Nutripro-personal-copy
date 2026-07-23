@@ -4192,6 +4192,8 @@ function CourseBuilderPage({
   const [saveMessage, setSaveMessage] = useState("");
   const [collapsedModuleIds, setCollapsedModuleIds] = useState([]);
   const [collapsedClassIds, setCollapsedClassIds] = useState([]);
+  const [editingClassId, setEditingClassId] = useState(null);
+  const [classEditDraft, setClassEditDraft] = useState(null);
   const [studentAssignmentOpen, setStudentAssignmentOpen] = useState(true);
   const [studentSearch, setStudentSearch] = useState("");
 
@@ -4199,6 +4201,8 @@ function CourseBuilderPage({
     setForm(createCourseDraft(course));
     setCollapsedModuleIds([]);
     setCollapsedClassIds([]);
+    setEditingClassId(null);
+    setClassEditDraft(null);
     setSaveError("");
     setSaveDetails("");
     setSaveMessage("");
@@ -4270,6 +4274,10 @@ function CourseBuilderPage({
       modules: (current.modules || []).filter((module) => String(module.class_id || module.classId || "") !== String(classId)),
     }));
     setCollapsedClassIds((current) => current.filter((id) => id !== classId));
+    if (String(editingClassId) === String(classId)) {
+      setEditingClassId(null);
+      setClassEditDraft(null);
+    }
   };
 
   const addModule = (classId) => {
@@ -4311,6 +4319,7 @@ function CourseBuilderPage({
   };
 
   const toggleClassCollapsed = (classId) => {
+    if (String(editingClassId) === String(classId)) return;
     setCollapsedClassIds((current) => (
       current.includes(classId)
         ? current.filter((id) => id !== classId)
@@ -4319,11 +4328,42 @@ function CourseBuilderPage({
   };
 
   const collapseAllClasses = () => {
-    setCollapsedClassIds((form.classes || []).map((entry) => entry.id));
+    setCollapsedClassIds(
+      (form.classes || [])
+        .map((entry) => entry.id)
+        .filter((classId) => String(classId) !== String(editingClassId)),
+    );
   };
 
   const expandAllClasses = () => {
     setCollapsedClassIds([]);
+  };
+
+  const startEditingClass = (courseClass) => {
+    setCollapsedClassIds((current) => current.filter((id) => String(id) !== String(courseClass.id)));
+    setEditingClassId(courseClass.id);
+    setClassEditDraft({
+      title: courseClass.title || "",
+      description: courseClass.description || "",
+      status: courseClass.status || "published",
+    });
+  };
+
+  const saveClassChanges = (classId) => {
+    if (!classEditDraft) return;
+    updateClass(classId, (currentClass) => ({
+      ...currentClass,
+      title: classEditDraft.title,
+      description: classEditDraft.description,
+      status: classEditDraft.status,
+    }));
+    setEditingClassId(null);
+    setClassEditDraft(null);
+  };
+
+  const cancelClassChanges = () => {
+    setEditingClassId(null);
+    setClassEditDraft(null);
   };
 
   const toggleAssignedStudent = (studentId) => {
@@ -4603,81 +4643,88 @@ function CourseBuilderPage({
           {classesForRender.map((courseClass) => {
             const classModules = getModulesForClass(courseClass.id);
             const isCollapsed = collapsedClassIds.includes(courseClass.id);
+            const isEditing = String(editingClassId) === String(courseClass.id);
             return (
               <section key={courseClass.id} className="section-card class-builder-card">
                 <div className="builder-header">
-                  {isCollapsed ? (
-                    <div className="class-builder-fields class-builder-fields-collapsed">
-                      <span className="eyebrow">{t("common.class")}</span>
-                      <h4>{courseClass.title || t("admin.classTitle")}</h4>
-                      <div className="row-actions wrap-actions class-card-summary">
-                        <Status status={courseClass.status || "published"} />
-                        <span className="subtle-badge">{t("common.modules")}: {classModules.length}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="class-builder-fields">
+                  {isEditing ? (
+                    <div className="class-builder-fields class-builder-edit-form">
                       <span className="eyebrow">{t("common.class")}</span>
                       <input
-                        value={courseClass.title}
-                        onChange={(event) =>
-                          updateClass(courseClass.id, (currentClass) => ({
-                            ...currentClass,
-                            title: event.target.value,
-                          }))
-                        }
+                        value={classEditDraft?.title || ""}
+                        onChange={(event) => setClassEditDraft((current) => ({ ...current, title: event.target.value }))}
                         placeholder={t("admin.classTitle")}
+                        aria-label={t("admin.classTitle")}
                       />
                       <textarea
                         rows="2"
-                        value={courseClass.description}
-                        onChange={(event) =>
-                          updateClass(courseClass.id, (currentClass) => ({
-                            ...currentClass,
-                            description: event.target.value,
-                          }))
-                        }
+                        value={classEditDraft?.description || ""}
+                        onChange={(event) => setClassEditDraft((current) => ({ ...current, description: event.target.value }))}
                         placeholder={t("admin.classDescription")}
+                        aria-label={t("admin.classDescription")}
                       />
                       <select
-                        value={courseClass.status || "published"}
-                        onChange={(event) =>
-                          updateClass(courseClass.id, (currentClass) => ({
-                            ...currentClass,
-                            status: event.target.value,
-                          }))
-                        }
+                        value={classEditDraft?.status || "published"}
+                        onChange={(event) => setClassEditDraft((current) => ({ ...current, status: event.target.value }))}
+                        aria-label={t("common.status")}
                       >
                         <option value="draft">{t("status.draft")}</option>
                         <option value="published">{t("status.published")}</option>
                         <option value="archived">{t("status.archived")}</option>
                       </select>
                     </div>
+                  ) : (
+                    <div className={`class-builder-fields class-builder-display${isCollapsed ? " is-collapsed" : ""}`}>
+                      <span className="eyebrow">{t("common.class")}</span>
+                      <h4>{courseClass.title || t("admin.classTitle")}</h4>
+                      <div className="row-actions wrap-actions class-card-summary">
+                        <Status status={courseClass.status || "published"} />
+                        <span className="subtle-badge">{t("common.modules")}: {classModules.length}</span>
+                      </div>
+                      {!isCollapsed && courseClass.description ? (
+                        <p className="class-builder-description">{courseClass.description}</p>
+                      ) : null}
+                    </div>
                   )}
                   <div className="row-actions wrap-actions builder-actions">
-                    {!isCollapsed ? <span className="subtle-badge">{t("common.modules")}: {classModules.length}</span> : null}
-                    <button
-                      type="button"
-                      className="secondary-btn"
-                      onClick={() => toggleClassCollapsed(courseClass.id)}
-                      aria-expanded={!isCollapsed}
-                      aria-controls={`class-body-${courseClass.id}`}
-                    >
-                      {isCollapsed ? t("common.expand") : t("common.minimize")}
-                    </button>
-                    {!isCollapsed ? (
-                      <button type="button" className="secondary-btn" onClick={() => addModule(courseClass.id)}>
-                        <Icon name="plus" />
-                        {t("admin.addModuleLesson")}
-                      </button>
-                    ) : null}
-                    <button type="button" className="secondary-btn danger-text" onClick={() => deleteClass(courseClass.id)}>
-                      {t("common.delete")}
-                    </button>
+                    {isEditing ? (
+                      <>
+                        <button type="button" className="primary-btn" onClick={() => saveClassChanges(courseClass.id)}>
+                          {t("common.saveChanges")}
+                        </button>
+                        <button type="button" className="secondary-btn" onClick={cancelClassChanges}>
+                          {t("common.cancel")}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          onClick={() => toggleClassCollapsed(courseClass.id)}
+                          aria-expanded={!isCollapsed}
+                          aria-controls={`class-body-${courseClass.id}`}
+                        >
+                          {isCollapsed ? t("common.expand") : t("common.minimize")}
+                        </button>
+                        <button type="button" className="secondary-btn" onClick={() => startEditingClass(courseClass)}>
+                          {t("admin.editClass")}
+                        </button>
+                        {!isCollapsed ? (
+                          <button type="button" className="secondary-btn" onClick={() => addModule(courseClass.id)}>
+                            <Icon name="plus" />
+                            {t("admin.addModuleLesson")}
+                          </button>
+                        ) : null}
+                        <button type="button" className="secondary-btn danger-text" onClick={() => deleteClass(courseClass.id)}>
+                          {t("common.delete")}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {!isCollapsed ? (
+                {!isCollapsed && !isEditing ? (
                   <div id={`class-body-${courseClass.id}`} className="class-builder-body">
                     {classModules.length ? (
                       classModules.map((module, index) => (

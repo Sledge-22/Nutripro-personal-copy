@@ -416,14 +416,26 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
   min-width: 0;
   flex: 1 1 auto;
 }
-.class-builder-fields-collapsed {
+.class-builder-display,
+.class-builder-edit-form {
   display: grid;
   gap: 8px;
 }
-.class-builder-fields-collapsed h4 {
+.class-builder-display h4 {
   margin: 0;
   color: var(--color-text);
   font: 700 1rem/1.25 var(--font-heading);
+}
+.class-builder-description {
+  max-width: 72ch;
+  margin: 2px 0 0;
+  color: var(--color-muted);
+  line-height: 1.6;
+}
+.class-builder-edit-form input,
+.class-builder-edit-form textarea,
+.class-builder-edit-form select {
+  margin-top: 0;
 }
 .class-card-summary {
   gap: 8px;
