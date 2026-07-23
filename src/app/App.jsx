@@ -355,6 +355,14 @@ function shouldShowPrivacyReminder(profile) {
   return accepted && !dismissed;
 }
 
+function isCourseBuilderSetupError(error) {
+  const details = `${sanitizeErrorDetails(error)}`.toLowerCase();
+  return (
+    (details.includes("course_classes") && (details.includes("does not exist") || details.includes("relation"))) ||
+    (details.includes("modules") && details.includes("class_id") && (details.includes("does not exist") || details.includes("column")))
+  );
+}
+
 export function App() {
   const { t, language } = useLanguage();
   const productionAuthAvailable = isAuthConfigured();
@@ -447,7 +455,7 @@ export function App() {
       const roleKey = profile?.roleKey ?? `${profile?.role ?? ""}`.toLowerCase();
       const nextStudentId = roleKey === "student" ? profile?.id ?? null : null;
 
-      const [nextUsers, nextCourses, nextCertificates, nextPosts] = await Promise.all([
+      const [nextUsersResult, nextCoursesResult, nextCertificatesResult, nextPostsResult] = await Promise.allSettled([
         getUsers(),
         getCourses(),
         getCertificates(),
@@ -466,10 +474,30 @@ export function App() {
             { status: "fulfilled", value: initialStudentProgress },
           ];
 
-      setUsers(nextUsers);
-      setCourses(nextCourses);
-      setCertificates(nextCertificates);
-      setPosts(nextPosts);
+      if (nextUsersResult.status === "fulfilled") {
+        setUsers(nextUsersResult.value);
+      } else {
+        console.error("Loading users during workspace hydration failed:", nextUsersResult.reason);
+      }
+
+      if (nextCoursesResult.status === "fulfilled") {
+        setCourses(nextCoursesResult.value);
+      } else {
+        console.error("Loading courses during workspace hydration failed:", nextCoursesResult.reason);
+      }
+
+      if (nextCertificatesResult.status === "fulfilled") {
+        setCertificates(nextCertificatesResult.value);
+      } else {
+        console.error("Loading certificates during workspace hydration failed:", nextCertificatesResult.reason);
+      }
+
+      if (nextPostsResult.status === "fulfilled") {
+        setPosts(nextPostsResult.value);
+      } else {
+        console.error("Loading community posts during workspace hydration failed:", nextPostsResult.reason);
+      }
+
       setStudentProfile(roleKey === "student" ? profile : null);
       setStudentCourses(nextStudentCoursesResult.status === "fulfilled" ? nextStudentCoursesResult.value : []);
       setStudentCertificates(
@@ -490,6 +518,14 @@ export function App() {
 
       if (nextStudentCoursesResult.status === "rejected") {
         console.error("Loading student enrollments during workspace hydration failed:", nextStudentCoursesResult.reason);
+      }
+
+      if (nextCoursesResult.status === "rejected" && isCourseBuilderSetupError(nextCoursesResult.reason)) {
+        setLoginInfo(
+          language === "es"
+            ? "El acceso al gestor de cursos requiere completar la migración de clases del curso."
+            : "Course Manager access requires completing the course classes migration.",
+        );
       }
 
       const blockedReason = getAccessBlockReason(profile);
