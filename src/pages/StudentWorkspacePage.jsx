@@ -1053,10 +1053,42 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
           <span className="eyebrow">{t("common.currentModule")}</span>
           <h2>{activeModule?.title || t("common.selectModule")}</h2>
           <p>{activeModule?.description || t("student.currentModuleDescriptionFallback")}</p>
+          {activeModule?.lesson_content || activeModule?.lessonContent ? (
+            <div className="section-card lesson-text-card">
+              <span className="eyebrow">{t("admin.lessonContent")}</span>
+              <p>{activeModule.lesson_content || activeModule.lessonContent}</p>
+            </div>
+          ) : null}
 
           {viewError && <small className="field-note danger-text">{viewError}</small>}
 
           <div className="module-assets">
+            <div className="lesson-meta">
+              <span className="subtle-badge">{t("common.image")}</span>
+              <span>{activeModule?.image_file_name || activeModule?.imageName || t("common.noImageUploadedYet")}</span>
+            </div>
+
+            {activeModule?.image_url || activeModule?.imageUrl ? (
+              <div className="resource-viewer-stack">
+                <div className="image-preview-shell">
+                  <img
+                    className="course-image-preview"
+                    src={activeModule.image_url || activeModule.imageUrl}
+                    alt={activeModule?.title || t("common.image")}
+                  />
+                </div>
+                <div className="row-actions resource-viewer-actions">
+                  <a href={activeModule.image_url || activeModule.imageUrl} target="_blank" rel="noreferrer">
+                    {t("common.openImage")}
+                  </a>
+                </div>
+              </div>
+            ) : activeModule?.image_file_name || activeModule?.imageName ? (
+              <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
+            ) : (
+              <small className="field-note">{t("common.noImageUploadedYet")}</small>
+            )}
+
             <div className="lesson-meta">
               <span className="subtle-badge">PDF</span>
               <span>{pdfLabel}</span>

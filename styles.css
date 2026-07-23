@@ -1579,6 +1579,33 @@ code {
 .status.paused { color: var(--color-warning); background: rgba(217, 183, 111, .14); border-color: rgba(217, 183, 111, .18); }
 .status.inactive { color: var(--color-muted); background: rgba(157, 150, 138, .14); border-color: rgba(157, 150, 138, .18); }
 
+.builder-shell,
+.course-manager-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.course-manager-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.course-manager-card,
+.empty-state-card,
+.class-builder-card,
+.lesson-text-card {
+  display: grid;
+  gap: 14px;
+}
+
+.wrap-actions {
+  flex-wrap: wrap;
+}
+
+.lesson-text-card p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 table {
   border-collapse: separate;
   border-spacing: 0;

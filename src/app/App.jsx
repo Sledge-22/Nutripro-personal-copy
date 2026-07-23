@@ -8,7 +8,14 @@ import {
   initialStudentProgress,
   initialUsers,
 } from "../data/mockData.js";
-import { ROUTES, isAdminRoute, isAuthUtilityRoute, isStudentRoute } from "../routes/appRoutes.js";
+import {
+  ROUTES,
+  getAdminCourseRouteState,
+  isAdminCourseRoute,
+  isAdminRoute,
+  isAuthUtilityRoute,
+  isStudentRoute,
+} from "../routes/appRoutes.js";
 import { LoginPage } from "../pages/LoginPage.jsx";
 import { ForcedPasswordPage } from "../pages/ForcedPasswordPage.jsx";
 import { AccessNoticePage } from "../pages/AccessNoticePage.jsx";
@@ -136,6 +143,21 @@ function normalizeClassAuditSnapshot(courseClasses = []) {
     : [];
 }
 
+function normalizeModuleAuditSnapshot(courseModules = []) {
+  return Array.isArray(courseModules)
+    ? courseModules
+        .map((courseModule) => ({
+          id: `${courseModule?.id ?? ""}`.trim(),
+          classId: `${courseModule?.class_id ?? courseModule?.classId ?? ""}`.trim(),
+          title: `${courseModule?.title ?? ""}`.trim(),
+          description: `${courseModule?.description ?? ""}`.trim(),
+          status: normalizeCourseStatusKey(courseModule?.status),
+          sortOrder: Number(courseModule?.sortOrder ?? courseModule?.sort_order ?? 0) || 0,
+        }))
+        .filter((courseModule) => courseModule.id)
+    : [];
+}
+
 function recordCourseClassAuditLogs({ adminUser, existingCourse, savedCourse }) {
   const previousClasses = normalizeClassAuditSnapshot(existingCourse?.classes);
   const nextClasses = normalizeClassAuditSnapshot(savedCourse?.classes);
@@ -230,6 +252,74 @@ function recordCourseClassAuditLogs({ adminUser, existingCourse, savedCourse }) 
         course_title: savedCourse?.title ?? existingCourse?.title ?? "",
         class_title: courseClass.title,
         previous_status: courseClass.status,
+      },
+    });
+  });
+}
+
+function recordCourseModuleAuditLogs({ adminUser, existingCourse, savedCourse }) {
+  const previousModules = normalizeModuleAuditSnapshot(existingCourse?.modules);
+  const nextModules = normalizeModuleAuditSnapshot(savedCourse?.modules);
+  const previousById = new Map(previousModules.map((courseModule) => [courseModule.id, courseModule]));
+  const nextById = new Map(nextModules.map((courseModule) => [courseModule.id, courseModule]));
+
+  nextModules.forEach((courseModule) => {
+    const previousModule = previousById.get(courseModule.id);
+    if (!previousModule) {
+      void recordAdminAuditLog({
+        adminUser,
+        action: "module_created",
+        targetType: "module",
+        targetId: courseModule.id,
+        details: {
+          course_id: savedCourse?.id ?? existingCourse?.id ?? "",
+          course_title: savedCourse?.title ?? existingCourse?.title ?? "",
+          class_id: courseModule.classId,
+          module_title: courseModule.title,
+          status: courseModule.status,
+        },
+      });
+      return;
+    }
+
+    if (
+      previousModule.title !== courseModule.title ||
+      previousModule.description !== courseModule.description ||
+      previousModule.status !== courseModule.status ||
+      previousModule.classId !== courseModule.classId ||
+      previousModule.sortOrder !== courseModule.sortOrder
+    ) {
+      void recordAdminAuditLog({
+        adminUser,
+        action: "module_updated",
+        targetType: "module",
+        targetId: courseModule.id,
+        details: {
+          course_id: savedCourse?.id ?? existingCourse?.id ?? "",
+          course_title: savedCourse?.title ?? existingCourse?.title ?? "",
+          class_id: courseModule.classId,
+          previous_class_id: previousModule.classId,
+          previous_title: previousModule.title,
+          new_title: courseModule.title,
+          previous_status: previousModule.status,
+          new_status: courseModule.status,
+        },
+      });
+    }
+  });
+
+  previousModules.forEach((courseModule) => {
+    if (nextById.has(courseModule.id)) return;
+    void recordAdminAuditLog({
+      adminUser,
+      action: "module_deleted",
+      targetType: "module",
+      targetId: courseModule.id,
+      details: {
+        course_id: savedCourse?.id ?? existingCourse?.id ?? "",
+        course_title: savedCourse?.title ?? existingCourse?.title ?? "",
+        class_id: courseModule.classId,
+        module_title: courseModule.title,
       },
     });
   });
@@ -516,6 +606,14 @@ export function App() {
       [ROUTES.auth.access]: t("auth.accessRestricted"),
     };
 
+    if (isAdminCourseRoute(pathname)) {
+      const routeState = getAdminCourseRouteState(pathname);
+      if (routeState.view === "create") return t("admin.createCourse");
+      if (routeState.view === "edit") return t("admin.editCourse");
+      if (routeState.view === "builder") return t("admin.courseBuilder");
+      return t("admin.courseManager");
+    }
+
     if (pathname.startsWith("/student/courses/")) {
       const courseId = `${pathname.split("/").pop() ?? ""}`.trim();
       return (
@@ -609,7 +707,7 @@ export function App() {
         setPrivacyReminderSeenThisSession(true);
       }
       navigateTo(dashboardPathForRole(result.profile?.roleKey ?? currentUser?.roleKey), true);
-      return { ok: true };
+      return { ok: true, course: savedCourse };
     } catch (error) {
       console.error("Updating the password failed:", error);
       const rawMessage = `${error?.message ?? ""}`.trim();
@@ -906,6 +1004,42 @@ export function App() {
         existingCourse,
         savedCourse,
       });
+      recordCourseModuleAuditLogs({
+        adminUser: currentUser,
+        existingCourse,
+        savedCourse,
+      });
+
+      const previousOwners = new Set((existingCourse?.owners ?? []).map(String));
+      const nextOwners = new Set((savedCourse?.owners ?? course?.owners ?? []).map(String));
+      const assignedOwnerIds = [...nextOwners].filter((ownerId) => !previousOwners.has(ownerId));
+      const unassignedOwnerIds = [...previousOwners].filter((ownerId) => !nextOwners.has(ownerId));
+
+      if (assignedOwnerIds.length) {
+        void recordAdminAuditLog({
+          adminUser: currentUser,
+          action: "course_assigned",
+          targetType: "course",
+          targetId: savedCourse?.id ?? editingId ?? "",
+          details: {
+            course_title: savedCourse?.title ?? course?.title ?? "",
+            student_ids: assignedOwnerIds,
+          },
+        });
+      }
+
+      if (unassignedOwnerIds.length) {
+        void recordAdminAuditLog({
+          adminUser: currentUser,
+          action: "course_unassigned",
+          targetType: "course",
+          targetId: savedCourse?.id ?? editingId ?? "",
+          details: {
+            course_title: savedCourse?.title ?? course?.title ?? "",
+            student_ids: unassignedOwnerIds,
+          },
+        });
+      }
 
       void refreshCourses().catch((refreshError) => {
         console.error("Refreshing courses after save failed:", refreshError);
@@ -1228,5 +1362,21 @@ export function App() {
     return <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />;
   }
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={pathname.startsWith("/student/courses/") ? t("common.courses") : title} detailTitle={pathname.startsWith("/student/courses/") ? title : null} profile={currentUser} navItems={role === "Admin" ? adminNav : studentNav} currentPath={pathname.startsWith("/student/courses/") ? ROUTES.student.courses : pathname} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} posts={posts} currentUser={currentUser} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+  const currentPath = pathname.startsWith("/student/courses/")
+    ? ROUTES.student.courses
+    : isAdminCourseRoute(pathname)
+      ? ROUTES.admin.postCourses
+      : pathname;
+  const headerTitle = pathname.startsWith("/student/courses/")
+    ? t("common.courses")
+    : isAdminCourseRoute(pathname)
+      ? t("common.postCourses")
+      : title;
+  const detailTitle = pathname.startsWith("/student/courses/")
+    ? title
+    : isAdminCourseRoute(pathname)
+      ? title
+      : null;
+
+  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={headerTitle} detailTitle={detailTitle} profile={currentUser} navItems={role === "Admin" ? adminNav : studentNav} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} posts={posts} currentUser={currentUser} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }

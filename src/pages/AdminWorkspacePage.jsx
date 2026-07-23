@@ -12,11 +12,11 @@ import {
   getGdprDataRequests,
   updateGdprDataRequest,
 } from "../services/gdprDataRequestService.js";
-import { uploadCourseImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
+import { uploadCourseImage, uploadModuleImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
 import { normalizeCountrySelection } from "../data/countries.js";
 import { getProfileCountryOptions } from "../data/profileCountries.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
-import { ROUTES } from "../routes/appRoutes.js";
+import { ROUTES, getAdminCourseRouteState, isAdminCourseRoute } from "../routes/appRoutes.js";
 import {
   getEmbeddablePdfUrl,
   getEmbeddableVideoUrl,
@@ -53,10 +53,16 @@ function AdminErrorMessage({ error, detailsLabel = "Details" }) {
 const COURSE_DRAFT_STORAGE_KEY = "nutripro-course-builder-draft-v2";
 const MAX_VIDEO_SIZE_MB = 250;
 const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
+const IMAGE_ACCEPT = "image/*";
 const PDF_ACCEPT = ".pdf,application/pdf";
 const VIDEO_ACCEPT = ".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm";
 const NO_PDF_SELECTED = "No PDF selected";
 const NO_VIDEO_SELECTED = "No video selected";
+
+function navigateTo(pathname) {
+  window.history.pushState({}, "", pathname);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
 
 function getRandomPasswordCharacter(characters) {
   const values = new Uint32Array(1);
@@ -315,6 +321,21 @@ function createModuleDraft(sortOrder = 1) {
     sortOrder,
     title: "",
     description: "",
+    lessonContent: "",
+    lesson_content: "",
+    status: "published",
+    imageUrl: "",
+    image_url: "",
+    imageName: "",
+    image_file_name: "",
+    imageStoragePath: "",
+    image_storage_path: "",
+    imageFile: null,
+    imagePendingName: "",
+    imagePendingSize: null,
+    imagePendingType: "",
+    imageUploading: false,
+    imageError: "",
     requiresAssignment: false,
     requires_assignment: false,
     pdfUrl: "",
@@ -391,6 +412,21 @@ function restoreModuleDraft(module = {}, index = 0) {
     classId: module.class_id || module.classId || "",
     class_id: module.class_id || module.classId || "",
     sortOrder: module.sortOrder ?? module.sort_order ?? index + 1,
+    lessonContent: module.lesson_content || module.lessonContent || "",
+    lesson_content: module.lesson_content || module.lessonContent || "",
+    status: module.status || "published",
+    imageUrl: module.image_url || module.imageUrl || "",
+    image_url: module.image_url || module.imageUrl || "",
+    imageName: module.image_file_name || module.imageName || "",
+    image_file_name: module.image_file_name || module.imageName || "",
+    imageStoragePath: module.image_storage_path || module.imageStoragePath || "",
+    image_storage_path: module.image_storage_path || module.imageStoragePath || "",
+    imageFile: null,
+    imagePendingName: module.imagePendingName || "",
+    imagePendingSize: module.imagePendingSize ?? null,
+    imagePendingType: module.imagePendingType || "",
+    imageUploading: false,
+    imageError: "",
     pdfUrl: restoredPdfUrl,
     pdf_url: restoredPdfUrl,
     pdfExternalUrl: restoredPdfExternalUrl,
@@ -565,13 +601,28 @@ function createCourseDraft(course = null) {
     bulkPdfSelections: [],
     bulkVideoSelections: [],
     classes,
-    modules: (course.modules || []).map((module, index) => ({
+      modules: (course.modules || []).map((module, index) => ({
       id: module.id || createId(),
       classId: module.class_id || module.classId || fallbackClassId,
       class_id: module.class_id || module.classId || fallbackClassId,
       sortOrder: module.sortOrder ?? index + 1,
       title: module.title || "",
       description: module.description || "",
+      lessonContent: module.lesson_content || module.lessonContent || "",
+      lesson_content: module.lesson_content || module.lessonContent || "",
+      status: module.status || "published",
+      imageUrl: module.image_url || module.imageUrl || "",
+      image_url: module.image_url || module.imageUrl || "",
+      imageName: module.image_file_name || module.imageName || "",
+      image_file_name: module.image_file_name || module.imageName || "",
+      imageStoragePath: module.image_storage_path || module.imageStoragePath || "",
+      image_storage_path: module.image_storage_path || module.imageStoragePath || "",
+      imageFile: null,
+      imagePendingName: "",
+      imagePendingSize: null,
+      imagePendingType: "",
+      imageUploading: false,
+      imageError: "",
       requiresAssignment:
         module.requiresAssignment ??
         module.requires_assignment ??
@@ -667,7 +718,7 @@ function buildCoursePayload(form, editingId, existingCourse) {
     image_storage_path: form.image_storage_path || form.imageStoragePath || "",
     owners: Array.from(new Set((Array.isArray(form.selectedStudentIds) ? form.selectedStudentIds : []).map((studentId) => `${studentId}`))),
     classes,
-    modules: form.modules
+      modules: form.modules
       .filter((module) => module.title.trim())
       .map((module, index) => {
         const pdfExternalUrl = firstFilledValue(
@@ -718,6 +769,9 @@ function buildCoursePayload(form, editingId, existingCourse) {
           sortOrder: index + 1,
           title: module.title.trim(),
           description: module.description.trim(),
+          lessonContent: `${module.lesson_content || module.lessonContent || ""}`.trim(),
+          lesson_content: `${module.lesson_content || module.lessonContent || ""}`.trim(),
+          status: module.status || "published",
           requiresAssignment:
             module.requiresAssignment ??
             module.requires_assignment ??
@@ -728,6 +782,11 @@ function buildCoursePayload(form, editingId, existingCourse) {
             Boolean(module.assignment?.title),
           pdfExternalUrl,
           pdf_external_url: pdfExternalUrl || null,
+          imageUrl: module.image_url || module.imageUrl || "",
+          image_url: module.image_url || module.imageUrl || null,
+          imageName: module.image_file_name || module.imageName || "",
+          image_file_name: module.image_file_name || module.imageName || null,
+          image_storage_path: module.image_storage_path || module.imageStoragePath || "",
           pdfSource,
           pdf_source: pdfExternalUrl ? "external" : pdfSource,
           pdfUrl,
@@ -870,8 +929,18 @@ export function AdminWorkspacePage({
     );
   }
 
-  if (pathname === "/admin/post-courses") {
-    return <CourseBuilderRebuildPage />;
+  if (isAdminCourseRoute(pathname)) {
+    return (
+      <CourseManagerPage
+        pathname={pathname}
+        users={users}
+        courses={courses}
+        currentUser={currentUser}
+        onSaveCourse={onSaveCourse}
+        onDeleteCourse={onDeleteCourse}
+        onSetStudentCourseAssignments={onSetStudentCourseAssignments}
+      />
+    );
   }
 
   if (pathname === "/admin/community") {
@@ -3173,6 +3242,7 @@ function ModuleEditor({
   deleteModule,
   enableAssignment,
   disableAssignment,
+  uploadImage,
   uploadPdf,
   uploadVideo,
 }) {
@@ -3200,6 +3270,7 @@ function ModuleEditor({
         <div className="module-editor-summary">
           <span>{module.description?.trim() || t("admin.whatCoveredInModule")}</span>
           <div className="row-actions">
+            <span className="subtle-badge">{module.image_url || module.imageUrl ? t("common.image") : t("common.noImageUploadedYet")}</span>
             <span className="subtle-badge">{module.pdf_url || module.pdfUrl ? "PDF" : t("common.noPdfSelected")}</span>
             <span className="subtle-badge">
               {module.video_url || module.videoUrl || module.video?.link?.trim() ? "Video" : t("common.noVideoSelected")}
@@ -3241,7 +3312,109 @@ function ModuleEditor({
             placeholder={t("admin.whatCoveredInModule")}
           />
         </label>
+
+        <label>
+          {t("admin.lessonContent")}
+          <textarea
+            rows="5"
+            value={module.lesson_content || module.lessonContent || ""}
+            onChange={(event) =>
+              updateModule(module.id, (currentModule) => ({
+                ...currentModule,
+                lessonContent: event.target.value,
+                lesson_content: event.target.value,
+              }))
+            }
+            placeholder={t("admin.lessonContentPlaceholder")}
+          />
+        </label>
+
+        <label>
+          {t("common.status")}
+          <select
+            value={module.status || "published"}
+            onChange={(event) =>
+              updateModule(module.id, (currentModule) => ({
+                ...currentModule,
+                status: event.target.value,
+              }))
+            }
+          >
+            <option value="draft">{t("status.draft")}</option>
+            <option value="published">{t("status.published")}</option>
+            <option value="archived">{t("status.archived")}</option>
+          </select>
+        </label>
       </div>
+
+      <section className="nested-builder single-video-builder">
+        <div className="nested-header">
+          <span className="eyebrow">{t("common.image")}</span>
+          <h5>{module.image_file_name || module.imageName || module.imagePendingName || t("common.noImageUploadedYet")}</h5>
+        </div>
+
+        <label className="upload-field">
+          {t("common.uploadImage")}
+          <input
+            id={`module-image-${module.id}`}
+            type="file"
+            accept={IMAGE_ACCEPT}
+            onChange={(event) => void uploadImage?.(module.id, event.target.files?.[0])}
+          />
+        </label>
+
+        {module.imageUploading ? <small className="field-note">{t("common.uploading")}</small> : null}
+        {module.imageError ? <small className="field-note danger-text">{module.imageError}</small> : null}
+        {module.imagePendingName && !module.image_url && !module.imageUrl ? (
+          <small className="field-note">
+            {t("common.selectedFile", {
+              name: `${module.imagePendingName}${module.imagePendingSize ? ` (${formatFileSize(module.imagePendingSize)})` : ""}`,
+            })}
+          </small>
+        ) : null}
+
+        {module.image_url || module.imageUrl ? (
+          <div className="resource-preview-card">
+            <div className="image-preview-shell">
+              <img className="course-image-preview" src={module.image_url || module.imageUrl} alt={module.title || t("common.image")} />
+            </div>
+            <div className="row-actions resource-viewer-actions">
+              <a href={module.image_url || module.imageUrl} target="_blank" rel="noreferrer">{t("common.openImage")}</a>
+            </div>
+          </div>
+        ) : (
+          <small className="field-note">{t("common.noImageUploadedYet")}</small>
+        )}
+
+        <div className="row-actions">
+          <button type="button" onClick={() => document.getElementById(`module-image-${module.id}`)?.click()}>
+            {t("common.replaceImage")}
+          </button>
+          <button
+            type="button"
+            className="danger-text"
+            onClick={() =>
+              updateModule(module.id, (currentModule) => ({
+                ...currentModule,
+                imageUrl: "",
+                image_url: "",
+                imageName: "",
+                image_file_name: "",
+                imageStoragePath: "",
+                image_storage_path: "",
+                imageFile: null,
+                imagePendingName: "",
+                imagePendingSize: null,
+                imagePendingType: "",
+                imageUploading: false,
+                imageError: "",
+              }))
+            }
+          >
+            {t("common.removeImage")}
+          </button>
+        </div>
+      </section>
 
       <section className="nested-builder single-video-builder">
         <div className="nested-header">
@@ -3702,26 +3875,794 @@ function ModuleEditor({
   );
 }
 
-function CourseBuilderRebuildPage() {
+function CourseManagerPage({
+  pathname,
+  users = [],
+  courses = [],
+  currentUser,
+  onSaveCourse,
+  onDeleteCourse,
+  onSetStudentCourseAssignments,
+}) {
   const { t } = useLanguage();
+  const routeState = getAdminCourseRouteState(pathname);
+  const selectedCourse = courses.find((course) => String(course.id) === String(routeState.courseId)) ?? null;
+  const studentOptions = (Array.isArray(users) ? users : []).filter(
+    (user) => normalizeRoleKey(user.roleKey ?? user.role) === "student",
+  );
+
+  if (routeState.view === "create") {
+    return (
+      <CourseDetailsPage
+        mode="create"
+        studentOptions={studentOptions}
+        onSaveCourse={onSaveCourse}
+      />
+    );
+  }
+
+  if (routeState.view === "edit") {
+    return (
+      <CourseDetailsPage
+        mode="edit"
+        course={selectedCourse}
+        studentOptions={studentOptions}
+        onSaveCourse={onSaveCourse}
+      />
+    );
+  }
+
+  if (routeState.view === "builder") {
+    return (
+      <CourseBuilderPage
+        course={selectedCourse}
+        studentOptions={studentOptions}
+        currentUser={currentUser}
+        onSaveCourse={onSaveCourse}
+        onDeleteCourse={onDeleteCourse}
+        onSetStudentCourseAssignments={onSetStudentCourseAssignments}
+      />
+    );
+  }
 
   return (
-    <section className="section-card gdpr-panel">
+    <CourseManagerOverviewPage
+      courses={courses}
+      studentOptions={studentOptions}
+      onDeleteCourse={onDeleteCourse}
+    />
+  );
+}
+
+function CourseManagerOverviewPage({ courses = [], studentOptions = [], onDeleteCourse }) {
+  const { language, t } = useLanguage();
+
+  return (
+    <section className="section-card">
       <div className="section-heading">
         <div>
           <span className="eyebrow">{t("common.postCourses")}</span>
-          <h2>{t("admin.courseBuilderRebuildTitle")}</h2>
-          <p>{t("admin.courseBuilderRebuildMessage")}</p>
+          <h2>{t("admin.courseManager")}</h2>
+          <p>{language === "es"
+            ? "Administra tus cursos y abre el constructor por curso para organizar clases y lecciones."
+            : "Manage your courses and open the builder for each course to organize classes and lessons."}</p>
+        </div>
+        <button type="button" className="primary-btn" onClick={() => navigateTo(ROUTES.admin.courseCreate)}>
+          <Icon name="plus" />
+          {t("admin.createCourse")}
+        </button>
+      </div>
+
+      {courses.length ? (
+        <div className="course-admin-list course-manager-grid">
+          {courses.map((course) => {
+            const classCount = Array.isArray(course.classes) ? course.classes.length : 0;
+            const moduleCount = Array.isArray(course.modules) ? course.modules.length : 0;
+            const assignedCount = Array.isArray(course.owners) ? course.owners.length : 0;
+
+            return (
+              <article key={course.id} className="course-manager-card">
+                {course.image_url || course.imageUrl ? (
+                  <div className="admin-course-thumb-wrap">
+                    <img className="admin-course-thumb" src={course.image_url || course.imageUrl} alt={course.title} />
+                  </div>
+                ) : null}
+                <div className="course-info">
+                  <div className="row-actions">
+                    <h3>{course.title}</h3>
+                    <Status status={course.status || "draft"} />
+                  </div>
+                  <p>{course.description || t("admin.courseDescription")}</p>
+                  <div className="row-actions wrap-actions">
+                    <span className="subtle-badge">{t("common.classes")}: {classCount}</span>
+                    <span className="subtle-badge">{t("common.modules")}: {moduleCount}</span>
+                    <span className="subtle-badge">{t("admin.studentsSelectedCount", { count: assignedCount })}</span>
+                  </div>
+                  {assignedCount ? (
+                    <div className="assigned-students-preview">
+                      {studentOptions
+                        .filter((student) => course.owners.some((ownerId) => String(ownerId) === String(student.id)))
+                        .slice(0, 6)
+                        .map((student) => (
+                          <span key={student.id} className="subtle-badge">{student.name}</span>
+                        ))}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="row-actions wrap-actions">
+                  <button type="button" className="primary-btn" onClick={() => navigateTo(ROUTES.admin.courseBuilder(course.id))}>
+                    {t("admin.openBuilder")}
+                  </button>
+                  <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.courseEdit(course.id))}>
+                    {t("common.edit")}
+                  </button>
+                  <button type="button" className="secondary-btn danger-text" onClick={() => void onDeleteCourse(course.id)}>
+                    {t("common.delete")}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="empty-state-card">
+          <span className="eyebrow">{t("admin.courseManager")}</span>
+          <h3>{t("admin.createCourse")}</h3>
+          <p>{language === "es"
+            ? "Todavía no hay cursos creados. Crea un curso y luego ábrelo en el constructor para agregar clases y lecciones."
+            : "There are no courses yet. Create a course, then open it in the builder to add classes and lessons."}</p>
+          <div className="form-actions">
+            <button type="button" className="primary-btn" onClick={() => navigateTo(ROUTES.admin.courseCreate)}>
+              <Icon name="plus" />
+              {t("admin.createCourse")}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CourseDetailsPage({ mode = "create", course = null, onSaveCourse }) {
+  const { language, t } = useLanguage();
+  const isEditing = mode === "edit" && course;
+  const [form, setForm] = useState(() => createCourseDraft(course));
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveDetails, setSaveDetails] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+
+  useEffect(() => {
+    setForm(createCourseDraft(course));
+    setSaveError("");
+    setSaveDetails("");
+    setSaveMessage("");
+  }, [course?.id]);
+
+  const updateField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const uploadImage = async (file) => {
+    if (!file) return;
+
+    setForm((current) => ({ ...current, imageUploading: true, imageError: "" }));
+    try {
+      const uploaded = await uploadCourseImage(file);
+      setForm((current) => ({
+        ...current,
+        imageUploading: false,
+        imageError: "",
+        imageUrl: uploaded.publicUrl,
+        image_url: uploaded.publicUrl,
+        imageStoragePath: uploaded.storagePath,
+        image_storage_path: uploaded.storagePath,
+        imageLabel: uploaded.fileName,
+      }));
+    } catch (error) {
+      console.error("Course image upload failed:", error);
+      setForm((current) => ({
+        ...current,
+        imageUploading: false,
+        imageError: error?.message || t("admin.courseImageUploadFailed"),
+      }));
+    }
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setSaveError("");
+    setSaveDetails("");
+    setSaveMessage("");
+
+    const payload = buildCoursePayload(form, course?.id ?? null, course);
+    const result = await onSaveCourse(payload, course?.id ?? null);
+    setSaving(false);
+
+    if (!result?.ok) {
+      setSaveError(result?.error || t("admin.savingCourseFailed"));
+      setSaveDetails(result?.errorDetails || "");
+      return;
+    }
+
+    const savedCourse = result?.course ?? null;
+    if (savedCourse?.id) {
+      navigateTo(ROUTES.admin.courseBuilder(savedCourse.id));
+      return;
+    }
+
+    setSaveMessage(language === "es" ? "Curso guardado." : "Course saved.");
+  };
+
+  if (mode === "edit" && !course) {
+    return (
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{t("common.postCourses")}</span>
+            <h2>{t("admin.editCourse")}</h2>
+            <p>{language === "es" ? "No se encontró el curso solicitado." : "The requested course could not be found."}</p>
+          </div>
+        </div>
+        <div className="form-actions">
+          <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.postCourses)}>
+            {t("common.backToCourses")}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <form className="section-card course-form" onSubmit={submit}>
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">{isEditing ? t("admin.editCourse") : t("admin.createCourse")}</span>
+          <h2>{isEditing ? t("admin.editCourse") : t("admin.createCourse")}</h2>
+          <p>{language === "es"
+            ? "Guarda primero los datos básicos del curso. Después podrás abrir el constructor para crear clases y lecciones."
+            : "Save the course basics first. Then you can open the builder to create classes and lessons."}</p>
         </div>
       </div>
 
+      <label>
+        {t("admin.courseTitle")}
+        <input required value={form.title} onChange={(event) => updateField("title", event.target.value)} />
+      </label>
+
+      <label>
+        {t("admin.courseDescription")}
+        <textarea required rows="4" value={form.description} onChange={(event) => updateField("description", event.target.value)} />
+      </label>
+
+      <label>
+        {t("common.courseImage")}
+        <input type="file" accept={IMAGE_ACCEPT} onChange={(event) => void uploadImage(event.target.files?.[0])} />
+      </label>
+
+      {form.imageUploading ? <small className="field-note">{t("common.uploading")}</small> : null}
+      {form.imageError ? <small className="field-note danger-text">{form.imageError}</small> : null}
+      {form.image_url || form.imageUrl ? (
+        <div className="image-preview-shell">
+          <img className="course-image-preview" src={form.image_url || form.imageUrl} alt={form.title || "Course image"} />
+        </div>
+      ) : null}
+
+      <label>
+        {t("common.status")}
+        <select value={form.status} onChange={(event) => updateField("status", event.target.value)}>
+          <option value="draft">{t("status.draft")}</option>
+          <option value="published">{t("status.published")}</option>
+          <option value="archived">{t("status.archived")}</option>
+        </select>
+      </label>
+
+      {saveError ? <AdminErrorMessage error={{ message: saveError, details: saveDetails }} detailsLabel={t("common.details")} /> : null}
+      {saveMessage ? <small className="field-note">{saveMessage}</small> : null}
+
       <div className="form-actions">
-        <a className="secondary-btn" href={ROUTES.admin.dashboard} aria-label={t("common.returnToDashboard")}>
-          <Icon name="arrow-left" />
-          {t("common.returnToDashboard")}
-        </a>
+        <button className="primary-btn" type="submit" disabled={saving || form.imageUploading}>
+          <Icon name="check" />
+          {saving ? t("common.saving") : t("admin.saveCourse")}
+        </button>
+        <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.postCourses)}>
+          {t("common.cancel")}
+        </button>
       </div>
-    </section>
+    </form>
+  );
+}
+
+function CourseBuilderPage({
+  course = null,
+  studentOptions = [],
+  onSaveCourse,
+  onDeleteCourse,
+}) {
+  const { language, t } = useLanguage();
+  const [form, setForm] = useState(() => createCourseDraft(course));
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveDetails, setSaveDetails] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [collapsedModuleIds, setCollapsedModuleIds] = useState([]);
+  const [studentAssignmentOpen, setStudentAssignmentOpen] = useState(true);
+  const [studentSearch, setStudentSearch] = useState("");
+
+  useEffect(() => {
+    setForm(createCourseDraft(course));
+    setCollapsedModuleIds([]);
+    setSaveError("");
+    setSaveDetails("");
+    setSaveMessage("");
+  }, [course?.id]);
+
+  if (!course) {
+    return (
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{t("admin.courseBuilder")}</span>
+            <h2>{t("admin.courseBuilder")}</h2>
+            <p>{language === "es" ? "No se encontró el curso solicitado." : "The requested course could not be found."}</p>
+          </div>
+        </div>
+        <div className="form-actions">
+          <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.postCourses)}>
+            {t("common.backToCourses")}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  const updateClass = (classId, updater) => {
+    setForm((current) => ({
+      ...current,
+      classes: (current.classes || []).map((entry) => (entry.id === classId ? updater(entry) : entry)),
+    }));
+  };
+
+  const updateModule = (moduleId, updater) => {
+    setForm((current) => ({
+      ...current,
+      modules: (current.modules || []).map((module) => (module.id === moduleId ? updater(module) : module)),
+    }));
+  };
+
+  const updateAssignment = (moduleId, updater) => {
+    updateModule(moduleId, (module) => ({
+      ...module,
+      assignment: updater(module.assignment ?? createAssignmentDraft()),
+    }));
+  };
+
+  const getModulesForClass = (classId) =>
+    (form.modules || []).filter((module) => String(module.class_id || module.classId || "") === String(classId));
+
+  const addClass = () => {
+    setForm((current) => ({
+      ...current,
+      classes: [
+        ...(current.classes || []),
+        createClassDraft(
+          (current.classes || []).length + 1,
+          language === "es" ? `Clase ${(current.classes || []).length + 1}` : `Class ${(current.classes || []).length + 1}`,
+        ),
+      ],
+    }));
+  };
+
+  const deleteClass = (classId) => {
+    setForm((current) => ({
+      ...current,
+      classes: (current.classes || [])
+        .filter((entry) => String(entry.id) !== String(classId))
+        .map((entry, index) => ({ ...entry, sortOrder: index + 1, sort_order: index + 1 })),
+      modules: (current.modules || []).filter((module) => String(module.class_id || module.classId || "") !== String(classId)),
+    }));
+  };
+
+  const addModule = (classId) => {
+    if (!classId) {
+      setSaveError(t("admin.selectOrCreateClassBeforeModules"));
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      modules: [
+        ...(current.modules || []),
+        {
+          ...createModuleDraft((current.modules || []).length + 1),
+          classId,
+          class_id: classId,
+        },
+      ],
+    }));
+  };
+
+  const deleteModule = (moduleId) => {
+    setForm((current) => ({
+      ...current,
+      modules: (current.modules || [])
+        .filter((module) => module.id !== moduleId)
+        .map((module, index) => ({ ...module, sortOrder: index + 1, sort_order: index + 1 })),
+    }));
+    setCollapsedModuleIds((current) => current.filter((id) => id !== moduleId));
+  };
+
+  const toggleCollapsed = (moduleId) => {
+    setCollapsedModuleIds((current) => (
+      current.includes(moduleId)
+        ? current.filter((id) => id !== moduleId)
+        : [...current, moduleId]
+    ));
+  };
+
+  const toggleAssignedStudent = (studentId) => {
+    const normalizedStudentId = `${studentId}`;
+    setForm((current) => {
+      const selectedIds = new Set((current.selectedStudentIds || []).map((value) => `${value}`));
+      if (selectedIds.has(normalizedStudentId)) selectedIds.delete(normalizedStudentId);
+      else selectedIds.add(normalizedStudentId);
+      return { ...current, selectedStudentIds: Array.from(selectedIds) };
+    });
+  };
+
+  const selectAllStudents = () => {
+    setForm((current) => ({
+      ...current,
+      selectedStudentIds: studentOptions.map((student) => `${student.id}`),
+    }));
+  };
+
+  const clearAssignedStudents = () => {
+    setForm((current) => ({ ...current, selectedStudentIds: [] }));
+  };
+
+  const uploadImage = async (moduleId, file) => {
+    if (!file) return;
+
+    updateModule(moduleId, (module) => ({
+      ...module,
+      imageUploading: true,
+      imageError: "",
+      imageFile: file,
+      imagePendingName: file.name,
+      imagePendingSize: file.size,
+      imagePendingType: file.type,
+    }));
+
+    try {
+      const uploaded = await uploadModuleImage(file);
+      updateModule(moduleId, (module) => ({
+        ...module,
+        imageUploading: false,
+        imageError: "",
+        imageUrl: uploaded.publicUrl,
+        image_url: uploaded.publicUrl,
+        imageName: uploaded.fileName,
+        image_file_name: uploaded.fileName,
+        imageStoragePath: uploaded.storagePath,
+        image_storage_path: uploaded.storagePath,
+        imageFile: null,
+        imagePendingName: "",
+        imagePendingSize: null,
+        imagePendingType: "",
+      }));
+    } catch (error) {
+      console.error("Module image upload failed:", error);
+      updateModule(moduleId, (module) => ({
+        ...module,
+        imageUploading: false,
+        imageError: error?.message || t("admin.moduleImageUploadFailed"),
+      }));
+    }
+  };
+
+  const uploadPdf = async (moduleId, file) => {
+    if (!file) return;
+
+    updateModule(moduleId, (module) => ({
+      ...module,
+      pdfUploading: true,
+      pdfError: "",
+      pdfFile: file,
+      pdfPendingName: file.name,
+      pdfPendingSize: file.size,
+      pdfPendingType: file.type,
+    }));
+
+    try {
+      const uploaded = await uploadModulePdf(file, moduleId);
+      updateModule(moduleId, (module) => ({
+        ...module,
+        pdfUploading: false,
+        pdfError: "",
+        pdfUrl: uploaded.publicUrl,
+        pdf_url: uploaded.publicUrl,
+        pdfLabel: uploaded.fileName,
+        pdfName: uploaded.fileName,
+        pdf_file_name: uploaded.fileName,
+        pdfStoragePath: uploaded.storagePath,
+        pdf_storage_path: uploaded.storagePath,
+        pdfSource: "upload",
+        pdf_source: "upload",
+        pdfFile: null,
+        pdfPendingName: "",
+        pdfPendingSize: null,
+        pdfPendingType: "",
+      }));
+    } catch (error) {
+      console.error("Module PDF upload failed:", error);
+      updateModule(moduleId, (module) => ({
+        ...module,
+        pdfUploading: false,
+        pdfError: error?.message || t("common.uploadingPdf"),
+      }));
+    }
+  };
+
+  const uploadVideo = async (moduleId, file) => {
+    if (!file) return;
+    if (file.size > MAX_VIDEO_SIZE_BYTES) {
+      updateModule(moduleId, (module) => ({
+        ...module,
+        video: {
+          ...module.video,
+          error: t("admin.videoTooLargeDirectUpload"),
+          uploading: false,
+        },
+      }));
+      return;
+    }
+
+    updateModule(moduleId, (module) => ({
+      ...module,
+      videoFile: file,
+      videoPendingName: file.name,
+      videoPendingSize: file.size,
+      videoPendingType: file.type,
+      video: {
+        ...module.video,
+        uploading: true,
+        error: "",
+      },
+    }));
+
+    try {
+      const uploaded = await uploadModuleVideo(file, moduleId);
+      updateModule(moduleId, (module) => ({
+        ...module,
+        videoUrl: uploaded.publicUrl,
+        video_url: uploaded.publicUrl,
+        videoName: uploaded.fileName,
+        video_file_name: uploaded.fileName,
+        videoStoragePath: uploaded.storagePath,
+        video_storage_path: uploaded.storagePath,
+        videoSource: "upload",
+        video_source: "upload",
+        videoFile: null,
+        videoPendingName: "",
+        videoPendingSize: null,
+        videoPendingType: "",
+        video: {
+          ...module.video,
+          uploadLabel: uploaded.fileName,
+          url: uploaded.publicUrl,
+          uploading: false,
+          error: "",
+        },
+      }));
+    } catch (error) {
+      console.error("Module video upload failed:", error);
+      updateModule(moduleId, (module) => ({
+        ...module,
+        video: {
+          ...module.video,
+          uploading: false,
+          error: error?.message || t("common.uploadingVideo"),
+        },
+      }));
+    }
+  };
+
+  const handleSaveBuilder = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setSaveError("");
+    setSaveDetails("");
+    setSaveMessage("");
+
+    try {
+      const payload = buildCoursePayload(form, course.id, course);
+      const result = await onSaveCourse(payload, course.id);
+      if (!result?.ok) {
+        setSaveError(result?.error || t("admin.savingCourseFailed"));
+        setSaveDetails(result?.errorDetails || "");
+        setSaving(false);
+        return;
+      }
+
+      setSaveMessage(language === "es" ? "Constructor guardado." : "Builder saved.");
+    } catch (error) {
+      console.error("Saving the course builder failed:", error);
+      setSaveError(error?.message || t("admin.savingCourseFailed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const classesForRender = Array.isArray(form.classes) ? form.classes : [];
+
+  return (
+    <form className="builder-shell" onSubmit={handleSaveBuilder}>
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{t("admin.courseBuilder")}</span>
+            <h2>{course.title}</h2>
+            <p>{course.description}</p>
+          </div>
+          <div className="row-actions wrap-actions">
+            <Status status={course.status || form.status || "draft"} />
+            <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.courseEdit(course.id))}>
+              {t("admin.editCourse")}
+            </button>
+            <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.postCourses)}>
+              {t("common.backToCourses")}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{t("admin.studentAccess")}</span>
+            <h3>{t("admin.studentAccess")}</h3>
+          </div>
+        </div>
+
+        <CourseStudentAssignmentSelector
+          students={studentOptions}
+          selectedStudentIds={form.selectedStudentIds || []}
+          searchTerm={studentSearch}
+          onSearchChange={setStudentSearch}
+          onToggleStudent={toggleAssignedStudent}
+          onSelectAll={selectAllStudents}
+          onClearAll={clearAssignedStudents}
+          isOpen={studentAssignmentOpen}
+          onToggleOpen={() => setStudentAssignmentOpen((current) => !current)}
+          t={t}
+        />
+      </section>
+
+      <section className="section-card">
+        <div className="builder-header">
+          <div>
+            <span className="eyebrow">{t("admin.classesInThisCourse")}</span>
+            <h3>{t("admin.classesInThisCourse")}</h3>
+          </div>
+          <button type="button" className="secondary-btn" onClick={addClass}>
+            <Icon name="plus" />
+            {t("admin.addClass")}
+          </button>
+        </div>
+
+        {!classesForRender.length ? (
+          <div className="empty-state-card">
+            <span className="eyebrow">{t("common.classes")}</span>
+            <h4>{t("admin.addFirstClass")}</h4>
+            <p>{t("admin.noClassesYet")}</p>
+            <div className="form-actions">
+              <button type="button" className="primary-btn" onClick={addClass}>
+                <Icon name="plus" />
+                {t("admin.addFirstClass")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="builder-stack">
+          {classesForRender.map((courseClass) => {
+            const classModules = getModulesForClass(courseClass.id);
+            return (
+              <section key={courseClass.id} className="section-card class-builder-card">
+                <div className="builder-header">
+                  <div className="class-builder-fields">
+                    <span className="eyebrow">{t("common.class")}</span>
+                    <input
+                      value={courseClass.title}
+                      onChange={(event) =>
+                        updateClass(courseClass.id, (currentClass) => ({
+                          ...currentClass,
+                          title: event.target.value,
+                        }))
+                      }
+                      placeholder={t("admin.classTitle")}
+                    />
+                    <textarea
+                      rows="2"
+                      value={courseClass.description}
+                      onChange={(event) =>
+                        updateClass(courseClass.id, (currentClass) => ({
+                          ...currentClass,
+                          description: event.target.value,
+                        }))
+                      }
+                      placeholder={t("admin.classDescription")}
+                    />
+                    <select
+                      value={courseClass.status || "published"}
+                      onChange={(event) =>
+                        updateClass(courseClass.id, (currentClass) => ({
+                          ...currentClass,
+                          status: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="draft">{t("status.draft")}</option>
+                      <option value="published">{t("status.published")}</option>
+                      <option value="archived">{t("status.archived")}</option>
+                    </select>
+                  </div>
+                  <div className="row-actions wrap-actions builder-actions">
+                    <span className="subtle-badge">{t("common.modules")}: {classModules.length}</span>
+                    <button type="button" className="secondary-btn" onClick={() => addModule(courseClass.id)}>
+                      <Icon name="plus" />
+                      {t("admin.addModuleLesson")}
+                    </button>
+                    <button type="button" className="secondary-btn danger-text" onClick={() => deleteClass(courseClass.id)}>
+                      {t("common.delete")}
+                    </button>
+                  </div>
+                </div>
+
+                {classModules.length ? (
+                  classModules.map((module, index) => (
+                    <ModuleEditor
+                      key={module.id}
+                      module={module}
+                      index={index}
+                      t={t}
+                      collapsed={collapsedModuleIds.includes(module.id)}
+                      toggleCollapsed={toggleCollapsed}
+                      updateModule={updateModule}
+                      updateAssignment={updateAssignment}
+                      deleteModule={deleteModule}
+                      uploadImage={uploadImage}
+                      uploadPdf={uploadPdf}
+                      uploadVideo={uploadVideo}
+                    />
+                  ))
+                ) : (
+                  <p className="empty-copy">{t("admin.noModulesInClass")}</p>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      </section>
+
+      {saveError ? <AdminErrorMessage error={{ message: saveError, details: saveDetails }} detailsLabel={t("common.details")} /> : null}
+      {saveMessage ? <small className="field-note">{saveMessage}</small> : null}
+
+      <div className="form-actions">
+        <button className="primary-btn" type="submit" disabled={saving}>
+          <Icon name="check" />
+          {saving ? t("common.saving") : t("admin.saveCourse")}
+        </button>
+        <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.courseEdit(course.id))}>
+          {t("admin.editCourse")}
+        </button>
+        <button type="button" className="secondary-btn danger-text" onClick={() => void onDeleteCourse(course.id)}>
+          {t("common.delete")}
+        </button>
+      </div>
+    </form>
   );
 }
 

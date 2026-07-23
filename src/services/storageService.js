@@ -138,6 +138,10 @@ export async function uploadCourseImage(file) {
   return uploadToBucket(COURSE_IMAGE_BUCKET, file, "courses");
 }
 
+export async function uploadModuleImage(file) {
+  return uploadToBucket(COURSE_IMAGE_BUCKET, file, "module-images");
+}
+
 export async function uploadCommunityPdf(file, postId = "post") {
   if (!postId) {
     throw new Error("Post ID was missing before PDF upload.");

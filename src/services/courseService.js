@@ -41,6 +41,9 @@ function normalizeModules(modules = []) {
     sortOrder: module.sortOrder ?? index + 1,
     title: module.title ?? "",
     description: module.description ?? "",
+    lessonContent: module.lesson_content ?? module.lessonContent ?? "",
+    lesson_content: module.lesson_content ?? module.lessonContent ?? "",
+    status: module.status ?? "published",
     requiresAssignment:
       module.requiresAssignment ??
       module.requires_assignment ??
@@ -49,6 +52,17 @@ function normalizeModules(modules = []) {
       module.requires_assignment ??
       module.requiresAssignment ??
       Boolean(module.assignment?.title),
+    imageUrl:
+      module.image_url ??
+      module.imageUrl ??
+      "",
+    image_url:
+      module.image_url ??
+      module.imageUrl ??
+      "",
+    imageName: module.imageName ?? module.image_file_name ?? "",
+    image_file_name: module.image_file_name ?? module.imageName ?? "",
+    image_storage_path: module.image_storage_path ?? module.imageStoragePath ?? "",
     pdfUrl:
       module.pdf_url ??
       module.pdfUrl ??
