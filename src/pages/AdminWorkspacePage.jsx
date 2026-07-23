@@ -871,14 +871,7 @@ export function AdminWorkspacePage({
   }
 
   if (pathname === "/admin/post-courses") {
-    return (
-      <PostCoursesPage
-        users={users}
-        courses={courses}
-        onSaveCourse={onSaveCourse}
-        onDeleteCourse={onDeleteCourse}
-      />
-    );
+    return <CourseBuilderRebuildPage />;
   }
 
   if (pathname === "/admin/community") {
@@ -3709,6 +3702,31 @@ function ModuleEditor({
   );
 }
 
+function CourseBuilderRebuildPage() {
+  const { t } = useLanguage();
+
+  return (
+    <section className="section-card gdpr-panel">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">{t("common.postCourses")}</span>
+          <h2>{t("admin.courseBuilderRebuildTitle")}</h2>
+          <p>{t("admin.courseBuilderRebuildMessage")}</p>
+        </div>
+      </div>
+
+      <div className="form-actions">
+        <a className="secondary-btn" href={ROUTES.admin.dashboard} aria-label={t("common.returnToDashboard")}>
+          <Icon name="arrow-left" />
+          {t("common.returnToDashboard")}
+        </a>
+      </div>
+    </section>
+  );
+}
+
+// Deprecated: kept temporarily for reference during the planned course-system rebuild.
+// This component is intentionally disconnected from active admin routing.
 function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   const { t, language, translateSubmissionType } = useLanguage();
   const [form, setForm] = useState(createCourseDraft());
