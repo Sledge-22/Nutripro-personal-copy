@@ -554,11 +554,16 @@ export async function getModuleDeletionSafety(moduleId) {
     };
   }
 
-  const [assignmentResult, progressResult] = await Promise.all([
-    supabase.from("module_assignments").select("id").eq("module_id", moduleId).limit(1),
+  const [moduleResult, assignmentResult, progressResult] = await Promise.all([
+    supabase.from("modules").select("id, course_id").eq("id", moduleId).maybeSingle(),
+    supabase.from("module_assignments").select("id").eq("module_id", moduleId),
     supabase.from("student_progress").select("module_id").eq("module_id", moduleId).limit(1),
   ]);
 
+  if (moduleResult.error) {
+    console.error("Checking the selected lesson before delete failed:", moduleResult.error);
+    throw moduleResult.error;
+  }
   if (assignmentResult.error) {
     console.error("Checking lesson assignments before delete failed:", assignmentResult.error);
     throw assignmentResult.error;
@@ -568,12 +573,43 @@ export async function getModuleDeletionSafety(moduleId) {
     throw progressResult.error;
   }
 
+  const assignmentIds = (assignmentResult.data ?? []).map((assignment) => assignment.id).filter(Boolean);
+  const [submissionResult, certificateResult] = await Promise.all([
+    assignmentIds.length
+      ? supabase
+          .from("assignment_submissions")
+          .select("id")
+          .in("assignment_id", assignmentIds)
+          .limit(1)
+      : Promise.resolve({ data: [], error: null }),
+    moduleResult.data?.course_id
+      ? supabase
+          .from("certificates")
+          .select("id")
+          .eq("course_id", moduleResult.data.course_id)
+          .limit(1)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (submissionResult.error) {
+    console.error("Checking lesson submissions before delete failed:", submissionResult.error);
+    throw submissionResult.error;
+  }
+  if (certificateResult.error) {
+    console.error("Checking course certificates before lesson delete failed:", certificateResult.error);
+    throw certificateResult.error;
+  }
+
   const hasAssignment = Boolean(assignmentResult.data?.length);
   const hasProgress = Boolean(progressResult.data?.length);
+  const hasSubmissions = Boolean(submissionResult.data?.length);
+  const hasCertificates = Boolean(certificateResult.data?.length);
   return {
-    canDelete: !hasAssignment && !hasProgress,
+    canDelete: !hasAssignment && !hasProgress && !hasSubmissions && !hasCertificates,
     hasAssignment,
     hasProgress,
+    hasSubmissions,
+    hasCertificates,
   };
 }
 
@@ -611,6 +647,45 @@ export async function archiveModuleById(moduleId) {
   }
   if (!data) {
     throw new Error("The selected lesson was not archived.");
+  }
+
+  return data;
+}
+
+export async function restoreModuleById(moduleId) {
+  if (!moduleId) {
+    throw new Error("A lesson id is required.");
+  }
+
+  const updatedAt = new Date().toISOString();
+  if (!isSupabaseConfigured) {
+    let restoredModule = null;
+    setMockCourses(
+      getMockCourses().map((course) => ({
+        ...course,
+        modules: (Array.isArray(course?.modules) ? course.modules : []).map((module) => {
+          if (String(module?.id) !== String(moduleId)) return module;
+          restoredModule = { ...module, status: "published", updatedAt, updated_at: updatedAt };
+          return restoredModule;
+        }),
+      })),
+    );
+    return restoredModule;
+  }
+
+  const { data, error } = await supabase
+    .from("modules")
+    .update({ status: "published", updated_at: updatedAt })
+    .eq("id", moduleId)
+    .select("id, class_id, status, sort_order, updated_at")
+    .maybeSingle();
+
+  if (error) {
+    console.error("Restoring the selected lesson failed:", error);
+    throw error;
+  }
+  if (!data) {
+    throw new Error("The selected lesson was not restored.");
   }
 
   return data;

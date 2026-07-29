@@ -17,6 +17,7 @@ import {
   archiveModuleById,
   deleteModuleById,
   getModulesByCourse,
+  restoreModuleById,
   updateModuleSortOrders,
 } from "../services/moduleService.js";
 import { normalizeCountrySelection } from "../data/countries.js";
@@ -3321,9 +3322,11 @@ function ModuleEditor({
   updateModule,
   updateAssignment,
   deleteModule,
+  restoreModule = () => {},
   requestDeleteModule = () => {},
   deleting = false,
   archiving = false,
+  restoring = false,
   moveModuleUp,
   moveModuleDown,
   canMoveUp,
@@ -3370,6 +3373,7 @@ function ModuleEditor({
   };
   const pdfPreview = getModulePdfViewerSource(module);
   const videoPreview = getModuleVideoViewerSource(module);
+  const isArchived = module.status === "archived";
 
   return (
     <article className="module-editor-card" key={module.id}>
@@ -3383,7 +3387,7 @@ function ModuleEditor({
             type="button"
             className="text-button compact-toggle"
             onClick={() => moveModuleUp(module.id)}
-            disabled={!canMoveUp || reordering}
+            disabled={isArchived || !canMoveUp || reordering}
             aria-label={t("admin.moveLessonUp")}
             title={t("admin.moveLessonUp")}
           >
@@ -3393,7 +3397,7 @@ function ModuleEditor({
             type="button"
             className="text-button compact-toggle"
             onClick={() => moveModuleDown(module.id)}
-            disabled={!canMoveDown || reordering}
+            disabled={isArchived || !canMoveDown || reordering}
             aria-label={t("admin.moveLessonDown")}
             title={t("admin.moveLessonDown")}
           >
@@ -3402,22 +3406,35 @@ function ModuleEditor({
           <button type="button" className="text-button compact-toggle" onClick={() => toggleCollapsed(module.id)}>
             {collapsed ? t("common.expand") : t("common.collapse")}
           </button>
-          <button
-            type="button"
-            className="danger-text mini-action"
-            onClick={() => deleteModule(module.id)}
-            disabled={archiving || deleting}
-          >
-            {t("common.archive")}
-          </button>
-          <button
-            type="button"
-            className="danger-text mini-action"
-            onClick={() => requestDeleteModule(module)}
-            disabled={deleting}
-          >
-            {t("common.delete")}
-          </button>
+          {isArchived ? (
+            <button
+              type="button"
+              className="secondary-btn mini-action"
+              onClick={() => restoreModule(module.id)}
+              disabled={restoring || deleting}
+            >
+              {t("common.restore")}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="secondary-btn mini-action"
+                onClick={() => deleteModule(module.id)}
+                disabled={archiving || deleting}
+              >
+                {t("common.archive")}
+              </button>
+              <button
+                type="button"
+                className="danger-btn mini-action"
+                onClick={() => requestDeleteModule(module)}
+                disabled={deleting}
+              >
+                {t("common.delete")}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -4450,8 +4467,11 @@ function CourseBuilderPage({
   const [studentSearch, setStudentSearch] = useState("");
   const [reorderingModuleIds, setReorderingModuleIds] = useState([]);
   const [pendingDeleteModule, setPendingDeleteModule] = useState(null);
+  const [blockedDeleteModule, setBlockedDeleteModule] = useState(null);
   const [deletingModuleId, setDeletingModuleId] = useState("");
   const [archivingModuleId, setArchivingModuleId] = useState("");
+  const [restoringModuleId, setRestoringModuleId] = useState("");
+  const [showArchivedLessons, setShowArchivedLessons] = useState(false);
 
   useEffect(() => {
     setForm(createCourseDraft(course));
@@ -4464,8 +4484,11 @@ function CourseBuilderPage({
     setSaveMessage("");
     setReorderingModuleIds([]);
     setPendingDeleteModule(null);
+    setBlockedDeleteModule(null);
     setDeletingModuleId("");
     setArchivingModuleId("");
+    setRestoringModuleId("");
+    setShowArchivedLessons(false);
   }, [course?.id]);
 
   if (!course) {
@@ -4516,10 +4539,21 @@ function CourseBuilderPage({
     safeArray(form?.modules)
       .filter(Boolean)
       .filter((module) => String(module?.class_id || module?.classId || "") === String(classId))
+      .filter((module) => showArchivedLessons || module?.status !== "archived")
+      .sort(compareLessonOrder);
+
+  const getActiveModulesForClass = (classId) =>
+    safeArray(form?.modules)
+      .filter(Boolean)
+      .filter(
+        (module) =>
+          module?.status !== "archived" &&
+          String(module?.class_id || module?.classId || "") === String(classId),
+      )
       .sort(compareLessonOrder);
 
   const moveModuleWithinClass = async (classId, moduleId, direction) => {
-    const classModules = getModulesForClass(classId);
+    const classModules = getActiveModulesForClass(classId);
     const sourceIndex = classModules.findIndex((module) => String(module.id) === String(moduleId));
     const targetIndex = sourceIndex + direction;
     if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= classModules.length) return;
@@ -4685,6 +4719,8 @@ function CourseBuilderPage({
         modules: mergeRefetchedModules(current?.modules, finalModules),
       }));
       setCollapsedModuleIds((current) => (current.includes(moduleId) ? current : [...current, moduleId]));
+      setCollapsedClassIds((current) => current.filter((id) => String(id) !== String(classId)));
+      setBlockedDeleteModule(null);
       setSaveMessage(language === "es" ? "Lección archivada." : "Lesson archived.");
 
       await recordAdminAuditLog({
@@ -4706,6 +4742,74 @@ function CourseBuilderPage({
     }
   };
 
+  const restoreModule = async (moduleId) => {
+    if (!moduleId || !course?.id) {
+      setSaveError(language === "es" ? "No se pudo restaurar la lección." : "Lesson could not be restored.");
+      return;
+    }
+
+    const targetModule = safeArray(form?.modules).find(
+      (module) => String(module?.id) === String(moduleId),
+    );
+    const classId = targetModule?.class_id || targetModule?.classId || "";
+    setRestoringModuleId(moduleId);
+    setSaveError("");
+    setSaveDetails("");
+    setSaveMessage("");
+
+    try {
+      await restoreModuleById(moduleId);
+      const refetchedModules = await getModulesByCourse(course.id);
+      const activeClassModules = safeArray(refetchedModules)
+        .filter(
+          (module) =>
+            module?.status !== "archived" &&
+            String(module?.class_id || module?.classId || "") === String(classId),
+        )
+        .sort(compareLessonOrder);
+      const orderUpdates = activeClassModules
+        .map((module, index) => ({
+          id: module.id,
+          classId,
+          class_id: classId,
+          sortOrder: index + 1,
+          sort_order: index + 1,
+          previousOrder: Number(module.sort_order ?? module.sortOrder ?? 0),
+        }))
+        .filter((module) => module.previousOrder !== module.sortOrder);
+
+      if (orderUpdates.length) {
+        await updateModuleSortOrders(orderUpdates);
+      }
+      const finalModules = orderUpdates.length
+        ? await getModulesByCourse(course.id)
+        : refetchedModules;
+      setForm((current) => ({
+        ...current,
+        modules: mergeRefetchedModules(current?.modules, finalModules),
+      }));
+      setCollapsedClassIds((current) => current.filter((id) => String(id) !== String(classId)));
+      setSaveMessage(language === "es" ? "Lección restaurada." : "Lesson restored.");
+
+      await recordAdminAuditLog({
+        adminUser: currentUser,
+        action: "module_restored",
+        targetType: "module",
+        targetId: moduleId,
+        details: {
+          course_id: course.id,
+          class_id: classId || null,
+        },
+      });
+    } catch (error) {
+      console.error("Restoring the selected lesson from the Course Builder failed:", error);
+      setSaveError(language === "es" ? "No se pudo restaurar la lección." : "Lesson could not be restored.");
+      setSaveDetails(error?.message || "");
+    } finally {
+      setRestoringModuleId("");
+    }
+  };
+
   const requestDeleteModule = (module) => {
     if (!module?.id) {
       setSaveError(language === "es" ? "No se pudo eliminar la lección." : "Lesson could not be deleted.");
@@ -4716,6 +4820,7 @@ function CourseBuilderPage({
       classId: module.class_id || module.classId || "",
       title: module.title || "",
     });
+    setBlockedDeleteModule(null);
     setSaveError("");
     setSaveDetails("");
     setSaveMessage("");
@@ -4769,6 +4874,7 @@ function CourseBuilderPage({
       const remainingClassModules = safeArray(refetchedModules)
         .filter(
           (module) =>
+            module?.status !== "archived" &&
             String(module?.class_id || module?.classId || "") === String(target.classId || ""),
         )
         .sort(compareLessonOrder);
@@ -4818,6 +4924,7 @@ function CourseBuilderPage({
         );
       } else if (error?.code === "MODULE_HAS_RELATED_ACTIVITY") {
         setPendingDeleteModule(null);
+        setBlockedDeleteModule(target);
         setSaveError(
           language === "es"
             ? "Esta lección tiene actividad de estudiantes relacionada. Archivala en lugar de eliminarla."
@@ -5144,6 +5251,19 @@ function CourseBuilderPage({
             <button type="button" className="secondary-btn" onClick={expandAllClasses}>
               {t("admin.expandAll")}
             </button>
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => setShowArchivedLessons((current) => !current)}
+            >
+              {showArchivedLessons
+                ? language === "es"
+                  ? "Ocultar lecciones archivadas"
+                  : "Hide archived lessons"
+                : language === "es"
+                  ? "Mostrar lecciones archivadas"
+                  : "Show archived lessons"}
+            </button>
             <button type="button" className="secondary-btn" onClick={addClass}>
               <Icon name="plus" />
               {t("admin.addClass")}
@@ -5253,8 +5373,13 @@ function CourseBuilderPage({
                 {!isCollapsed && !isEditing ? (
                   <div id={`class-body-${courseClass.id}`} className="class-builder-body">
                     {classModules.length ? (
-                      classModules.map((module, index) => (
-                        <ModuleEditor
+                      classModules.map((module, index) => {
+                        const activeClassModules = getActiveModulesForClass(courseClass.id);
+                        const activeIndex = activeClassModules.findIndex(
+                          (entry) => String(entry?.id) === String(module?.id),
+                        );
+                        return (
+                          <ModuleEditor
                           key={module.id}
                           module={module}
                           index={index}
@@ -5264,19 +5389,26 @@ function CourseBuilderPage({
                           updateModule={updateModule}
                           updateAssignment={updateAssignment}
                           deleteModule={archiveModule}
+                          restoreModule={restoreModule}
                           requestDeleteModule={requestDeleteModule}
                           deleting={String(deletingModuleId) === String(module.id)}
                           archiving={String(archivingModuleId) === String(module.id)}
+                          restoring={String(restoringModuleId) === String(module.id)}
                           moveModuleUp={(moduleId) => void moveModuleWithinClass(courseClass.id, moduleId, -1)}
                           moveModuleDown={(moduleId) => void moveModuleWithinClass(courseClass.id, moduleId, 1)}
-                          canMoveUp={index > 0}
-                          canMoveDown={index < classModules.length - 1}
+                          canMoveUp={module?.status !== "archived" && activeIndex > 0}
+                          canMoveDown={
+                            module?.status !== "archived" &&
+                            activeIndex >= 0 &&
+                            activeIndex < activeClassModules.length - 1
+                          }
                           reordering={reorderingModuleIds.includes(module.id)}
                           uploadImage={uploadImage}
                           uploadPdf={uploadPdf}
                           uploadVideo={uploadVideo}
                         />
-                      ))
+                        );
+                      })
                     ) : (
                       <p className="empty-copy">{t("admin.noModulesInClass")}</p>
                     )}
@@ -5289,6 +5421,18 @@ function CourseBuilderPage({
       </section>
 
       {saveError ? <AdminErrorMessage error={{ message: saveError, details: saveDetails }} detailsLabel={t("common.details")} /> : null}
+      {blockedDeleteModule ? (
+        <div className="form-actions compact">
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => void archiveModule(blockedDeleteModule.id)}
+            disabled={String(archivingModuleId) === String(blockedDeleteModule.id)}
+          >
+            {language === "es" ? "Archivar lección" : "Archive lesson"}
+          </button>
+        </div>
+      ) : null}
       {saveMessage ? <small className="field-note">{saveMessage}</small> : null}
 
       <div className="form-actions">

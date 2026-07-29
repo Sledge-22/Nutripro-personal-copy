@@ -49,9 +49,13 @@ function getCourseModules(course) {
   );
   return (Array.isArray(course?.modules) ? course.modules : [])
     .filter(
-      (module) =>
-        module?.status !== "archived" &&
-        !archivedClassIds.has(String(module?.class_id ?? module?.classId ?? "")),
+      (module) => {
+        const moduleStatus = `${module?.status ?? ""}`.trim().toLowerCase();
+        return (
+          (!moduleStatus || moduleStatus === "published") &&
+          !archivedClassIds.has(String(module?.class_id ?? module?.classId ?? ""))
+        );
+      },
     )
     .sort(compareLessonOrder);
 }
