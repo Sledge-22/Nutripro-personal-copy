@@ -13,7 +13,12 @@ import {
   updateGdprDataRequest,
 } from "../services/gdprDataRequestService.js";
 import { uploadCourseImage, uploadModuleImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
-import { updateModuleSortOrders } from "../services/moduleService.js";
+import {
+  archiveModuleById,
+  deleteModuleById,
+  getModulesByCourse,
+  updateModuleSortOrders,
+} from "../services/moduleService.js";
 import { normalizeCountrySelection } from "../data/countries.js";
 import { getProfileCountryOptions } from "../data/profileCountries.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
@@ -3316,6 +3321,9 @@ function ModuleEditor({
   updateModule,
   updateAssignment,
   deleteModule,
+  requestDeleteModule = () => {},
+  deleting = false,
+  archiving = false,
   moveModuleUp,
   moveModuleDown,
   canMoveUp,
@@ -3394,8 +3402,21 @@ function ModuleEditor({
           <button type="button" className="text-button compact-toggle" onClick={() => toggleCollapsed(module.id)}>
             {collapsed ? t("common.expand") : t("common.collapse")}
           </button>
-          <button type="button" className="danger-text mini-action" onClick={() => deleteModule(module.id)}>
+          <button
+            type="button"
+            className="danger-text mini-action"
+            onClick={() => deleteModule(module.id)}
+            disabled={archiving || deleting}
+          >
             {t("common.archive")}
+          </button>
+          <button
+            type="button"
+            className="danger-text mini-action"
+            onClick={() => requestDeleteModule(module)}
+            disabled={deleting}
+          >
+            {t("common.delete")}
           </button>
         </div>
       </div>
@@ -4411,6 +4432,7 @@ function CourseDetailsPage({ mode = "create", course = null, onSaveCourse }) {
 function CourseBuilderPage({
   course = null,
   studentOptions = [],
+  currentUser = null,
   onSaveCourse,
   onDeleteCourse,
 }) {
@@ -4427,6 +4449,9 @@ function CourseBuilderPage({
   const [studentAssignmentOpen, setStudentAssignmentOpen] = useState(true);
   const [studentSearch, setStudentSearch] = useState("");
   const [reorderingModuleIds, setReorderingModuleIds] = useState([]);
+  const [pendingDeleteModule, setPendingDeleteModule] = useState(null);
+  const [deletingModuleId, setDeletingModuleId] = useState("");
+  const [archivingModuleId, setArchivingModuleId] = useState("");
 
   useEffect(() => {
     setForm(createCourseDraft(course));
@@ -4438,6 +4463,9 @@ function CourseBuilderPage({
     setSaveDetails("");
     setSaveMessage("");
     setReorderingModuleIds([]);
+    setPendingDeleteModule(null);
+    setDeletingModuleId("");
+    setArchivingModuleId("");
   }, [course?.id]);
 
   if (!course) {
@@ -4604,20 +4632,205 @@ function CourseBuilderPage({
     setCollapsedClassIds((current) => current.filter((id) => id !== classId));
   };
 
-  const deleteModule = (moduleId) => {
+  const archiveModule = async (moduleId) => {
     const confirmed = window.confirm(
       language === "es"
         ? "¿Archivar este módulo? Sus archivos, tarea, entregas y progreso se conservarán."
         : "Archive this module? Its files, assignment, submissions, and progress will be preserved.",
     );
     if (!confirmed) return;
-    setForm((current) => ({
-      ...current,
-      modules: safeArray(current?.modules).map((module) =>
-        String(module.id) === String(moduleId) ? { ...module, status: "archived" } : module,
-      ),
-    }));
-    setCollapsedModuleIds((current) => (current.includes(moduleId) ? current : [...current, moduleId]));
+    if (!moduleId || !course?.id) {
+      setSaveError(language === "es" ? "No se pudo archivar la lección." : "Lesson could not be archived.");
+      return;
+    }
+
+    const targetModule = safeArray(form?.modules).find(
+      (module) => String(module?.id) === String(moduleId),
+    );
+    const classId = targetModule?.class_id || targetModule?.classId || "";
+    setArchivingModuleId(moduleId);
+    setSaveError("");
+    setSaveDetails("");
+    setSaveMessage("");
+
+    try {
+      await archiveModuleById(moduleId);
+      const refetchedModules = await getModulesByCourse(course.id);
+      const activeClassModules = safeArray(refetchedModules)
+        .filter(
+          (module) =>
+            module?.status !== "archived" &&
+            String(module?.class_id || module?.classId || "") === String(classId),
+        )
+        .sort(compareLessonOrder);
+      const orderUpdates = activeClassModules
+        .map((module, index) => ({
+          id: module.id,
+          classId,
+          class_id: classId,
+          sortOrder: index + 1,
+          sort_order: index + 1,
+          previousOrder: Number(module.sort_order ?? module.sortOrder ?? 0),
+        }))
+        .filter((module) => module.previousOrder !== module.sortOrder);
+
+      if (orderUpdates.length) {
+        await updateModuleSortOrders(orderUpdates);
+      }
+      const finalModules = orderUpdates.length
+        ? await getModulesByCourse(course.id)
+        : refetchedModules;
+      setForm((current) => ({
+        ...current,
+        modules: mergeRefetchedModules(current?.modules, finalModules),
+      }));
+      setCollapsedModuleIds((current) => (current.includes(moduleId) ? current : [...current, moduleId]));
+      setSaveMessage(language === "es" ? "Lección archivada." : "Lesson archived.");
+
+      await recordAdminAuditLog({
+        adminUser: currentUser,
+        action: "module_archived",
+        targetType: "module",
+        targetId: moduleId,
+        details: {
+          course_id: course.id,
+          class_id: classId || null,
+        },
+      });
+    } catch (error) {
+      console.error("Archiving the selected lesson from the Course Builder failed:", error);
+      setSaveError(language === "es" ? "No se pudo archivar la lección." : "Lesson could not be archived.");
+      setSaveDetails(error?.message || "");
+    } finally {
+      setArchivingModuleId("");
+    }
+  };
+
+  const requestDeleteModule = (module) => {
+    if (!module?.id) {
+      setSaveError(language === "es" ? "No se pudo eliminar la lección." : "Lesson could not be deleted.");
+      return;
+    }
+    setPendingDeleteModule({
+      id: module.id,
+      classId: module.class_id || module.classId || "",
+      title: module.title || "",
+    });
+    setSaveError("");
+    setSaveDetails("");
+    setSaveMessage("");
+  };
+
+  const mergeRefetchedModules = (currentModules, refetchedModules) =>
+    safeArray(refetchedModules).map((module, index) => {
+      const localModule = safeArray(currentModules).find(
+        (entry) => String(entry?.id) === String(module?.id),
+      );
+      return {
+        ...restoreModuleDraft(module, index),
+        ...(localModule || {}),
+        classId: module.class_id || module.classId || localModule?.class_id || localModule?.classId || "",
+        class_id: module.class_id || module.classId || localModule?.class_id || localModule?.classId || "",
+        sortOrder: module.sort_order ?? module.sortOrder ?? localModule?.sort_order ?? localModule?.sortOrder ?? index + 1,
+        sort_order: module.sort_order ?? module.sortOrder ?? localModule?.sort_order ?? localModule?.sortOrder ?? index + 1,
+        status: module.status || localModule?.status || "published",
+        updatedAt: module.updated_at || module.updatedAt || localModule?.updated_at || localModule?.updatedAt || "",
+        updated_at: module.updated_at || module.updatedAt || localModule?.updated_at || localModule?.updatedAt || "",
+      };
+    });
+
+  const confirmDeleteModule = async () => {
+    const target = pendingDeleteModule;
+    if (!target?.id || !course?.id) {
+      setSaveError(language === "es" ? "No se pudo eliminar la lección." : "Lesson could not be deleted.");
+      setPendingDeleteModule(null);
+      return;
+    }
+
+    setDeletingModuleId(target.id);
+    setSaveError("");
+    setSaveDetails("");
+    setSaveMessage("");
+    let lessonDeleted = false;
+
+    try {
+      await deleteModuleById(target.id, { confirmed: true });
+      lessonDeleted = true;
+      setForm((current) => ({
+        ...current,
+        modules: safeArray(current?.modules).filter(
+          (module) => String(module?.id) !== String(target.id),
+        ),
+      }));
+      setCollapsedModuleIds((current) => current.filter((id) => String(id) !== String(target.id)));
+      setCollapsedClassIds((current) => current.filter((id) => String(id) !== String(target.classId)));
+
+      const refetchedModules = await getModulesByCourse(course.id);
+      const remainingClassModules = safeArray(refetchedModules)
+        .filter(
+          (module) =>
+            String(module?.class_id || module?.classId || "") === String(target.classId || ""),
+        )
+        .sort(compareLessonOrder);
+      const orderUpdates = remainingClassModules
+        .map((module, index) => ({
+          id: module.id,
+          classId: target.classId,
+          class_id: target.classId,
+          sortOrder: index + 1,
+          sort_order: index + 1,
+          previousOrder: Number(module.sort_order ?? module.sortOrder ?? 0),
+        }))
+        .filter((module) => module.previousOrder !== module.sortOrder);
+
+      if (orderUpdates.length) {
+        await updateModuleSortOrders(orderUpdates);
+      }
+
+      const finalModules = orderUpdates.length
+        ? await getModulesByCourse(course.id)
+        : refetchedModules;
+      setForm((current) => ({
+        ...current,
+        modules: mergeRefetchedModules(current?.modules, finalModules),
+      }));
+      setPendingDeleteModule(null);
+      setSaveMessage(language === "es" ? "Lección eliminada." : "Lesson deleted.");
+
+      await recordAdminAuditLog({
+        adminUser: currentUser,
+        action: "module_deleted",
+        targetType: "module",
+        targetId: target.id,
+        details: {
+          course_id: course.id,
+          class_id: target.classId || null,
+        },
+      });
+    } catch (error) {
+      console.error("Deleting the selected lesson from the Course Builder failed:", error);
+      if (lessonDeleted) {
+        setPendingDeleteModule(null);
+        setSaveError(
+          language === "es"
+            ? "La lección fue eliminada, pero no se pudo actualizar la lista. Recarga la página para reintentar."
+            : "The lesson was deleted, but the list could not be refreshed. Reload the page to retry.",
+        );
+      } else if (error?.code === "MODULE_HAS_RELATED_ACTIVITY") {
+        setPendingDeleteModule(null);
+        setSaveError(
+          language === "es"
+            ? "Esta lección tiene actividad de estudiantes relacionada. Archivala en lugar de eliminarla."
+            : "This lesson has related student activity. Archive it instead of deleting.",
+        );
+      } else {
+        setPendingDeleteModule(null);
+        setSaveError(language === "es" ? "No se pudo eliminar la lección." : "Lesson could not be deleted.");
+      }
+      setSaveDetails(error?.message || "");
+    } finally {
+      setDeletingModuleId("");
+    }
   };
 
   const toggleCollapsed = (moduleId) => {
@@ -5050,7 +5263,10 @@ function CourseBuilderPage({
                           toggleCollapsed={toggleCollapsed}
                           updateModule={updateModule}
                           updateAssignment={updateAssignment}
-                          deleteModule={deleteModule}
+                          deleteModule={archiveModule}
+                          requestDeleteModule={requestDeleteModule}
+                          deleting={String(deletingModuleId) === String(module.id)}
+                          archiving={String(archivingModuleId) === String(module.id)}
                           moveModuleUp={(moduleId) => void moveModuleWithinClass(courseClass.id, moduleId, -1)}
                           moveModuleDown={(moduleId) => void moveModuleWithinClass(courseClass.id, moduleId, 1)}
                           canMoveUp={index > 0}
@@ -5098,6 +5314,62 @@ function CourseBuilderPage({
           {t("common.archive")}
         </button>
       </div>
+
+      {pendingDeleteModule ? (
+        <div
+          className="modal-backdrop"
+          onMouseDown={() => {
+            if (!deletingModuleId) setPendingDeleteModule(null);
+          }}
+        >
+          <div
+            className="certificate-modal confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-lesson-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              className="modal-close"
+              type="button"
+              onClick={() => setPendingDeleteModule(null)}
+              disabled={Boolean(deletingModuleId)}
+              aria-label={t("common.cancel")}
+            >
+              ×
+            </button>
+            <span className="eyebrow">{language === "es" ? "Eliminar lección" : "Delete lesson"}</span>
+            <h2 id="delete-lesson-title">
+              {language === "es"
+                ? "¿Seguro que querés eliminar esta lección? Esta acción no se puede deshacer."
+                : "Are you sure you want to delete this lesson? This action cannot be undone."}
+            </h2>
+            {pendingDeleteModule.title ? <p><strong>{pendingDeleteModule.title}</strong></p> : null}
+            <div className="form-actions compact confirm-modal-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setPendingDeleteModule(null)}
+                disabled={Boolean(deletingModuleId)}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className="primary-btn danger-btn"
+                onClick={() => void confirmDeleteModule()}
+                disabled={Boolean(deletingModuleId)}
+              >
+                {deletingModuleId
+                  ? t("common.saving")
+                  : language === "es"
+                    ? "Eliminar lección"
+                    : "Delete lesson"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </form>
   );
 }

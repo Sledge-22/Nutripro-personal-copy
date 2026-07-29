@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
-import { getMockCourses, setMockCourses } from "./mockStore.js";
+import { requireConfirmedDelete } from "../utils/dataSafety.js";
+import { getMockCourses, getMockProgress, setMockCourses } from "./mockStore.js";
 import { getAssignmentsByModuleIds, syncAssignmentsForModules } from "./assignmentService.js";
 
 const OPTIONAL_MODULE_COLUMNS = [
@@ -529,4 +530,132 @@ export async function updateModuleSortOrders(moduleUpdates = []) {
   }
 
   return savedRows;
+}
+
+export async function getModuleDeletionSafety(moduleId) {
+  if (!moduleId) {
+    throw new Error("A lesson id is required.");
+  }
+
+  if (!isSupabaseConfigured) {
+    const module = getMockCourses()
+      .flatMap((course) => (Array.isArray(course?.modules) ? course.modules : []))
+      .find((entry) => String(entry?.id) === String(moduleId));
+    const mockProgress = getMockProgress();
+    const hasProgress = Boolean(
+      mockProgress?.[`module-${moduleId}`] ||
+      mockProgress?.[`pdf-${moduleId}`] ||
+      mockProgress?.[`video-${moduleId}`],
+    );
+    return {
+      canDelete: !module?.assignment && !hasProgress,
+      hasAssignment: Boolean(module?.assignment),
+      hasProgress,
+    };
+  }
+
+  const [assignmentResult, progressResult] = await Promise.all([
+    supabase.from("module_assignments").select("id").eq("module_id", moduleId).limit(1),
+    supabase.from("student_progress").select("module_id").eq("module_id", moduleId).limit(1),
+  ]);
+
+  if (assignmentResult.error) {
+    console.error("Checking lesson assignments before delete failed:", assignmentResult.error);
+    throw assignmentResult.error;
+  }
+  if (progressResult.error) {
+    console.error("Checking lesson progress before delete failed:", progressResult.error);
+    throw progressResult.error;
+  }
+
+  const hasAssignment = Boolean(assignmentResult.data?.length);
+  const hasProgress = Boolean(progressResult.data?.length);
+  return {
+    canDelete: !hasAssignment && !hasProgress,
+    hasAssignment,
+    hasProgress,
+  };
+}
+
+export async function archiveModuleById(moduleId) {
+  if (!moduleId) {
+    throw new Error("A lesson id is required.");
+  }
+
+  const updatedAt = new Date().toISOString();
+  if (!isSupabaseConfigured) {
+    let archivedModule = null;
+    setMockCourses(
+      getMockCourses().map((course) => ({
+        ...course,
+        modules: (Array.isArray(course?.modules) ? course.modules : []).map((module) => {
+          if (String(module?.id) !== String(moduleId)) return module;
+          archivedModule = { ...module, status: "archived", updatedAt, updated_at: updatedAt };
+          return archivedModule;
+        }),
+      })),
+    );
+    return archivedModule;
+  }
+
+  const { data, error } = await supabase
+    .from("modules")
+    .update({ status: "archived", updated_at: updatedAt })
+    .eq("id", moduleId)
+    .select("id, class_id, status, sort_order, updated_at")
+    .maybeSingle();
+
+  if (error) {
+    console.error("Archiving the selected lesson failed:", error);
+    throw error;
+  }
+  if (!data) {
+    throw new Error("The selected lesson was not archived.");
+  }
+
+  return data;
+}
+
+export async function deleteModuleById(moduleId, { confirmed = false } = {}) {
+  const [confirmedModuleId] = requireConfirmedDelete({
+    table: "modules",
+    ids: [moduleId],
+    confirmed,
+    reason: "Explicit Admin lesson deletion",
+  });
+  const safety = await getModuleDeletionSafety(confirmedModuleId);
+  if (!safety.canDelete) {
+    const activityError = new Error("This lesson has related student activity. Archive it instead of deleting.");
+    activityError.code = "MODULE_HAS_RELATED_ACTIVITY";
+    throw activityError;
+  }
+
+  if (!isSupabaseConfigured) {
+    setMockCourses(
+      getMockCourses().map((course) => ({
+        ...course,
+        modules: (Array.isArray(course?.modules) ? course.modules : []).filter(
+          (module) => String(module?.id) !== String(confirmedModuleId),
+        ),
+      })),
+    );
+    return { id: confirmedModuleId };
+  }
+
+  const { data, error } = await supabase
+    .from("modules")
+    .delete()
+    .eq("id", confirmedModuleId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("Deleting the selected lesson failed:", error);
+    throw error;
+  }
+  if (!data) {
+    throw new Error("The selected lesson was not deleted.");
+  }
+
+  return data;
 }
