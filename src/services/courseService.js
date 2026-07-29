@@ -1,8 +1,8 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
-import { deleteCourseClassesByIds, getClassesByCourse, syncClassesForCourse } from "./courseClassService.js";
+import { getClassesByCourse, syncClassesForCourse } from "./courseClassService.js";
 import { setCourseStudentAssignments } from "./enrollmentService.js";
 import { cloneMockValue, createMockId, getMockCourses, setMockCourses } from "./mockStore.js";
-import { getModulesByCourse, replaceModulesForCourse } from "./moduleService.js";
+import { getModulesByCourse, saveModulesForCourse } from "./moduleService.js";
 
 const OPTIONAL_COURSE_COLUMNS = ["image_url", "image_storage_path"];
 
@@ -450,7 +450,7 @@ export async function createCourse(course, options = {}) {
   let savedModules = [];
   if (nextModules.length) {
     try {
-      savedModules = await replaceModulesForCourse(data.id, nextModules, { onProgress: options.onProgress });
+      savedModules = await saveModulesForCourse(data.id, nextModules, { onProgress: options.onProgress });
     } catch (moduleError) {
       console.error("Module insert error:", moduleError);
       throw moduleError;
@@ -488,8 +488,12 @@ export async function updateCourse(courseId, updates, options = {}) {
   }
 
   const { owners, modules, classes, ...courseRow } = payload;
-  console.log("Course classes right before update:", classes);
-  console.log("Course modules right before update:", modules);
+  const syncContent = options.syncContent === true;
+  const syncEnrollments = options.syncEnrollments === true;
+
+  // Do not delete modules/classes during course save. Existing course content
+  // must persist across deployments and edits.
+  // Modules should only be deleted by explicit Admin action.
   const data = await runCourseMutationWithFallback(
     (nextPayload) =>
       supabase.from("courses").update(nextPayload).eq("id", courseId).select("*").single(),
@@ -497,65 +501,65 @@ export async function updateCourse(courseId, updates, options = {}) {
   );
   console.log("Updated course response:", data);
 
-  const { savedClasses, removedClassIds } = await syncClassesForCourse(courseId, classes);
-  const classIdMap = new Map(savedClasses.map((courseClass) => [String(courseClass.clientId ?? ""), courseClass.id]));
-  const firstSavedClassId = savedClasses[0]?.id ?? null;
-  const nextModules = modules.map((module) => ({
-    ...module,
-    classId: classIdMap.get(String(module.class_id ?? module.classId ?? "")) ?? module.class_id ?? module.classId ?? firstSavedClassId,
-    class_id: classIdMap.get(String(module.class_id ?? module.classId ?? "")) ?? module.class_id ?? module.classId ?? firstSavedClassId,
-  }));
+  let savedClasses = await getClassesByCourse(courseId);
+  let savedModules = await getModulesByCourse(courseId);
+  if (syncContent) {
+    console.log("Course classes right before non-destructive content sync:", classes);
+    console.log("Course modules right before non-destructive content sync:", modules);
+    const classResult = await syncClassesForCourse(courseId, classes);
+    savedClasses = classResult.savedClasses;
+    const classIdMap = new Map(savedClasses.map((courseClass) => [String(courseClass.clientId ?? ""), courseClass.id]));
+    const firstSavedClassId = savedClasses[0]?.id ?? null;
+    const nextModules = modules.map((module) => ({
+      ...module,
+      classId: classIdMap.get(String(module.class_id ?? module.classId ?? "")) ?? module.class_id ?? module.classId ?? firstSavedClassId,
+      class_id: classIdMap.get(String(module.class_id ?? module.classId ?? "")) ?? module.class_id ?? module.classId ?? firstSavedClassId,
+    }));
 
-  let savedModules = [];
-  try {
-    savedModules = await replaceModulesForCourse(courseId, nextModules, { onProgress: options.onProgress });
-  } catch (moduleError) {
-    console.error("Module insert error:", moduleError);
-    throw moduleError;
+    try {
+      savedModules = await saveModulesForCourse(courseId, nextModules, { onProgress: options.onProgress });
+      savedClasses = await getClassesByCourse(courseId);
+    } catch (moduleError) {
+      console.error("Module save error:", moduleError);
+      throw moduleError;
+    }
   }
 
-  if (removedClassIds.length) {
-    await deleteCourseClassesByIds(removedClassIds);
+  let persistedOwners = owners;
+  if (syncEnrollments) {
+    try {
+      const enrollmentRows = await setCourseStudentAssignments(courseId, owners);
+      console.log("Updated course enrollment response:", enrollmentRows);
+    } catch (enrollmentError) {
+      console.error("Course enrollment sync failed after update:", enrollmentError);
+      throw enrollmentError;
+    }
+  } else {
+    const enrollments = await fetchEnrollmentRows();
+    persistedOwners = ownersForCourse(courseId, enrollments);
   }
 
-  try {
-    const enrollmentRows = await setCourseStudentAssignments(courseId, owners);
-    console.log("Updated course enrollment response:", enrollmentRows);
-  } catch (enrollmentError) {
-    console.error("Course enrollment sync failed after update:", enrollmentError);
-    throw enrollmentError;
-  }
-
-  return normalizeCourse(data, owners, savedModules, savedClasses);
+  return normalizeCourse(data, persistedOwners, savedModules, savedClasses);
 }
 
 export async function deleteCourse(courseId) {
   if (!isSupabaseConfigured) {
-    setMockCourses(getMockCourses().filter((course) => course.id !== courseId));
+    setMockCourses(
+      getMockCourses().map((course) =>
+        String(course.id) === String(courseId) ? { ...course, status: "archived" } : course,
+      ),
+    );
     return true;
   }
 
-  const { error: enrollmentDeleteError } = await supabase.from("enrollments").delete().eq("course_id", courseId);
-  if (enrollmentDeleteError) {
-    console.error("Failed to delete enrollments in Supabase:", enrollmentDeleteError);
-    throw enrollmentDeleteError;
-  }
-
-  const { error: moduleDeleteError } = await supabase.from("modules").delete().eq("course_id", courseId);
-  if (moduleDeleteError) {
-    console.error("Failed to delete modules in Supabase:", moduleDeleteError);
-    throw moduleDeleteError;
-  }
-
-  const { error: classDeleteError } = await supabase.from("course_classes").delete().eq("course_id", courseId);
-  if (classDeleteError) {
-    console.error("Failed to delete course classes in Supabase:", classDeleteError);
-    throw classDeleteError;
-  }
-
-  const { error } = await supabase.from("courses").delete().eq("id", courseId);
+  // Course removal is intentionally a soft archive. Child classes, modules,
+  // assignments, submissions, progress, certificates, and enrollments persist.
+  const { error } = await supabase
+    .from("courses")
+    .update({ status: "archived" })
+    .eq("id", courseId);
   if (error) {
-    console.error("Failed to delete course in Supabase:", error);
+    console.error("Failed to archive course in Supabase:", error);
     throw error;
   }
 

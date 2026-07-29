@@ -28,11 +28,22 @@ function goTo(pathname) {
 }
 
 function getCourseModules(course) {
-  return Array.isArray(course?.modules) ? course.modules : [];
+  const archivedClassIds = new Set(
+    (Array.isArray(course?.classes) ? course.classes : [])
+      .filter((courseClass) => courseClass?.status === "archived")
+      .map((courseClass) => String(courseClass.id)),
+  );
+  return (Array.isArray(course?.modules) ? course.modules : []).filter(
+    (module) =>
+      module?.status !== "archived" &&
+      !archivedClassIds.has(String(module?.class_id ?? module?.classId ?? "")),
+  );
 }
 
 function getCourseClasses(course) {
-  const classes = Array.isArray(course?.classes) ? course.classes : [];
+  const classes = (Array.isArray(course?.classes) ? course.classes : []).filter(
+    (courseClass) => courseClass?.status !== "archived",
+  );
   const modules = getCourseModules(course);
 
   if (classes.length) {

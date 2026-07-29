@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
+import { requireConfirmedDelete } from "../utils/dataSafety.js";
 import { maybeGenerateCertificate } from "./certificateService.js";
 import {
   createMockId,
@@ -417,32 +418,26 @@ export async function updateAssignment(assignmentId, assignmentData) {
   return normalizeAssignment(data);
 }
 
-export async function deleteAssignment(assignmentId) {
+export async function deleteAssignment(assignmentId, options = {}) {
   const normalizedAssignmentId = normalizeEntityId(assignmentId);
+  requireConfirmedDelete({
+    table: "module_assignments",
+    ids: normalizedAssignmentId,
+    confirmed: options.confirmed,
+    reason: options.reason || "Explicit Admin assignment deletion",
+  });
 
   if (!isSupabaseConfigured) {
     const assignmentEntry = allMockModules().find(({ module }) => String(module.assignment?.id) === String(normalizedAssignmentId)) ?? null;
     if (!assignmentEntry) return true;
 
     updateMockAssignmentForModule(assignmentEntry.module.id, () => null);
-    setMockAssignmentSubmissions(
-      getMockAssignmentSubmissions().filter(
-        (submission) => String(submission.assignment_id ?? submission.assignmentId) !== String(normalizedAssignmentId),
-      ),
-    );
+    // Historical submissions are intentionally retained.
     return true;
   }
 
-  const { error: submissionError } = await supabase
-    .from("assignment_submissions")
-    .delete()
-    .eq("assignment_id", normalizedAssignmentId);
-
-  if (submissionError) {
-    console.error("Failed to delete assignment submissions in Supabase:", submissionError);
-    throw submissionError;
-  }
-
+  // Do not cascade-delete submissions. If database constraints require the
+  // assignment for history, the explicit delete will fail safely.
   const { error } = await supabase.from("module_assignments").delete().eq("id", normalizedAssignmentId);
   if (error) {
     console.error("Failed to delete module assignment in Supabase:", error);
@@ -452,9 +447,16 @@ export async function deleteAssignment(assignmentId) {
   return true;
 }
 
-export async function deleteAssignmentsForModuleIds(moduleIds = []) {
+export async function deleteAssignmentsForModuleIds(moduleIds = [], options = {}) {
   const normalizedIds = Array.from(new Set(moduleIds.map((moduleId) => normalizeEntityId(moduleId)).filter(Boolean)));
   if (!normalizedIds.length) return;
+  requireConfirmedDelete({
+    table: "module_assignments",
+    ids: normalizedIds,
+    confirmed: options.confirmed,
+    allowBulk: options.allowBulk,
+    reason: options.reason || "Explicit Admin bulk assignment deletion",
+  });
 
   if (!isSupabaseConfigured) {
     const assignmentIds = allMockModules()
@@ -515,6 +517,7 @@ export async function deleteAssignmentsForModuleIds(moduleIds = []) {
 export async function syncAssignmentsForModules(savedModules = [], sourceModules = []) {
   if (!savedModules.length) return [];
 
+  const existingAssignments = await getAssignmentsByModuleIds(savedModules.map((module) => module.id));
   const nextModules = [];
 
   for (const savedModule of savedModules) {
@@ -532,15 +535,22 @@ export async function syncAssignmentsForModules(savedModules = [], sourceModules
       Boolean(sourceAssignment?.title?.trim());
 
     if (requiresAssignment && sourceAssignment?.title?.trim()) {
-      const createdAssignment = await createAssignment(savedModule.id, sourceAssignment);
+      const existingAssignment =
+        existingAssignments.get(String(savedModule.id)) ??
+        (sourceAssignment?.id ? normalizeAssignment(sourceAssignment) : null);
+      const savedAssignment = existingAssignment?.id
+        ? await updateAssignment(existingAssignment.id, sourceAssignment)
+        : await createAssignment(savedModule.id, sourceAssignment);
       nextModules.push({
         ...savedModule,
-        assignment: createdAssignment,
+        assignment: savedAssignment,
       });
     } else {
       nextModules.push({
         ...savedModule,
-        assignment: null,
+        // Turning the requirement off hides the assignment without erasing its
+        // submissions. Permanent removal is an explicit, confirmed Admin action.
+        assignment: existingAssignments.get(String(savedModule.id)) ?? null,
       });
     }
   }

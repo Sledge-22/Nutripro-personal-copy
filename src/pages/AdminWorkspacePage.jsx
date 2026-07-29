@@ -3271,7 +3271,7 @@ function ModuleEditor({
             {collapsed ? t("common.expand") : t("common.collapse")}
           </button>
           <button type="button" className="danger-text mini-action" onClick={() => deleteModule(module.id)}>
-            {t("admin.deleteModule")}
+            {t("common.archive")}
           </button>
         </div>
       </div>
@@ -4009,8 +4009,19 @@ function CourseManagerOverviewPage({ courses = [], studentOptions = [], onDelete
                     <button type="button" className="np-course-card-button-v2" onClick={() => navigateTo(ROUTES.admin.courseEdit(course.id))}>
                       {t("common.edit")}
                     </button>
-                    <button type="button" className="np-course-card-button-v2 np-course-card-button-danger-v2" onClick={() => void onDeleteCourse(course.id)}>
-                      {t("common.delete")}
+                    <button
+                      type="button"
+                      className="np-course-card-button-v2 np-course-card-button-danger-v2"
+                      onClick={() => {
+                        const confirmed = window.confirm(
+                          language === "es"
+                            ? "¿Archivar este curso? Sus clases, módulos, tareas y datos de estudiantes se conservarán."
+                            : "Archive this course? Its classes, modules, assignments, and student data will be preserved.",
+                        );
+                        if (confirmed) void onDeleteCourse(course.id);
+                      }}
+                    >
+                      {t("common.archive")}
                     </button>
                   </div>
                 </div>
@@ -4091,7 +4102,10 @@ function CourseDetailsPage({ mode = "create", course = null, onSaveCourse }) {
     setSaveMessage("");
 
     const payload = buildCoursePayload(form, course?.id ?? null, course);
-    const result = await onSaveCourse(payload, course?.id ?? null);
+    const result = await onSaveCourse(payload, course?.id ?? null, {
+      syncContent: false,
+      syncEnrollments: false,
+    });
     setSaving(false);
 
     if (!result?.ok) {
@@ -4276,14 +4290,19 @@ function CourseBuilderPage({
   };
 
   const deleteClass = (classId) => {
+    const confirmed = window.confirm(
+      language === "es"
+        ? "¿Archivar esta clase? Sus módulos y datos existentes se conservarán."
+        : "Archive this class? Its modules and existing data will be preserved.",
+    );
+    if (!confirmed) return;
     setForm((current) => ({
       ...current,
-      classes: (current.classes || [])
-        .filter((entry) => String(entry.id) !== String(classId))
-        .map((entry, index) => ({ ...entry, sortOrder: index + 1, sort_order: index + 1 })),
-      modules: (current.modules || []).filter((module) => String(module.class_id || module.classId || "") !== String(classId)),
+      classes: (current.classes || []).map((entry) =>
+        String(entry.id) === String(classId) ? { ...entry, status: "archived" } : entry,
+      ),
     }));
-    setCollapsedClassIds((current) => current.filter((id) => id !== classId));
+    setCollapsedClassIds((current) => (current.includes(classId) ? current : [...current, classId]));
     if (String(editingClassId) === String(classId)) {
       setEditingClassId(null);
       setClassEditDraft(null);
@@ -4311,13 +4330,19 @@ function CourseBuilderPage({
   };
 
   const deleteModule = (moduleId) => {
+    const confirmed = window.confirm(
+      language === "es"
+        ? "¿Archivar este módulo? Sus archivos, tarea, entregas y progreso se conservarán."
+        : "Archive this module? Its files, assignment, submissions, and progress will be preserved.",
+    );
+    if (!confirmed) return;
     setForm((current) => ({
       ...current,
-      modules: (current.modules || [])
-        .filter((module) => module.id !== moduleId)
-        .map((module, index) => ({ ...module, sortOrder: index + 1, sort_order: index + 1 })),
+      modules: (current.modules || []).map((module) =>
+        String(module.id) === String(moduleId) ? { ...module, status: "archived" } : module,
+      ),
     }));
-    setCollapsedModuleIds((current) => current.filter((id) => id !== moduleId));
+    setCollapsedModuleIds((current) => (current.includes(moduleId) ? current : [...current, moduleId]));
   };
 
   const toggleCollapsed = (moduleId) => {
@@ -4553,7 +4578,10 @@ function CourseBuilderPage({
 
     try {
       const payload = buildCoursePayload(form, course.id, course);
-      const result = await onSaveCourse(payload, course.id);
+      const result = await onSaveCourse(payload, course.id, {
+        syncContent: true,
+        syncEnrollments: true,
+      });
       if (!result?.ok) {
         setSaveError(result?.error || t("admin.savingCourseFailed"));
         setSaveDetails(result?.errorDetails || "");
@@ -4727,7 +4755,7 @@ function CourseBuilderPage({
                           </button>
                         ) : null}
                         <button type="button" className="secondary-btn danger-text" onClick={() => deleteClass(courseClass.id)}>
-                          {t("common.delete")}
+                          {t("common.archive")}
                         </button>
                       </>
                     )}
@@ -4775,8 +4803,19 @@ function CourseBuilderPage({
         <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.courseEdit(course.id))}>
           {t("admin.editCourse")}
         </button>
-        <button type="button" className="secondary-btn danger-text" onClick={() => void onDeleteCourse(course.id)}>
-          {t("common.delete")}
+        <button
+          type="button"
+          className="secondary-btn danger-text"
+          onClick={() => {
+            const confirmed = window.confirm(
+              language === "es"
+                ? "¿Archivar este curso? Sus clases, módulos, tareas y datos de estudiantes se conservarán."
+                : "Archive this course? Its classes, modules, assignments, and student data will be preserved.",
+            );
+            if (confirmed) void onDeleteCourse(course.id);
+          }}
+        >
+          {t("common.archive")}
         </button>
       </div>
     </form>

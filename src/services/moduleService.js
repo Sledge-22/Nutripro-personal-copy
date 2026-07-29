@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { getMockCourses, setMockCourses } from "./mockStore.js";
-import { deleteAssignmentsForModuleIds, getAssignmentsByModuleIds, syncAssignmentsForModules } from "./assignmentService.js";
+import { getAssignmentsByModuleIds, syncAssignmentsForModules } from "./assignmentService.js";
 
 const OPTIONAL_MODULE_COLUMNS = [
   "requires_assignment",
@@ -271,6 +271,41 @@ async function insertModuleRows(rows, allowOptionalColumns = true) {
   throw error;
 }
 
+async function saveModuleRow(courseId, moduleId, row, allowOptionalColumns = true) {
+  const query = moduleId
+    ? supabase
+        .from("modules")
+        .update(row)
+        .eq("id", moduleId)
+        .eq("course_id", courseId)
+        .select("*")
+        .single()
+    : supabase.from("modules").insert([row]).select("*").single();
+  const { data, error } = await query;
+
+  if (!error) return data;
+
+  const shouldRetryWithoutOptionalColumns =
+    allowOptionalColumns &&
+    OPTIONAL_MODULE_COLUMNS.some(
+      (column) =>
+        error.message?.includes(`'${column}'`) ||
+        error.message?.includes(`modules.${column}`) ||
+        error.details?.includes(column) ||
+        error.hint?.includes(column),
+    );
+
+  if (shouldRetryWithoutOptionalColumns) {
+    console.warn("Retrying module save without optional module columns. Run the matching SQL later to enable them.");
+    const fallbackRow = Object.fromEntries(
+      Object.entries(row).filter(([column]) => !OPTIONAL_MODULE_COLUMNS.includes(column)),
+    );
+    return saveModuleRow(courseId, moduleId, fallbackRow, false);
+  }
+
+  throw error;
+}
+
 export async function getModulesByCourse(courseId) {
   if (!isSupabaseConfigured) {
     const course = getMockCourses().find((entry) => String(entry.id) === String(courseId));
@@ -308,7 +343,7 @@ export async function getModulesByCourse(courseId) {
   }
 }
 
-export async function replaceModulesForCourse(courseId, modules, options = {}) {
+export async function saveModulesForCourse(courseId, modules, options = {}) {
   if (!isSupabaseConfigured) {
     return updateMockModules(courseId, modules);
   }
@@ -319,22 +354,26 @@ export async function replaceModulesForCourse(courseId, modules, options = {}) {
     .eq("course_id", courseId);
 
   if (existingModuleError) {
-    console.error("Failed to load existing modules before replacement:", existingModuleError);
+    console.error("Failed to load existing modules before save:", existingModuleError);
     throw existingModuleError;
   }
 
-  const existingModuleIds = (existingModules ?? []).map((module) => module.id).filter(Boolean);
-  if (existingModuleIds.length) {
-    await deleteAssignmentsForModuleIds(existingModuleIds);
+  const existingModuleIds = new Set((existingModules ?? []).map((module) => String(module.id)));
+  const submittedExistingIds = new Set(
+    modules
+      .map((module) => module?.id)
+      .filter((id) => id && existingModuleIds.has(String(id)))
+      .map(String),
+  );
+  const preservedIds = [...existingModuleIds].filter((id) => !submittedExistingIds.has(id));
+  if (preservedIds.length) {
+    console.warn("[DataSafety] Preserved modules omitted from the current save.", {
+      courseId,
+      moduleIds: preservedIds,
+    });
   }
 
-  const { error: deleteError } = await supabase.from("modules").delete().eq("course_id", courseId);
-  if (deleteError) {
-    console.error("Failed to clear existing modules in Supabase:", deleteError);
-    throw deleteError;
-  }
-
-  if (!modules.length) return [];
+  if (!modules.length) return getModulesByCourse(courseId);
 
   const nextModules = [];
   for (let index = 0; index < modules.length; index += 1) {
@@ -347,11 +386,15 @@ export async function replaceModulesForCourse(courseId, modules, options = {}) {
 
     try {
       const row = toModuleRow(courseId, sourceModule, index + 1);
+      const existingId =
+        sourceModule?.id && existingModuleIds.has(String(sourceModule.id))
+          ? sourceModule.id
+          : null;
       console.log("Final module object sent to Supabase:", row);
-      const data = await insertModuleRows([row]);
-      const mappedModule = mapModuleRow((data ?? [])[0] ?? {});
+      const data = await saveModuleRow(courseId, existingId, row);
+      const mappedModule = mapModuleRow(data ?? {});
       const [moduleWithAssignment] = await syncAssignmentsForModules([mappedModule], [sourceModule]);
-      console.log("Created module response:", moduleWithAssignment ?? mappedModule);
+      console.log("Saved module response:", moduleWithAssignment ?? mappedModule);
 
       const sourcePdfUrl = sourceModule?.pdf_url || sourceModule?.pdfUrl;
       const sourceVideoUrl =
@@ -376,5 +419,10 @@ export async function replaceModulesForCourse(courseId, modules, options = {}) {
     }
   }
 
-  return nextModules;
+  // Supabase remains the source of truth. This includes existing rows omitted
+  // from a partial editor save, which are intentionally never deleted.
+  return getModulesByCourse(courseId);
 }
+
+// Backward-compatible name. Despite the legacy name this is non-destructive.
+export const replaceModulesForCourse = saveModulesForCourse;

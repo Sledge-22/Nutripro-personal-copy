@@ -1176,7 +1176,7 @@ export function App() {
     await deleteCourse(courseId);
     void recordAdminAuditLog({
       adminUser: currentUser,
-      action: "course_deleted",
+      action: "course_archived",
       targetType: "course",
       targetId: courseId,
       details: {

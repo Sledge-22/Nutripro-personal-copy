@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
+import { requireConfirmedDelete } from "../utils/dataSafety.js";
 
 const COURSE_CLASS_SELECT_COLUMNS = [
   "id",
@@ -86,7 +87,6 @@ export async function syncClassesForCourse(courseId, classes = []) {
   }
 
   const existingIds = new Set((existingRows ?? []).map((row) => String(row.id)));
-  const keptIds = new Set();
   const savedClasses = [];
 
   for (let index = 0; index < classes.length; index += 1) {
@@ -103,27 +103,39 @@ export async function syncClassesForCourse(courseId, classes = []) {
       throw error;
     }
 
-    keptIds.add(String(data.id));
     savedClasses.push({
       ...mapClassRow(data),
       clientId: sourceClass?.id ?? null,
     });
   }
 
-  const removedClassIds = (existingRows ?? [])
+  const preservedClassIds = (existingRows ?? [])
     .map((row) => row.id)
-    .filter((id) => !keptIds.has(String(id)));
+    .filter((id) => !classes.some((entry) => String(entry?.id) === String(id)));
 
-  return { savedClasses, removedClassIds };
+  if (preservedClassIds.length) {
+    console.warn("[DataSafety] Preserved course classes omitted from the current save.", {
+      courseId,
+      classIds: preservedClassIds.map(String),
+    });
+  }
+
+  return { savedClasses, removedClassIds: [] };
 }
 
-export async function deleteCourseClassesByIds(classIds = []) {
+export async function deleteCourseClassesByIds(classIds = [], options = {}) {
   if (!isSupabaseConfigured || !Array.isArray(classIds) || !classIds.length) return;
+  const confirmedIds = requireConfirmedDelete({
+    table: "course_classes",
+    ids: classIds,
+    confirmed: options.confirmed,
+    allowBulk: options.allowBulk,
+    reason: options.reason || "Explicit Admin class deletion",
+  });
 
-  const { error } = await supabase.from("course_classes").delete().in("id", classIds);
+  const { error } = await supabase.from("course_classes").delete().in("id", confirmedIds);
   if (error) {
     console.error("Deleting removed course classes failed:", error);
     throw error;
   }
 }
-
