@@ -11,6 +11,11 @@ function normalizeCourseStatus(status) {
   return "published";
 }
 
+function isStudentVisibleCourseStatus(status) {
+  const normalizedStatus = `${status ?? ""}`.trim().toLowerCase();
+  return !normalizedStatus || normalizedStatus === "published" || normalizedStatus === "active";
+}
+
 function normalizeEntityId(value) {
   const trimmedValue = `${value ?? ""}`.trim();
   if (!trimmedValue) return "";
@@ -585,10 +590,12 @@ export async function getStudentCourses(studentId) {
     const status = `${row.status ?? ""}`.trim().toLowerCase();
     return !status || status === "active";
   });
+  console.log("[StudentCourses] enrollments count", activeEnrollmentRows.length);
 
   const courseIds = Array.from(
     new Set(activeEnrollmentRows.map((row) => row.course_id ?? row.courseId).filter(Boolean)),
   );
+  console.log("[StudentCourses] course ids", courseIds);
   if (!courseIds.length) {
     return [];
   }
@@ -597,7 +604,6 @@ export async function getStudentCourses(studentId) {
     .from("courses")
     .select("*")
     .in("id", courseIds)
-    .eq("status", "published")
     .order("id", { ascending: true });
 
   if (courseError) {
@@ -605,13 +611,26 @@ export async function getStudentCourses(studentId) {
     throw courseError;
   }
 
-  const publishedCourseIds = new Set((courseRows ?? []).map((course) => course.id));
-  const unavailableCourseIds = courseIds.filter((courseId) => !publishedCourseIds.has(courseId));
-  if (unavailableCourseIds.length) {
-    console.error("Student course access failed because these enrolled courses are not published:", unavailableCourseIds);
+  console.log("[StudentCourses] courses count", courseRows?.length ?? 0);
+
+  const returnedCourseIds = new Set((courseRows ?? []).map((course) => String(course.id)));
+  const missingCourseIds = courseIds.filter((courseId) => !returnedCourseIds.has(String(courseId)));
+  if (missingCourseIds.length) {
+    console.error(
+      "[StudentCourses] Assigned course rows were not returned from public.courses (missing row or RLS restriction):",
+      missingCourseIds,
+    );
   }
 
-  return (courseRows ?? []).map((course) => normalizeCourse(course, [studentId], [], []));
+  const visibleCourses = (courseRows ?? []).filter((course) => isStudentVisibleCourseStatus(course.status));
+  const hiddenCourses = (courseRows ?? [])
+    .filter((course) => !isStudentVisibleCourseStatus(course.status))
+    .map((course) => ({ courseId: course.id, status: course.status ?? null }));
+  if (hiddenCourses.length) {
+    console.warn("[StudentCourses] Assigned courses hidden by status:", hiddenCourses);
+  }
+
+  return visibleCourses.map((course) => normalizeCourse(course, [studentId], [], []));
 }
 
 export async function hydrateStudentCourseDetails(courses = [], studentId) {
@@ -714,12 +733,16 @@ export async function getStudentCourseAccess(studentId, courseId) {
 
   console.log("Enrollment result:", enrollmentRows ?? []);
 
-  const activeEnrollmentRows = (enrollmentRows ?? []).filter(
-    (row) => `${row.status ?? "active"}`.trim().toLowerCase() !== "inactive",
-  );
+  const activeEnrollmentRows = (enrollmentRows ?? []).filter((row) => {
+    const status = `${row.status ?? ""}`.trim().toLowerCase();
+    return !status || status === "active";
+  });
 
   if (!activeEnrollmentRows.length) {
-    console.error("Student course access failed because the course is not assigned to Maya Laurent:", normalizedCourseId);
+    console.error("Student course access failed because the course is not assigned to the active student:", {
+      studentId,
+      courseId: normalizedCourseId,
+    });
     return { reason: "missing-enrollment", course: null, enrollment: null, courseStatus: null };
   }
 
@@ -771,8 +794,11 @@ export async function getStudentCourseAccess(studentId, courseId) {
       modulesResult.status === "rejected",
   };
 
-  if (normalizeCourseStatus(courseRow.status) !== "published") {
-    console.error("Student course access failed because the selected course is not published:", courseRow.status);
+  if (!isStudentVisibleCourseStatus(courseRow.status)) {
+    console.error("Student course access failed because the selected course is not student-visible:", {
+      courseId: courseRow.id,
+      status: courseRow.status ?? null,
+    });
     return {
       reason: "not-published",
       course: normalizedCourse,

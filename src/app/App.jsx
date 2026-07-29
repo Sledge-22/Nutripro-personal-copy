@@ -464,7 +464,15 @@ export function App() {
     setLoginError("");
 
     try {
-      const profile = await getUserProfileForAuthUser(authUser);
+      console.log("[StudentCourses] auth user id", authUser?.id ?? null);
+      let profile;
+      try {
+        profile = await getUserProfileForAuthUser(authUser);
+      } catch (profileError) {
+        console.error("[StudentCourses] Failed to load profile from public.users:", profileError);
+        throw profileError;
+      }
+      console.log("[StudentCourses] profile id", profile?.id ?? null);
       setCurrentUser(profile);
 
       const roleKey = profile?.roleKey ?? `${profile?.role ?? ""}`.toLowerCase();
