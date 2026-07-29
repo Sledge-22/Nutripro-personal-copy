@@ -3,6 +3,7 @@ import { getMockCourses, setMockCourses } from "./mockStore.js";
 import { getAssignmentsByModuleIds, syncAssignmentsForModules } from "./assignmentService.js";
 
 const OPTIONAL_MODULE_COLUMNS = [
+  "created_at",
   "pdf_file_name",
   "video_file_name",
   "pdf_storage_path",
@@ -30,6 +31,7 @@ const MODULE_SELECT_COLUMNS = [
   "id",
   "course_id",
   "class_id",
+  "created_at",
   "sort_order",
   "title",
   "description",
@@ -171,6 +173,8 @@ function mapModuleRow(module) {
     classId: module.class_id ?? module.classId ?? "",
     class_id: module.class_id ?? module.classId ?? "",
     sortOrder: module.sort_order ?? module.sortOrder ?? 0,
+    createdAt: module.created_at ?? module.createdAt ?? "",
+    created_at: module.created_at ?? module.createdAt ?? "",
     title: module.title ?? "",
     description: module.description ?? "",
     lessonContent: module.lesson_content ?? module.lessonContent ?? "",
@@ -318,6 +322,20 @@ function updateMockModules(courseId, modules) {
   return modules;
 }
 
+function compareModuleOrder(left, right) {
+  const leftOrder = Number(left?.sort_order ?? left?.sortOrder ?? 0);
+  const rightOrder = Number(right?.sort_order ?? right?.sortOrder ?? 0);
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+
+  const leftCreatedAt = Date.parse(left?.created_at ?? left?.createdAt ?? "");
+  const rightCreatedAt = Date.parse(right?.created_at ?? right?.createdAt ?? "");
+  if (Number.isFinite(leftCreatedAt) && Number.isFinite(rightCreatedAt) && leftCreatedAt !== rightCreatedAt) {
+    return leftCreatedAt - rightCreatedAt;
+  }
+
+  return String(left?.id ?? "").localeCompare(String(right?.id ?? ""), undefined, { numeric: true });
+}
+
 async function saveModuleRow(courseId, moduleId, row, allowOptionalColumns = true) {
   const query = moduleId
     ? supabase
@@ -368,8 +386,9 @@ export async function getModulesByCourse(courseId) {
     }
 
     console.log("Fetched Supabase module rows:", data);
-    const assignmentMap = await getAssignmentsByModuleIds(data.map((module) => module.id));
-    return data.map((module) => ({
+    const orderedData = [...data].sort(compareModuleOrder);
+    const assignmentMap = await getAssignmentsByModuleIds(orderedData.map((module) => module.id));
+    return orderedData.map((module) => ({
       ...mapModuleRow(module),
       assignment: assignmentMap.get(String(module.id)) ?? null,
     }));
@@ -462,3 +481,52 @@ export async function saveModulesForCourse(courseId, modules, options = {}) {
 
 // Backward-compatible name. Despite the legacy name this is non-destructive.
 export const replaceModulesForCourse = saveModulesForCourse;
+
+export async function updateModuleSortOrders(moduleUpdates = []) {
+  const normalizedUpdates = (Array.isArray(moduleUpdates) ? moduleUpdates : [])
+    .map((module) => ({
+      id: module?.id,
+      classId: module?.class_id ?? module?.classId ?? "",
+      sortOrder: Number(module?.sort_order ?? module?.sortOrder),
+    }))
+    .filter((module) => module.id && Number.isInteger(module.sortOrder) && module.sortOrder >= 0);
+
+  if (!normalizedUpdates.length) return [];
+
+  const classIds = new Set(normalizedUpdates.map((module) => String(module.classId)));
+  if (classIds.size > 1) {
+    throw new Error("Lessons can only be reordered within the same class.");
+  }
+
+  if (!isSupabaseConfigured) {
+    const orderById = new Map(normalizedUpdates.map((module) => [String(module.id), module.sortOrder]));
+    const nextCourses = getMockCourses().map((course) => ({
+      ...course,
+      modules: (course.modules ?? []).map((module) =>
+        orderById.has(String(module.id))
+          ? { ...module, sortOrder: orderById.get(String(module.id)), sort_order: orderById.get(String(module.id)) }
+          : module,
+      ),
+    }));
+    setMockCourses(nextCourses);
+    return normalizedUpdates;
+  }
+
+  const savedRows = [];
+  for (const module of normalizedUpdates) {
+    const { data, error } = await supabase
+      .from("modules")
+      .update({ sort_order: module.sortOrder })
+      .eq("id", module.id)
+      .select("id, class_id, sort_order")
+      .maybeSingle();
+
+    if (error) {
+      console.error("Saving lesson sort_order failed:", error);
+      throw error;
+    }
+    if (data) savedRows.push(data);
+  }
+
+  return savedRows;
+}

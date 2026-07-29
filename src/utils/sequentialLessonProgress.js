@@ -7,6 +7,19 @@ function sortValue(entry, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function compareOrderedEntries(left, right) {
+  const sortDifference = sortValue(left, 0) - sortValue(right, 0);
+  if (sortDifference) return sortDifference;
+
+  const leftCreatedAt = Date.parse(left?.created_at ?? left?.createdAt ?? "");
+  const rightCreatedAt = Date.parse(right?.created_at ?? right?.createdAt ?? "");
+  if (Number.isFinite(leftCreatedAt) && Number.isFinite(rightCreatedAt) && leftCreatedAt !== rightCreatedAt) {
+    return leftCreatedAt - rightCreatedAt;
+  }
+
+  return normalizeId(left?.id).localeCompare(normalizeId(right?.id), undefined, { numeric: true });
+}
+
 function submissionIsApproved(submission) {
   if (!submission) return false;
 
@@ -67,7 +80,7 @@ function orderedCourseLessons(classes = [], modules = []) {
   const ordered = [];
 
   [...safeClasses]
-    .sort((left, right) => sortValue(left, 0) - sortValue(right, 0))
+    .sort(compareOrderedEntries)
     .forEach((courseClass, classIndex) => {
       const classId = normalizeId(courseClass?.id);
       const nestedModules = Array.isArray(courseClass?.modules) ? courseClass.modules : [];
@@ -81,7 +94,7 @@ function orderedCourseLessons(classes = [], modules = []) {
       ];
 
       classModules
-        .sort((left, right) => sortValue(left, 0) - sortValue(right, 0))
+        .sort(compareOrderedEntries)
         .forEach((module, moduleIndex) => {
           const moduleId = normalizeId(module?.id);
           if (!moduleId || seen.has(moduleId)) return;
@@ -99,7 +112,7 @@ function orderedCourseLessons(classes = [], modules = []) {
 
   safeModules
     .filter((module) => !seen.has(normalizeId(module?.id)))
-    .sort((left, right) => sortValue(left, 0) - sortValue(right, 0))
+    .sort(compareOrderedEntries)
     .forEach((module, moduleIndex) => {
       const moduleId = normalizeId(module?.id);
       if (!moduleId) return;

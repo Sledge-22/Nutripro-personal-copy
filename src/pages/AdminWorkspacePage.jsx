@@ -13,6 +13,7 @@ import {
   updateGdprDataRequest,
 } from "../services/gdprDataRequestService.js";
 import { uploadCourseImage, uploadModuleImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
+import { updateModuleSortOrders } from "../services/moduleService.js";
 import { normalizeCountrySelection } from "../data/countries.js";
 import { getProfileCountryOptions } from "../data/profileCountries.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
@@ -103,6 +104,20 @@ function formatFileSize(bytes) {
 
 function firstFilledValue(...values) {
   return values.find((value) => `${value ?? ""}`.trim()) || "";
+}
+
+function compareLessonOrder(left, right) {
+  const leftOrder = Number(left?.sort_order ?? left?.sortOrder ?? 0);
+  const rightOrder = Number(right?.sort_order ?? right?.sortOrder ?? 0);
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+
+  const leftCreatedAt = Date.parse(left?.created_at ?? left?.createdAt ?? "");
+  const rightCreatedAt = Date.parse(right?.created_at ?? right?.createdAt ?? "");
+  if (Number.isFinite(leftCreatedAt) && Number.isFinite(rightCreatedAt) && leftCreatedAt !== rightCreatedAt) {
+    return leftCreatedAt - rightCreatedAt;
+  }
+
+  return String(left?.id ?? "").localeCompare(String(right?.id ?? ""), undefined, { numeric: true });
 }
 
 function getModulePdfViewerSource(module) {
@@ -718,6 +733,17 @@ function buildCoursePayload(form, editingId, existingCourse) {
     }));
 
   const fallbackClassId = classes[0]?.id || null;
+  const moduleOrderById = new Map();
+  classes.forEach((courseClass) => {
+    (form.modules || [])
+      .filter(
+        (module) =>
+          String(module.class_id || module.classId || fallbackClassId || "") === String(courseClass.id),
+      )
+      .sort(compareLessonOrder)
+      .forEach((module, index) => moduleOrderById.set(String(module.id), index + 1));
+  });
+
   return {
     id: editingId || createId(),
     title: form.title.trim(),
@@ -741,6 +767,8 @@ function buildCoursePayload(form, editingId, existingCourse) {
           module.pdf_link,
         );
         const videoExternalUrl = firstFilledValue(
+          module.embed_url,
+          module.embedUrl,
           module.video_external_url,
           module.videoExternalUrl,
           module.external_video_url,
@@ -777,7 +805,12 @@ function buildCoursePayload(form, editingId, existingCourse) {
           id: module.id,
           classId: module.class_id || module.classId || fallbackClassId,
           class_id: module.class_id || module.classId || fallbackClassId,
-          sortOrder: index + 1,
+          sortOrder:
+            moduleOrderById.get(String(module.id)) ??
+            Number(module.sort_order ?? module.sortOrder ?? index + 1),
+          sort_order:
+            moduleOrderById.get(String(module.id)) ??
+            Number(module.sort_order ?? module.sortOrder ?? index + 1),
           title: module.title.trim(),
           description: module.description.trim(),
           lessonContent: `${module.lesson_content || module.lessonContent || ""}`.trim(),
@@ -3265,6 +3298,11 @@ function ModuleEditor({
   updateModule,
   updateAssignment,
   deleteModule,
+  moveModuleUp,
+  moveModuleDown,
+  canMoveUp,
+  canMoveDown,
+  reordering,
   enableAssignment,
   disableAssignment,
   uploadImage,
@@ -3282,6 +3320,26 @@ function ModuleEditor({
           <h4>{module.title.trim() || t("admin.newModule")}</h4>
         </div>
         <div className="module-editor-actions">
+          <button
+            type="button"
+            className="text-button compact-toggle"
+            onClick={() => moveModuleUp(module.id)}
+            disabled={!canMoveUp || reordering}
+            aria-label={t("admin.moveLessonUp")}
+            title={t("admin.moveLessonUp")}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className="text-button compact-toggle"
+            onClick={() => moveModuleDown(module.id)}
+            disabled={!canMoveDown || reordering}
+            aria-label={t("admin.moveLessonDown")}
+            title={t("admin.moveLessonDown")}
+          >
+            ↓
+          </button>
           <button type="button" className="text-button compact-toggle" onClick={() => toggleCollapsed(module.id)}>
             {collapsed ? t("common.expand") : t("common.collapse")}
           </button>
@@ -4235,6 +4293,7 @@ function CourseBuilderPage({
   const [classEditDraft, setClassEditDraft] = useState(null);
   const [studentAssignmentOpen, setStudentAssignmentOpen] = useState(true);
   const [studentSearch, setStudentSearch] = useState("");
+  const [reorderingModuleIds, setReorderingModuleIds] = useState([]);
 
   useEffect(() => {
     setForm(createCourseDraft(course));
@@ -4245,6 +4304,7 @@ function CourseBuilderPage({
     setSaveError("");
     setSaveDetails("");
     setSaveMessage("");
+    setReorderingModuleIds([]);
   }, [course?.id]);
 
   if (!course) {
@@ -4288,7 +4348,67 @@ function CourseBuilderPage({
   };
 
   const getModulesForClass = (classId) =>
-    (form.modules || []).filter((module) => String(module.class_id || module.classId || "") === String(classId));
+    (form.modules || [])
+      .filter((module) => String(module.class_id || module.classId || "") === String(classId))
+      .sort(compareLessonOrder);
+
+  const moveModuleWithinClass = async (classId, moduleId, direction) => {
+    const classModules = getModulesForClass(classId);
+    const sourceIndex = classModules.findIndex((module) => String(module.id) === String(moduleId));
+    const targetIndex = sourceIndex + direction;
+    if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= classModules.length) return;
+
+    const reorderedModules = [...classModules];
+    [reorderedModules[sourceIndex], reorderedModules[targetIndex]] = [
+      reorderedModules[targetIndex],
+      reorderedModules[sourceIndex],
+    ];
+    const desiredOrders = new Map(
+      reorderedModules.map((module, index) => [String(module.id), index + 1]),
+    );
+    const affectedModules = reorderedModules
+      .filter(
+        (module) =>
+          Number(module.sort_order ?? module.sortOrder ?? 0) !== desiredOrders.get(String(module.id)),
+      )
+      .map((module) => ({
+        id: module.id,
+        classId,
+        class_id: classId,
+        sortOrder: desiredOrders.get(String(module.id)),
+        sort_order: desiredOrders.get(String(module.id)),
+      }));
+    const previousModules = form.modules;
+
+    setForm((current) => ({
+      ...current,
+      modules: (current.modules || []).map((module) =>
+        desiredOrders.has(String(module.id))
+          ? {
+              ...module,
+              sortOrder: desiredOrders.get(String(module.id)),
+              sort_order: desiredOrders.get(String(module.id)),
+            }
+          : module,
+      ),
+    }));
+    setReorderingModuleIds(affectedModules.map((module) => module.id));
+    setSaveError("");
+    setSaveDetails("");
+    setSaveMessage("");
+
+    try {
+      await updateModuleSortOrders(affectedModules);
+      setSaveMessage(t("admin.lessonOrderUpdated"));
+    } catch (error) {
+      console.error("Saving lesson order failed:", error);
+      setForm((current) => ({ ...current, modules: previousModules }));
+      setSaveError(t("admin.lessonOrderSaveFailed"));
+      setSaveDetails(error?.message || "");
+    } finally {
+      setReorderingModuleIds([]);
+    }
+  };
 
   const addClass = () => {
     setForm((current) => ({
@@ -4791,6 +4911,11 @@ function CourseBuilderPage({
                           updateModule={updateModule}
                           updateAssignment={updateAssignment}
                           deleteModule={deleteModule}
+                          moveModuleUp={(moduleId) => void moveModuleWithinClass(courseClass.id, moduleId, -1)}
+                          moveModuleDown={(moduleId) => void moveModuleWithinClass(courseClass.id, moduleId, 1)}
+                          canMoveUp={index > 0}
+                          canMoveDown={index < classModules.length - 1}
+                          reordering={reorderingModuleIds.includes(module.id)}
                           uploadImage={uploadImage}
                           uploadPdf={uploadPdf}
                           uploadVideo={uploadVideo}

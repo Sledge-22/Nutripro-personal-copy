@@ -27,17 +27,33 @@ function goTo(pathname) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+function compareLessonOrder(left, right) {
+  const leftOrder = Number(left?.sort_order ?? left?.sortOrder ?? 0);
+  const rightOrder = Number(right?.sort_order ?? right?.sortOrder ?? 0);
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+
+  const leftCreatedAt = Date.parse(left?.created_at ?? left?.createdAt ?? "");
+  const rightCreatedAt = Date.parse(right?.created_at ?? right?.createdAt ?? "");
+  if (Number.isFinite(leftCreatedAt) && Number.isFinite(rightCreatedAt) && leftCreatedAt !== rightCreatedAt) {
+    return leftCreatedAt - rightCreatedAt;
+  }
+
+  return String(left?.id ?? "").localeCompare(String(right?.id ?? ""), undefined, { numeric: true });
+}
+
 function getCourseModules(course) {
   const archivedClassIds = new Set(
     (Array.isArray(course?.classes) ? course.classes : [])
       .filter((courseClass) => courseClass?.status === "archived")
       .map((courseClass) => String(courseClass.id)),
   );
-  return (Array.isArray(course?.modules) ? course.modules : []).filter(
-    (module) =>
-      module?.status !== "archived" &&
-      !archivedClassIds.has(String(module?.class_id ?? module?.classId ?? "")),
-  );
+  return (Array.isArray(course?.modules) ? course.modules : [])
+    .filter(
+      (module) =>
+        module?.status !== "archived" &&
+        !archivedClassIds.has(String(module?.class_id ?? module?.classId ?? "")),
+    )
+    .sort(compareLessonOrder);
 }
 
 function getCourseClasses(course) {
@@ -55,11 +71,12 @@ function getCourseClasses(course) {
       )
       .map((courseClass) => ({
         ...courseClass,
-        modules: [...(courseClass.modules || [])].sort(
-          (left, right) =>
-            Number(left?.sort_order ?? left?.sortOrder ?? 0) -
-            Number(right?.sort_order ?? right?.sortOrder ?? 0),
-        ),
+        modules: modules
+          .filter(
+            (module) =>
+              String(module?.class_id ?? module?.classId ?? "") === String(courseClass.id),
+          )
+          .sort(compareLessonOrder),
       }));
   }
   if (!modules.length) return [];
