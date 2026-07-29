@@ -106,6 +106,10 @@ function firstFilledValue(...values) {
   return values.find((value) => `${value ?? ""}`.trim()) || "";
 }
 
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function compareLessonOrder(left, right) {
   const leftOrder = Number(left?.sort_order ?? left?.sortOrder ?? 0);
   const rightOrder = Number(right?.sort_order ?? right?.sortOrder ?? 0);
@@ -278,8 +282,8 @@ function createClassDraft(sortOrder = 1, title = "General") {
 }
 
 function groupCourseClasses(course = null) {
-  const modules = Array.isArray(course?.modules) ? course.modules : [];
-  const sourceClasses = Array.isArray(course?.classes) ? course.classes : [];
+  const modules = safeArray(course?.modules).filter(Boolean);
+  const sourceClasses = safeArray(course?.classes).filter(Boolean);
   const mappedClasses = sourceClasses.map((entry, index) => ({
     id: entry.id || createId(),
     sortOrder: entry.sortOrder ?? entry.sort_order ?? index + 1,
@@ -287,15 +291,22 @@ function groupCourseClasses(course = null) {
     title: entry.title || "General",
     description: entry.description || "",
     status: entry.status || "published",
+    isFallback: Boolean(entry.isFallback),
   }));
 
-  const hasGeneralModules = modules.some((module) => !(module.class_id || module.classId));
-  if (hasGeneralModules) {
-    mappedClasses.push(createClassDraft(mappedClasses.length + 1, "General"));
+  const hasGeneralModules = modules.some((module) => !(module?.class_id || module?.classId));
+  if (hasGeneralModules && !mappedClasses.some((entry) => entry.isFallback)) {
+    mappedClasses.push({
+      ...createClassDraft(mappedClasses.length + 1, "General"),
+      isFallback: true,
+    });
   }
 
   if (!mappedClasses.length) {
-    mappedClasses.push(createClassDraft(1, "General"));
+    mappedClasses.push({
+      ...createClassDraft(1, "General"),
+      isFallback: true,
+    });
   }
 
   const seen = new Set();
@@ -494,10 +505,10 @@ function restoreModuleDraft(module = {}, index = 0) {
       uploading: false,
       error: "",
     },
-    assignment: module.assignment
+    assignment: module.assignment || module.requires_assignment || module.requiresAssignment
       ? {
           ...createAssignmentDraft(),
-          ...module.assignment,
+          ...(module.assignment || {}),
           submissionType: "file",
           submission_type: "file",
         }
@@ -610,11 +621,12 @@ function createCourseDraft(course = null) {
   }
 
   const classes = groupCourseClasses(course);
-  const fallbackClassId = classes[0]?.id || "";
+  const fallbackClassId = classes.find((entry) => entry.isFallback)?.id || classes[0]?.id || "";
+  const courseModules = safeArray(course.modules).filter(Boolean);
 
   return {
-    title: course.title,
-    description: course.description,
+    title: `${course.title ?? ""}`,
+    description: `${course.description ?? ""}`,
     status: course.status || "published",
     selectedStudentIds: Array.isArray(course.owners) ? course.owners.map((studentId) => `${studentId}`) : [],
     imageUrl: course.image_url || course.imageUrl || "",
@@ -627,11 +639,12 @@ function createCourseDraft(course = null) {
     bulkPdfSelections: [],
     bulkVideoSelections: [],
     classes,
-      modules: (course.modules || []).map((module, index) => ({
+    modules: courseModules.map((module, index) => ({
       id: module.id || createId(),
       classId: module.class_id || module.classId || fallbackClassId,
       class_id: module.class_id || module.classId || fallbackClassId,
-      sortOrder: module.sortOrder ?? index + 1,
+      sortOrder: module.sort_order ?? module.sortOrder ?? index + 1,
+      sort_order: module.sort_order ?? module.sortOrder ?? index + 1,
       title: module.title || "",
       description: module.description || "",
       lessonContent: module.lesson_content || module.lessonContent || "",
@@ -699,19 +712,21 @@ function createCourseDraft(course = null) {
         uploading: false,
         error: "",
       },
-      assignment: module.assignment
+      assignment: module.assignment || module.requires_assignment || module.requiresAssignment
         ? {
-            id: module.assignment.id || null,
-            title: module.assignment.title || "",
-            instructions: module.assignment.instructions || "",
-            titleEn: module.assignment.title_en || module.assignment.titleEn || "",
-            title_en: module.assignment.title_en || module.assignment.titleEn || "",
-            titleEs: module.assignment.title_es || module.assignment.titleEs || "",
-            title_es: module.assignment.title_es || module.assignment.titleEs || "",
-            instructionsEn: module.assignment.instructions_en || module.assignment.instructionsEn || "",
-            instructions_en: module.assignment.instructions_en || module.assignment.instructionsEn || "",
-            instructionsEs: module.assignment.instructions_es || module.assignment.instructionsEs || "",
-            instructions_es: module.assignment.instructions_es || module.assignment.instructionsEs || "",
+            ...createAssignmentDraft(),
+            ...(module.assignment || {}),
+            id: module.assignment?.id || null,
+            title: module.assignment?.title || "",
+            instructions: module.assignment?.instructions || "",
+            titleEn: module.assignment?.title_en || module.assignment?.titleEn || "",
+            title_en: module.assignment?.title_en || module.assignment?.titleEn || "",
+            titleEs: module.assignment?.title_es || module.assignment?.titleEs || "",
+            title_es: module.assignment?.title_es || module.assignment?.titleEs || "",
+            instructionsEn: module.assignment?.instructions_en || module.assignment?.instructionsEn || "",
+            instructions_en: module.assignment?.instructions_en || module.assignment?.instructionsEn || "",
+            instructionsEs: module.assignment?.instructions_es || module.assignment?.instructionsEs || "",
+            instructions_es: module.assignment?.instructions_es || module.assignment?.instructionsEs || "",
             submissionType: "file",
             submission_type: "file",
           }
@@ -721,7 +736,10 @@ function createCourseDraft(course = null) {
 }
 
 function buildCoursePayload(form, editingId, existingCourse) {
-  const classes = (form.classes || [])
+  const safeForm = form && typeof form === "object" ? form : {};
+  const formClasses = safeArray(safeForm.classes).filter(Boolean);
+  const formModules = safeArray(safeForm.modules).filter(Boolean);
+  const classes = formClasses
     .filter((entry) => `${entry.title ?? ""}`.trim())
     .map((entry, index) => ({
       id: entry.id,
@@ -735,7 +753,7 @@ function buildCoursePayload(form, editingId, existingCourse) {
   const fallbackClassId = classes[0]?.id || null;
   const moduleOrderById = new Map();
   classes.forEach((courseClass) => {
-    (form.modules || [])
+    formModules
       .filter(
         (module) =>
           String(module.class_id || module.classId || fallbackClassId || "") === String(courseClass.id),
@@ -746,17 +764,17 @@ function buildCoursePayload(form, editingId, existingCourse) {
 
   return {
     id: editingId || createId(),
-    title: form.title.trim(),
-    description: form.description.trim(),
-    status: form.status || "published",
-    imageUrl: form.image_url || form.imageUrl || "",
-    image_url: form.image_url || form.imageUrl || "",
-    imageStoragePath: form.image_storage_path || form.imageStoragePath || "",
-    image_storage_path: form.image_storage_path || form.imageStoragePath || "",
-    owners: Array.from(new Set((Array.isArray(form.selectedStudentIds) ? form.selectedStudentIds : []).map((studentId) => `${studentId}`))),
+    title: `${safeForm.title ?? ""}`.trim(),
+    description: `${safeForm.description ?? ""}`.trim(),
+    status: safeForm.status || "published",
+    imageUrl: safeForm.image_url || safeForm.imageUrl || "",
+    image_url: safeForm.image_url || safeForm.imageUrl || "",
+    imageStoragePath: safeForm.image_storage_path || safeForm.imageStoragePath || "",
+    image_storage_path: safeForm.image_storage_path || safeForm.imageStoragePath || "",
+    owners: Array.from(new Set(safeArray(safeForm.selectedStudentIds).map((studentId) => `${studentId}`))),
     classes,
-      modules: form.modules
-      .filter((module) => module.title.trim())
+    modules: formModules
+      .filter((module) => `${module?.title ?? ""}`.trim())
       .map((module, index) => {
         const pdfExternalUrl = firstFilledValue(
           module.pdf_external_url,
@@ -864,9 +882,9 @@ function buildCoursePayload(form, editingId, existingCourse) {
           assignment:
             (module.requiresAssignment ?? module.requires_assignment) && module.assignment?.title?.trim()
             ? {
-                id: module.assignment.id || null,
-                title: module.assignment.title.trim(),
-                instructions: module.assignment.instructions.trim(),
+                id: module.assignment?.id || null,
+                title: `${module.assignment?.title ?? ""}`.trim(),
+                instructions: `${module.assignment?.instructions ?? ""}`.trim(),
                 titleEn: `${module.assignment.titleEn || module.assignment.title_en || ""}`.trim(),
                 title_en: `${module.assignment.titleEn || module.assignment.title_en || ""}`.trim(),
                 titleEs: `${module.assignment.titleEs || module.assignment.title_es || ""}`.trim(),
@@ -3309,6 +3327,39 @@ function ModuleEditor({
   uploadPdf,
   uploadVideo,
 }) {
+  const sourceModule = module && typeof module === "object" ? module : {};
+  const requiresAssignment = Boolean(
+    sourceModule.requiresAssignment ||
+    sourceModule.requires_assignment ||
+    sourceModule.assignment,
+  );
+  module = {
+    ...sourceModule,
+    id: sourceModule.id || `module-${index + 1}`,
+    title: `${sourceModule.title ?? ""}`,
+    description: `${sourceModule.description ?? ""}`,
+    video: {
+      id: sourceModule.video?.id || `video-${sourceModule.id || index + 1}`,
+      title: sourceModule.video?.title || "",
+      description: sourceModule.video?.description || "",
+      duration: sourceModule.video?.duration || "10 min",
+      link: sourceModule.video?.link || "",
+      url: sourceModule.video?.url || sourceModule.video_url || sourceModule.videoUrl || "",
+      uploadLabel:
+        sourceModule.video?.uploadLabel ||
+        sourceModule.video_file_name ||
+        sourceModule.videoName ||
+        NO_VIDEO_SELECTED,
+      uploading: Boolean(sourceModule.video?.uploading),
+      error: sourceModule.video?.error || "",
+    },
+    assignment: requiresAssignment
+      ? {
+          ...createAssignmentDraft(),
+          ...(sourceModule.assignment || {}),
+        }
+      : null,
+  };
   const pdfPreview = getModulePdfViewerSource(module);
   const videoPreview = getModuleVideoViewerSource(module);
 
@@ -3958,6 +4009,78 @@ function ModuleEditor({
   );
 }
 
+class CourseBuilderErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("[CourseBuilder] Rendering the saved course failed:", error, errorInfo);
+  }
+
+  componentDidUpdate(previousProps) {
+    if (previousProps.courseId !== this.props.courseId && this.state.error) {
+      this.setState({ error: null });
+    }
+  }
+
+  render() {
+    const { error } = this.state;
+    if (!error) return this.props.children;
+
+    const {
+      language = "es",
+      courseId = "",
+      classesCount = 0,
+      modulesCount = 0,
+    } = this.props;
+    const isSpanish = language === "es";
+
+    return (
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{isSpanish ? "Constructor de cursos" : "Course Builder"}</span>
+            <h2>{isSpanish ? "No se pudo abrir el constructor del curso." : "The Course Builder could not be opened."}</h2>
+            <p>
+              {isSpanish
+                ? "Los datos guardados no se modificaron. Intenta cargar el curso nuevamente."
+                : "Your saved data was not changed. Try loading the course again."}
+            </p>
+          </div>
+        </div>
+        <AdminErrorMessage
+          error={{
+            message: isSpanish
+              ? "Ocurrió un error al mostrar este curso."
+              : "An error occurred while displaying this course.",
+            details: import.meta.env.DEV ? `${error?.message ?? error}` : "",
+          }}
+          detailsLabel={isSpanish ? "Detalles" : "Details"}
+        />
+        {import.meta.env.DEV ? (
+          <small className="field-note">
+            courseId: {courseId || "missing"} · classes: {classesCount} · modules: {modulesCount} · query: course-builder-render
+          </small>
+        ) : null}
+        <div className="form-actions">
+          <button type="button" className="primary-btn" onClick={() => window.location.reload()}>
+            {isSpanish ? "Reintentar" : "Retry"}
+          </button>
+          <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.postCourses)}>
+            {isSpanish ? "Volver a cursos" : "Back to courses"}
+          </button>
+        </div>
+      </section>
+    );
+  }
+}
+
 function CourseManagerPage({
   pathname,
   users = [],
@@ -3967,10 +4090,11 @@ function CourseManagerPage({
   onDeleteCourse,
   onSetStudentCourseAssignments,
 }) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const routeState = getAdminCourseRouteState(pathname);
-  const selectedCourse = courses.find((course) => String(course.id) === String(routeState.courseId)) ?? null;
-  const studentOptions = (Array.isArray(users) ? users : []).filter(
+  const safeCourses = safeArray(courses).filter(Boolean);
+  const selectedCourse = safeCourses.find((course) => String(course?.id) === String(routeState.courseId)) ?? null;
+  const studentOptions = safeArray(users).filter(
     (user) => normalizeRoleKey(user.roleKey ?? user.role) === "student",
   );
 
@@ -3996,21 +4120,30 @@ function CourseManagerPage({
   }
 
   if (routeState.view === "builder") {
+    const classesCount = safeArray(selectedCourse?.classes).length;
+    const modulesCount = safeArray(selectedCourse?.modules).length;
     return (
-      <CourseBuilderPage
-        course={selectedCourse}
-        studentOptions={studentOptions}
-        currentUser={currentUser}
-        onSaveCourse={onSaveCourse}
-        onDeleteCourse={onDeleteCourse}
-        onSetStudentCourseAssignments={onSetStudentCourseAssignments}
-      />
+      <CourseBuilderErrorBoundary
+        courseId={routeState.courseId}
+        classesCount={classesCount}
+        modulesCount={modulesCount}
+        language={language}
+      >
+        <CourseBuilderPage
+          course={selectedCourse}
+          studentOptions={studentOptions}
+          currentUser={currentUser}
+          onSaveCourse={onSaveCourse}
+          onDeleteCourse={onDeleteCourse}
+          onSetStudentCourseAssignments={onSetStudentCourseAssignments}
+        />
+      </CourseBuilderErrorBoundary>
     );
   }
 
   return (
     <CourseManagerOverviewPage
-      courses={courses}
+      courses={safeCourses}
       studentOptions={studentOptions}
       onDeleteCourse={onDeleteCourse}
     />
@@ -4329,14 +4462,18 @@ function CourseBuilderPage({
   const updateClass = (classId, updater) => {
     setForm((current) => ({
       ...current,
-      classes: (current.classes || []).map((entry) => (entry.id === classId ? updater(entry) : entry)),
+      classes: safeArray(current?.classes).map((entry) =>
+        String(entry?.id) === String(classId) ? updater(entry) : entry,
+      ),
     }));
   };
 
   const updateModule = (moduleId, updater) => {
     setForm((current) => ({
       ...current,
-      modules: (current.modules || []).map((module) => (module.id === moduleId ? updater(module) : module)),
+      modules: safeArray(current?.modules).map((entry) =>
+        String(entry?.id) === String(moduleId) ? updater(entry) : entry,
+      ),
     }));
   };
 
@@ -4348,8 +4485,9 @@ function CourseBuilderPage({
   };
 
   const getModulesForClass = (classId) =>
-    (form.modules || [])
-      .filter((module) => String(module.class_id || module.classId || "") === String(classId))
+    safeArray(form?.modules)
+      .filter(Boolean)
+      .filter((module) => String(module?.class_id || module?.classId || "") === String(classId))
       .sort(compareLessonOrder);
 
   const moveModuleWithinClass = async (classId, moduleId, direction) => {
@@ -4378,11 +4516,11 @@ function CourseBuilderPage({
         sortOrder: desiredOrders.get(String(module.id)),
         sort_order: desiredOrders.get(String(module.id)),
       }));
-    const previousModules = form.modules;
+    const previousModules = safeArray(form?.modules);
 
     setForm((current) => ({
       ...current,
-      modules: (current.modules || []).map((module) =>
+      modules: safeArray(current?.modules).map((module) =>
         desiredOrders.has(String(module.id))
           ? {
               ...module,
@@ -4414,10 +4552,12 @@ function CourseBuilderPage({
     setForm((current) => ({
       ...current,
       classes: [
-        ...(current.classes || []),
+        ...safeArray(current?.classes),
         createClassDraft(
-          (current.classes || []).length + 1,
-          language === "es" ? `Clase ${(current.classes || []).length + 1}` : `Class ${(current.classes || []).length + 1}`,
+          safeArray(current?.classes).length + 1,
+          language === "es"
+            ? `Clase ${safeArray(current?.classes).length + 1}`
+            : `Class ${safeArray(current?.classes).length + 1}`,
         ),
       ],
     }));
@@ -4433,7 +4573,7 @@ function CourseBuilderPage({
     if (!confirmed) return;
     setForm((current) => ({
       ...current,
-      classes: (current.classes || []).map((entry) =>
+      classes: safeArray(current?.classes).map((entry) =>
         String(entry.id) === String(classId) ? { ...entry, status: "archived" } : entry,
       ),
     }));
@@ -4453,9 +4593,9 @@ function CourseBuilderPage({
     setForm((current) => ({
       ...current,
       modules: [
-        ...(current.modules || []),
+        ...safeArray(current?.modules),
         {
-          ...createModuleDraft((current.modules || []).length + 1),
+          ...createModuleDraft(safeArray(current?.modules).length + 1),
           classId,
           class_id: classId,
         },
@@ -4473,7 +4613,7 @@ function CourseBuilderPage({
     if (!confirmed) return;
     setForm((current) => ({
       ...current,
-      modules: (current.modules || []).map((module) =>
+      modules: safeArray(current?.modules).map((module) =>
         String(module.id) === String(moduleId) ? { ...module, status: "archived" } : module,
       ),
     }));
@@ -4499,7 +4639,7 @@ function CourseBuilderPage({
 
   const collapseAllClasses = () => {
     setCollapsedClassIds(
-      (form.classes || [])
+      safeArray(form?.classes)
         .map((entry) => entry.id)
         .filter((classId) => String(classId) !== String(editingClassId)),
     );

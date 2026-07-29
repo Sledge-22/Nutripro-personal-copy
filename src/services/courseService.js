@@ -31,7 +31,7 @@ function normalizeOwners(owners = []) {
 }
 
 function normalizeModules(modules = []) {
-  return modules.map((module, index) => ({
+  return (Array.isArray(modules) ? modules : []).filter(Boolean).map((module, index) => ({
     id: module.id ?? Date.now() + index,
     classId: module.class_id ?? module.classId ?? "",
     class_id: module.class_id ?? module.classId ?? "",
@@ -247,7 +247,8 @@ function buildGeneralClass(courseId, modules = []) {
 }
 
 function normalizeClasses(classes = [], courseId, modules = []) {
-  const mappedClasses = (Array.isArray(classes) ? classes : []).map((entry, index) => ({
+  const safeModules = Array.isArray(modules) ? modules.filter(Boolean) : [];
+  const mappedClasses = (Array.isArray(classes) ? classes : []).filter(Boolean).map((entry, index) => ({
     id: entry.id,
     courseId: entry.course_id ?? entry.courseId ?? courseId,
     course_id: entry.course_id ?? entry.courseId ?? courseId,
@@ -261,7 +262,7 @@ function normalizeClasses(classes = [], courseId, modules = []) {
   const modulesByClass = new Map();
   const unclassedModules = [];
 
-  (modules ?? []).forEach((module) => {
+  safeModules.forEach((module) => {
     const classId = module.class_id ?? module.classId ?? "";
     if (!classId) {
       unclassedModules.push(module);
@@ -284,8 +285,8 @@ function normalizeClasses(classes = [], courseId, modules = []) {
     normalized.push(buildGeneralClass(courseId, unclassedModules));
   }
 
-  if (!normalized.length && modules.length) {
-    return [buildGeneralClass(courseId, modules)];
+  if (!normalized.length && safeModules.length) {
+    return [buildGeneralClass(courseId, safeModules)];
   }
 
   return normalized.sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0));
