@@ -4,7 +4,6 @@ import { ENABLE_AUTH_TEST_TOOLS, isProductionAuthMode } from "../config/authMode
 import {
   initialCertificates,
   initialCommunityPosts,
-  initialCourses,
   initialStudentProgress,
   initialUsers,
 } from "../data/mockData.js";
@@ -355,12 +354,25 @@ function shouldShowPrivacyReminder(profile) {
   return accepted && !dismissed;
 }
 
-function isCourseBuilderSetupError(error) {
+function getStudentCoursesLoadMessage(error, language) {
   const details = `${sanitizeErrorDetails(error)}`.toLowerCase();
-  return (
-    (details.includes("course_classes") && (details.includes("does not exist") || details.includes("relation"))) ||
-    (details.includes("modules") && details.includes("class_id") && (details.includes("does not exist") || details.includes("column")))
-  );
+  const needsDatabaseReview =
+    details.includes("row-level security") ||
+    details.includes("permission denied") ||
+    details.includes("does not exist") ||
+    details.includes("schema cache") ||
+    details.includes("42703") ||
+    details.includes("42p01");
+
+  if (needsDatabaseReview) {
+    return language === "es"
+      ? "Se deben revisar los permisos o la configuración de la base de datos de cursos."
+      : "Course database permissions or setup need review.";
+  }
+
+  return language === "es"
+    ? "No se pudieron cargar los cursos. Contacta con un administrador."
+    : "Courses could not be loaded. Please contact an administrator.";
 }
 
 export function App() {
@@ -378,7 +390,8 @@ export function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [privacyReminderSeenThisSession, setPrivacyReminderSeenThisSession] = useState(false);
   const [users, setUsers] = useState(initialUsers);
-  const [courses, setCourses] = useState(initialCourses);
+  const [courses, setCourses] = useState([]);
+  const [coursesError, setCoursesError] = useState(null);
   const [studentProfile, setStudentProfile] = useState(null);
   const [studentCourses, setStudentCourses] = useState([]);
   const [studentCoursesError, setStudentCoursesError] = useState("");
@@ -482,8 +495,15 @@ export function App() {
 
       if (nextCoursesResult.status === "fulfilled") {
         setCourses(nextCoursesResult.value);
+        setCoursesError(null);
       } else {
         console.error("Loading courses during workspace hydration failed:", nextCoursesResult.reason);
+        setCoursesError({
+          message: language === "es"
+            ? "No se pudieron cargar los cursos. Revisa los permisos de cursos en Supabase."
+            : "Courses could not be loaded. Check the Supabase course permissions.",
+          details: sanitizeErrorDetails(nextCoursesResult.reason),
+        });
       }
 
       if (nextCertificatesResult.status === "fulfilled") {
@@ -506,26 +526,12 @@ export function App() {
       setProgressState(nextProgressResult.status === "fulfilled" ? nextProgressResult.value : initialStudentProgress);
       setStudentCoursesError(
         nextStudentCoursesResult.status === "rejected"
-          ? buildUserFacingError(
-              nextStudentCoursesResult.reason,
-              language === "es" ? "No se pudieron cargar tus inscripciones de cursos." : "Unable to load your course enrollments.",
-              {
-                setupMessage: t("auth.databaseSetupRequired"),
-              },
-            )
+          ? getStudentCoursesLoadMessage(nextStudentCoursesResult.reason, language)
           : "",
       );
 
       if (nextStudentCoursesResult.status === "rejected") {
         console.error("Loading student enrollments during workspace hydration failed:", nextStudentCoursesResult.reason);
-      }
-
-      if (nextCoursesResult.status === "rejected" && isCourseBuilderSetupError(nextCoursesResult.reason)) {
-        setLoginInfo(
-          language === "es"
-            ? "El acceso al gestor de cursos requiere completar la migración de clases del curso."
-            : "Course Manager access requires completing the course classes migration.",
-        );
       }
 
       const blockedReason = getAccessBlockReason(profile);
@@ -571,26 +577,27 @@ export function App() {
 
     if (allCoursesResult.status === "rejected") {
       console.error("Refreshing all courses failed:", allCoursesResult.reason);
+      setCoursesError({
+        message: language === "es"
+          ? "No se pudieron cargar los cursos. Revisa los permisos de cursos en Supabase."
+          : "Courses could not be loaded. Check the Supabase course permissions.",
+        details: sanitizeErrorDetails(allCoursesResult.reason),
+      });
       throw allCoursesResult.reason;
     }
 
     setCourses(allCoursesResult.value);
+    setCoursesError(null);
 
     if (ownedCoursesResult.status === "fulfilled") {
       setStudentCourses(ownedCoursesResult.value);
       setStudentCoursesError("");
     } else {
       console.error("Refreshing student courses failed:", ownedCoursesResult.reason);
-      setStudentCoursesError(
-        buildUserFacingError(
-          ownedCoursesResult.reason,
-          language === "es" ? "No se pudieron cargar tus inscripciones de cursos." : "Unable to load your course enrollments.",
-          {
-            setupMessage: t("auth.databaseSetupRequired"),
-          },
-        ),
-      );
+      setStudentCoursesError(getStudentCoursesLoadMessage(ownedCoursesResult.reason, language));
     }
+
+    return allCoursesResult.value;
   }
 
   async function refreshCertificates(nextStudentId = activeStudentId) {
@@ -1077,10 +1084,16 @@ export function App() {
         });
       }
 
-      void refreshCourses().catch((refreshError) => {
+      let courseForUi = savedCourse;
+      try {
+        const persistedCourses = await refreshCourses();
+        courseForUi =
+          persistedCourses.find((entry) => String(entry.id) === String(savedCourse.id)) ??
+          savedCourse;
+      } catch (refreshError) {
         console.error("Refreshing courses after save failed:", refreshError);
-      });
-      return { ok: true };
+      }
+      return { ok: true, course: courseForUi };
     } catch (error) {
       console.error("Saving course failed:", error);
       const errorDetails = extractErrorDetails(error);
@@ -1420,5 +1433,5 @@ export function App() {
       ? title
       : null;
 
-  return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={headerTitle} detailTitle={detailTitle} profile={currentUser} navItems={role === "Admin" ? adminNav : studentNav} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} certificates={certificates} posts={posts} currentUser={currentUser} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+    return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={headerTitle} detailTitle={detailTitle} profile={currentUser} navItems={role === "Admin" ? adminNav : studentNav} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} coursesError={coursesError} certificates={certificates} posts={posts} currentUser={currentUser} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }

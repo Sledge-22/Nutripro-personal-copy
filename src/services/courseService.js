@@ -305,12 +305,30 @@ function ownersForCourse(courseId, enrollments) {
 }
 
 async function attachRelations(courses = []) {
-  const enrollments = await fetchEnrollmentRows();
+  let enrollments = [];
+  try {
+    enrollments = await fetchEnrollmentRows();
+  } catch (error) {
+    console.error("Loading course enrollment relations failed; base courses will still be shown:", error);
+  }
+
   const enriched = [];
 
   for (const course of courses) {
-    const modules = await getModulesByCourse(course.id);
-    const classes = await getClassesByCourse(course.id);
+    const [modulesResult, classesResult] = await Promise.allSettled([
+      getModulesByCourse(course.id),
+      getClassesByCourse(course.id),
+    ]);
+
+    if (modulesResult.status === "rejected") {
+      console.error(`Loading modules for course ${course.id} failed; showing the persisted course without modules:`, modulesResult.reason);
+    }
+    if (classesResult.status === "rejected") {
+      console.error(`Loading classes for course ${course.id} failed; showing the persisted course without classes:`, classesResult.reason);
+    }
+
+    const modules = modulesResult.status === "fulfilled" ? modulesResult.value : [];
+    const classes = classesResult.status === "fulfilled" ? classesResult.value : [];
     enriched.push(normalizeCourse(course, ownersForCourse(course.id, enrollments), modules, classes));
   }
 
@@ -387,7 +405,7 @@ async function runCourseMutationWithFallback(operation, payload, attempt = 0) {
 export async function getCourses() {
   if (!isSupabaseConfigured) return getMockCourses();
 
-  const { data, error } = await supabase.from("courses").select(COURSE_SELECT_COLUMNS).order("id", { ascending: true });
+  const { data, error } = await supabase.from("courses").select("*").order("id", { ascending: true });
   if (error) {
     console.error("Failed to load courses from Supabase:", error);
     throw error;
@@ -421,7 +439,9 @@ export async function createCourse(course, options = {}) {
   );
   console.log("Created course response:", data);
 
-  const { savedClasses } = await syncClassesForCourse(data.id, classes);
+  const { savedClasses } = classes.length
+    ? await syncClassesForCourse(data.id, classes)
+    : { savedClasses: [] };
   const classIdMap = new Map(savedClasses.map((courseClass) => [String(courseClass.clientId ?? ""), courseClass.id]));
   const firstSavedClassId = savedClasses[0]?.id ?? null;
   const nextModules = modules.map((module) => ({
@@ -431,19 +451,23 @@ export async function createCourse(course, options = {}) {
   }));
 
   let savedModules = [];
-  try {
-    savedModules = await replaceModulesForCourse(data.id, nextModules, { onProgress: options.onProgress });
-  } catch (moduleError) {
-    console.error("Module insert error:", moduleError);
-    throw moduleError;
+  if (nextModules.length) {
+    try {
+      savedModules = await replaceModulesForCourse(data.id, nextModules, { onProgress: options.onProgress });
+    } catch (moduleError) {
+      console.error("Module insert error:", moduleError);
+      throw moduleError;
+    }
   }
 
-  try {
-    const enrollmentRows = await setCourseStudentAssignments(data.id, owners);
-    console.log("Created course enrollment response:", enrollmentRows);
-  } catch (enrollmentError) {
-    console.error("Course enrollment sync failed after create:", enrollmentError);
-    throw enrollmentError;
+  if (owners.length) {
+    try {
+      const enrollmentRows = await setCourseStudentAssignments(data.id, owners);
+      console.log("Created course enrollment response:", enrollmentRows);
+    } catch (enrollmentError) {
+      console.error("Course enrollment sync failed after create:", enrollmentError);
+      throw enrollmentError;
+    }
   }
 
   return normalizeCourse(data, owners, savedModules, savedClasses);
@@ -556,18 +580,18 @@ export async function getStudentCourses(studentId) {
     );
   }
 
-  const { data: enrollmentRows, error } = await supabase.from("enrollments").select("*").eq("student_id", studentId);
+  const { data: enrollmentRows, error } = await supabase
+    .from("enrollments")
+    .select("id,course_id,student_id,status")
+    .eq("student_id", studentId)
+    .eq("status", "active");
   if (error) {
     console.error("Failed to load student enrollments from Supabase:", error);
     throw error;
   }
 
-  const activeEnrollmentRows = (enrollmentRows ?? []).filter(
-    (row) => `${row.status ?? "active"}`.trim().toLowerCase() !== "inactive",
-  );
-
   const courseIds = Array.from(
-    new Set(activeEnrollmentRows.map((row) => row.course_id ?? row.courseId).filter(Boolean)),
+    new Set((enrollmentRows ?? []).map((row) => row.course_id ?? row.courseId).filter(Boolean)),
   );
   if (!courseIds.length) {
     return [];
@@ -575,7 +599,7 @@ export async function getStudentCourses(studentId) {
 
   const { data: courseRows, error: courseError } = await supabase
     .from("courses")
-    .select(COURSE_SELECT_COLUMNS)
+    .select("*")
     .in("id", courseIds)
     .eq("status", "published")
     .order("id", { ascending: true });
@@ -591,12 +615,11 @@ export async function getStudentCourses(studentId) {
     console.error("Student course access failed because these enrolled courses are not published:", unavailableCourseIds);
   }
 
-  const allEnrollments = await fetchEnrollmentRows();
   const result = [];
   for (const course of courseRows ?? []) {
     const modules = await getModulesByCourse(course.id);
     const classes = await getClassesByCourse(course.id);
-    result.push(normalizeCourse(course, ownersForCourse(course.id, allEnrollments), modules, classes));
+    result.push(normalizeCourse(course, [studentId], modules, classes));
   }
   return result;
 }

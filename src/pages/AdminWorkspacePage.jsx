@@ -891,6 +891,7 @@ export function AdminWorkspacePage({
   pathname,
   users,
   courses,
+  coursesError = null,
   certificates,
   posts,
   currentUser,
@@ -911,6 +912,8 @@ export function AdminWorkspacePage({
   onDeletePost,
   onUpdateComment,
 }) {
+  const { t } = useLanguage();
+
   if (pathname === "/admin/users") {
     return (
       <UsersAdminPanel
@@ -931,15 +934,22 @@ export function AdminWorkspacePage({
 
   if (isAdminCourseRoute(pathname)) {
     return (
-      <CourseManagerPage
-        pathname={pathname}
-        users={users}
-        courses={courses}
-        currentUser={currentUser}
-        onSaveCourse={onSaveCourse}
-        onDeleteCourse={onDeleteCourse}
-        onSetStudentCourseAssignments={onSetStudentCourseAssignments}
-      />
+      <>
+        {coursesError ? (
+          <section className="section-card">
+            <AdminErrorMessage error={coursesError} detailsLabel={t("common.details")} />
+          </section>
+        ) : null}
+        <CourseManagerPage
+          pathname={pathname}
+          users={users}
+          courses={courses}
+          currentUser={currentUser}
+          onSaveCourse={onSaveCourse}
+          onDeleteCourse={onDeleteCourse}
+          onSetStudentCourseAssignments={onSetStudentCourseAssignments}
+        />
+      </>
     );
   }
 
