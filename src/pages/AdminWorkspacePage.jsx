@@ -166,6 +166,8 @@ function getModuleVideoViewerSource(module) {
       : "";
   const externalVideoSource =
     firstFilledValue(
+    module?.embed_url,
+    module?.embedUrl,
     module?.video_external_url,
     module?.videoExternalUrl,
     module?.external_video_url,
@@ -359,6 +361,8 @@ function createModuleDraft(sortOrder = 1) {
     video_url: "",
     videoExternalUrl: "",
     video_external_url: "",
+    embedUrl: "",
+    embed_url: "",
     videoSource: "upload",
     video_source: "upload",
     videoName: "",
@@ -389,7 +393,12 @@ function restoreModuleDraft(module = {}, index = 0) {
   const restoredPdfUrl = module.pdf_url || module.pdfUrl || "";
   const restoredPdfExternalUrl = module.pdf_external_url || module.pdfExternalUrl || "";
   const restoredVideoUrl = module.video_url || module.videoUrl || module.video?.url || "";
-  const restoredVideoExternalUrl = module.video_external_url || module.videoExternalUrl || "";
+  const restoredVideoExternalUrl =
+    module.embed_url ||
+    module.embedUrl ||
+    module.video_external_url ||
+    module.videoExternalUrl ||
+    "";
   const legacyPdfName = module.pdfPendingName || module.pdfName || module.pdf_file_name || module.pdfLabel || "";
   const legacyVideoName =
     module.videoPendingName ||
@@ -448,6 +457,8 @@ function restoreModuleDraft(module = {}, index = 0) {
     video_url: restoredVideoUrl || module.video?.link || "",
     videoExternalUrl: restoredVideoExternalUrl,
     video_external_url: restoredVideoExternalUrl,
+    embedUrl: restoredVideoExternalUrl,
+    embed_url: restoredVideoExternalUrl,
     videoSource: module.video_source || module.videoSource || (restoredVideoExternalUrl ? "external" : "upload"),
     video_source: module.video_source || module.videoSource || (restoredVideoExternalUrl ? "external" : "upload"),
     videoName: restoredVideoUrl ? module.videoName || module.video_file_name || module.video?.uploadLabel || legacyVideoName || "" : "",
@@ -797,6 +808,10 @@ function buildCoursePayload(form, editingId, existingCourse) {
           pdf_storage_path: module.pdfStoragePath || module.pdf_storage_path || "",
           videoExternalUrl,
           video_external_url: videoExternalUrl || null,
+          embedUrl: videoExternalUrl,
+          embed_url: videoExternalUrl || null,
+          assignmentInstructions: module.assignment?.instructions || "",
+          assignment_instructions: module.assignment?.instructions || null,
           videoSource,
           video_source: videoExternalUrl ? "external" : videoSource,
           videoUrl,

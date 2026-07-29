@@ -3,16 +3,28 @@ import { getMockCourses, setMockCourses } from "./mockStore.js";
 import { getAssignmentsByModuleIds, syncAssignmentsForModules } from "./assignmentService.js";
 
 const OPTIONAL_MODULE_COLUMNS = [
-  "requires_assignment",
+  "pdf_file_name",
+  "video_file_name",
+  "pdf_storage_path",
+  "video_storage_path",
   "pdf_external_url",
   "video_external_url",
   "pdf_source",
   "video_source",
-  "lesson_content",
-  "status",
-  "image_url",
   "image_file_name",
   "image_storage_path",
+];
+const REQUIRED_COURSE_BUILDER_COLUMNS = [
+  "lesson_content",
+  "pdf_url",
+  "video_url",
+  "embed_url",
+  "image_url",
+  "requires_assignment",
+  "assignment_instructions",
+  "status",
+  "sort_order",
+  "updated_at",
 ];
 const MODULE_SELECT_COLUMNS = [
   "id",
@@ -24,6 +36,7 @@ const MODULE_SELECT_COLUMNS = [
   "requires_assignment",
   "pdf_url",
   "video_url",
+  "embed_url",
   "pdf_file_name",
   "video_file_name",
   "pdf_storage_path",
@@ -33,11 +46,64 @@ const MODULE_SELECT_COLUMNS = [
   "pdf_source",
   "video_source",
   "lesson_content",
+  "assignment_instructions",
   "status",
+  "updated_at",
   "image_url",
   "image_file_name",
   "image_storage_path",
-].join(",");
+];
+
+function getMissingModuleColumn(error) {
+  const details = `${error?.message ?? ""} ${error?.details ?? ""} ${error?.hint ?? ""}`;
+  const quotedMatch = details.match(/['"]([a-z][a-z0-9_]*)['"]\s+column/i);
+  if (quotedMatch?.[1]) return quotedMatch[1].toLowerCase();
+  const qualifiedMatch = details.match(/modules\.([a-z][a-z0-9_]*)/i);
+  return qualifiedMatch?.[1]?.toLowerCase() ?? "";
+}
+
+function isMissingModuleColumnError(error) {
+  const details = `${error?.message ?? ""} ${error?.details ?? ""} ${error?.hint ?? ""}`.toLowerCase();
+  return (
+    error?.code === "42703" ||
+    details.includes("schema cache") ||
+    (details.includes("modules") && details.includes("column") && details.includes("does not exist"))
+  );
+}
+
+function createModuleSchemaError(error) {
+  if (!isMissingModuleColumnError(error)) return error;
+
+  const missingColumn = getMissingModuleColumn(error) || "required Course Builder columns";
+  const setupError = new Error(
+    `Course Builder database setup required: public.modules is missing ${missingColumn}. Run supabase/sql/modules_course_builder_columns.sql.`,
+  );
+  setupError.code = error?.code ?? "MODULE_SCHEMA_SETUP_REQUIRED";
+  setupError.details = [error?.message, error?.details, error?.hint].filter(Boolean).join(" ");
+  return setupError;
+}
+
+async function fetchModuleRows(courseId, columns = MODULE_SELECT_COLUMNS) {
+  const { data, error } = await supabase
+    .from("modules")
+    .select(columns.join(","))
+    .eq("course_id", courseId)
+    .order("class_id", { ascending: true, nullsFirst: true })
+    .order("sort_order", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (!error) return data ?? [];
+
+  const missingColumn = getMissingModuleColumn(error);
+  if (missingColumn && OPTIONAL_MODULE_COLUMNS.includes(missingColumn) && columns.includes(missingColumn)) {
+    console.warn("[CourseBuilder] Optional module column is unavailable; loading without it.", {
+      column: missingColumn,
+    });
+    return fetchModuleRows(courseId, columns.filter((column) => column !== missingColumn));
+  }
+
+  throw createModuleSchemaError(error);
+}
 
 function fileNameFromUrl(url, fallback) {
   if (!url) return fallback;
@@ -58,6 +124,8 @@ function mapModuleRow(module) {
     module.pdf_link ??
     "";
   const videoExternalUrl =
+    module.embed_url ??
+    module.embedUrl ??
     module.video_external_url ??
     module.videoExternalUrl ??
     module.external_video_url ??
@@ -107,7 +175,15 @@ function mapModuleRow(module) {
     description: module.description ?? "",
     lessonContent: module.lesson_content ?? module.lessonContent ?? "",
     lesson_content: module.lesson_content ?? module.lessonContent ?? "",
+    embedUrl: module.embed_url ?? module.embedUrl ?? videoExternalUrl,
+    embed_url: module.embed_url ?? module.embedUrl ?? videoExternalUrl,
+    assignmentInstructions:
+      module.assignment_instructions ?? module.assignmentInstructions ?? module.assignment?.instructions ?? "",
+    assignment_instructions:
+      module.assignment_instructions ?? module.assignmentInstructions ?? module.assignment?.instructions ?? "",
     status: module.status ?? "published",
+    updatedAt: module.updated_at ?? module.updatedAt ?? "",
+    updated_at: module.updated_at ?? module.updatedAt ?? "",
     requiresAssignment,
     requires_assignment: requiresAssignment,
     imageUrl: module.image_url ?? module.imageUrl ?? "",
@@ -165,6 +241,8 @@ function toModuleRow(courseId, module, index, allowOptionalColumns = true) {
     module.pdf_link ??
     null;
   const videoExternalUrl =
+    module.embed_url ??
+    module.embedUrl ??
     module.video_external_url ??
     module.videoExternalUrl ??
     module.external_video_url ??
@@ -203,7 +281,14 @@ function toModuleRow(courseId, module, index, allowOptionalColumns = true) {
     title: module.title ?? "",
     description: module.description ?? "",
     lesson_content: module.lesson_content ?? module.lessonContent ?? "",
+    embed_url: videoExternalUrl,
+    assignment_instructions:
+      module.assignment_instructions ??
+      module.assignmentInstructions ??
+      module.assignment?.instructions ??
+      null,
     status: module.status ?? "published",
+    updated_at: new Date().toISOString(),
     sort_order: module.sortOrder ?? index,
     image_url: module.image_url ?? module.imageUrl ?? null,
     image_file_name: module.image_file_name ?? module.imageName ?? null,
@@ -231,44 +316,6 @@ function updateMockModules(courseId, modules) {
   const nextCourses = getMockCourses().map((course) => (course.id === courseId ? { ...course, modules } : course));
   setMockCourses(nextCourses);
   return modules;
-}
-
-async function insertModuleRows(rows, allowOptionalColumns = true) {
-  const { data, error } = await supabase.from("modules").insert(rows).select("*");
-
-  if (!error) return data ?? [];
-
-  const shouldRetryWithoutOptionalColumns =
-    allowOptionalColumns &&
-    OPTIONAL_MODULE_COLUMNS.some(
-      (column) =>
-        error.message?.includes(`'${column}'`) ||
-        error.message?.includes(`modules.${column}`) ||
-        error.details?.includes(column) ||
-        error.hint?.includes(column),
-    );
-
-  if (shouldRetryWithoutOptionalColumns) {
-    console.warn("Retrying module insert without optional module columns. Run the matching SQL later to enable them.");
-    const fallbackRows = rows.map(
-      ({
-        requires_assignment,
-        pdf_external_url,
-        video_external_url,
-        pdf_source,
-        video_source,
-        lesson_content,
-        status,
-        image_url,
-        image_file_name,
-        image_storage_path,
-        ...rest
-      }) => rest,
-    );
-    return insertModuleRows(fallbackRows, false);
-  }
-
-  throw error;
 }
 
 async function saveModuleRow(courseId, moduleId, row, allowOptionalColumns = true) {
@@ -303,7 +350,7 @@ async function saveModuleRow(courseId, moduleId, row, allowOptionalColumns = tru
     return saveModuleRow(courseId, moduleId, fallbackRow, false);
   }
 
-  throw error;
+  throw createModuleSchemaError(error);
 }
 
 export async function getModulesByCourse(courseId) {
@@ -314,18 +361,7 @@ export async function getModulesByCourse(courseId) {
 
   try {
     const selectedCourseId = Number.isNaN(Number(courseId)) ? courseId : Number(courseId);
-    const { data, error } = await supabase
-      .from("modules")
-      .select(MODULE_SELECT_COLUMNS)
-      .eq("course_id", selectedCourseId)
-      .order("class_id", { ascending: true, nullsFirst: true })
-      .order("sort_order", { ascending: true })
-      .order("id", { ascending: true });
-
-    if (error) {
-      console.error("Failed module fetch from Supabase:", error);
-      throw error;
-    }
+    const data = await fetchModuleRows(selectedCourseId);
 
     if (!Array.isArray(data) || !data.length) {
       return [];

@@ -145,6 +145,8 @@ function getUploadedVideoSource(module) {
 
 function getExternalVideoSource(module) {
   return firstFilledValue(
+    module?.embed_url,
+    module?.embedUrl,
     module?.video_external_url,
     module?.videoExternalUrl,
     module?.external_video_url,

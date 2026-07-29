@@ -1162,6 +1162,12 @@ export function App() {
                 normalizedDetails.includes("modules") &&
                 (normalizedDetails.includes("does not exist") || normalizedDetails.includes("column"))
               ? t("admin.moduleClassLinkingRequired")
+              : normalizedDetails.includes("modules") &&
+                  (normalizedDetails.includes("42703") ||
+                    normalizedDetails.includes("does not exist") ||
+                    normalizedDetails.includes("schema setup required") ||
+                    normalizedDetails.includes("schema cache"))
+                ? t("admin.moduleSchemaSetupRequired")
               : buildUserFacingError(error, t("admin.savingCourseFailed"));
       return {
         ok: false,

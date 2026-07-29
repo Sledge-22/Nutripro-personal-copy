@@ -40,6 +40,28 @@ function normalizeModules(modules = []) {
     description: module.description ?? "",
     lessonContent: module.lesson_content ?? module.lessonContent ?? "",
     lesson_content: module.lesson_content ?? module.lessonContent ?? "",
+    embedUrl:
+      module.embed_url ??
+      module.embedUrl ??
+      module.video_external_url ??
+      module.videoExternalUrl ??
+      module.video_embed_url ??
+      module.videoEmbedUrl ??
+      "",
+    embed_url:
+      module.embed_url ??
+      module.embedUrl ??
+      module.video_external_url ??
+      module.videoExternalUrl ??
+      module.video_embed_url ??
+      module.videoEmbedUrl ??
+      "",
+    assignmentInstructions:
+      module.assignment_instructions ?? module.assignmentInstructions ?? module.assignment?.instructions ?? "",
+    assignment_instructions:
+      module.assignment_instructions ?? module.assignmentInstructions ?? module.assignment?.instructions ?? "",
+    updatedAt: module.updated_at ?? module.updatedAt ?? "",
+    updated_at: module.updated_at ?? module.updatedAt ?? "",
     status: module.status ?? "published",
     requiresAssignment:
       module.requiresAssignment ??
