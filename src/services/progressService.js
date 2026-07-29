@@ -41,8 +41,9 @@ export async function getStudentProgress(studentId = 1) {
     const { data, error } = await supabase.from("student_progress").select("*").eq("student_id", studentId);
     if (error) throw error;
     return mapRowsToProgress(data);
-  } catch {
-    return getMockProgress();
+  } catch (error) {
+    console.error("[StudentCourses] Failed to load progress from public.student_progress:", error);
+    throw error;
   }
 }
 

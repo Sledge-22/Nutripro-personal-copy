@@ -5,14 +5,6 @@ import { cloneMockValue, createMockId, getMockCourses, setMockCourses } from "./
 import { getModulesByCourse, replaceModulesForCourse } from "./moduleService.js";
 
 const OPTIONAL_COURSE_COLUMNS = ["image_url", "image_storage_path"];
-const COURSE_SELECT_COLUMNS = [
-  "id",
-  "title",
-  "description",
-  "status",
-  "image_url",
-  "image_storage_path",
-].join(",");
 
 function normalizeCourseStatus(status) {
   if (status === "draft" || status === "archived" || status === "published") return status;
@@ -583,15 +575,19 @@ export async function getStudentCourses(studentId) {
   const { data: enrollmentRows, error } = await supabase
     .from("enrollments")
     .select("id,course_id,student_id,status")
-    .eq("student_id", studentId)
-    .eq("status", "active");
+    .eq("student_id", studentId);
   if (error) {
-    console.error("Failed to load student enrollments from Supabase:", error);
+    console.error("[StudentCourses] Failed to load enrollments from public.enrollments:", error);
     throw error;
   }
 
+  const activeEnrollmentRows = (enrollmentRows ?? []).filter((row) => {
+    const status = `${row.status ?? ""}`.trim().toLowerCase();
+    return !status || status === "active";
+  });
+
   const courseIds = Array.from(
-    new Set((enrollmentRows ?? []).map((row) => row.course_id ?? row.courseId).filter(Boolean)),
+    new Set(activeEnrollmentRows.map((row) => row.course_id ?? row.courseId).filter(Boolean)),
   );
   if (!courseIds.length) {
     return [];
@@ -605,7 +601,7 @@ export async function getStudentCourses(studentId) {
     .order("id", { ascending: true });
 
   if (courseError) {
-    console.error("Failed to load student courses from Supabase:", courseError);
+    console.error("[StudentCourses] Failed to load assigned rows from public.courses:", courseError);
     throw courseError;
   }
 
@@ -615,13 +611,42 @@ export async function getStudentCourses(studentId) {
     console.error("Student course access failed because these enrolled courses are not published:", unavailableCourseIds);
   }
 
-  const result = [];
-  for (const course of courseRows ?? []) {
-    const modules = await getModulesByCourse(course.id);
-    const classes = await getClassesByCourse(course.id);
-    result.push(normalizeCourse(course, [studentId], modules, classes));
+  return (courseRows ?? []).map((course) => normalizeCourse(course, [studentId], [], []));
+}
+
+export async function hydrateStudentCourseDetails(courses = [], studentId) {
+  const hydratedCourses = [];
+
+  for (const course of Array.isArray(courses) ? courses : []) {
+    const [classesResult, modulesResult] = await Promise.allSettled([
+      getClassesByCourse(course.id),
+      getModulesByCourse(course.id),
+    ]);
+
+    if (classesResult.status === "rejected") {
+      console.error(
+        `[StudentCourses] Failed to load course_classes for course ${course.id}:`,
+        classesResult.reason,
+      );
+    }
+    if (modulesResult.status === "rejected") {
+      console.error(
+        `[StudentCourses] Failed to load modules for course ${course.id}:`,
+        modulesResult.reason,
+      );
+    }
+
+    const classes = classesResult.status === "fulfilled" ? classesResult.value : [];
+    const modules = modulesResult.status === "fulfilled" ? modulesResult.value : [];
+    hydratedCourses.push({
+      ...normalizeCourse(course, [studentId], modules, classes),
+      detailsLoadFailed:
+        classesResult.status === "rejected" ||
+        modulesResult.status === "rejected",
+    });
   }
-  return result;
+
+  return hydratedCourses;
 }
 
 export async function getStudentCourseAccess(studentId, courseId) {
@@ -700,7 +725,7 @@ export async function getStudentCourseAccess(studentId, courseId) {
 
   const { data: courseRow, error: courseError } = await supabase
     .from("courses")
-    .select(COURSE_SELECT_COLUMNS)
+    .select("*")
     .eq("id", normalizedCourseId)
     .limit(1)
     .maybeSingle();
@@ -718,9 +743,33 @@ export async function getStudentCourseAccess(studentId, courseId) {
     return { reason: "missing-enrollment", course: null, enrollment: enrollmentRows?.[0] ?? null, courseStatus: null };
   }
 
-  const modules = await getModulesByCourse(courseRow.id);
-  const classes = await getClassesByCourse(courseRow.id);
-  const normalizedCourse = normalizeCourse(courseRow, [studentId], modules, classes);
+  const [classesResult, modulesResult] = await Promise.allSettled([
+    getClassesByCourse(courseRow.id),
+    getModulesByCourse(courseRow.id),
+  ]);
+  if (classesResult.status === "rejected") {
+    console.error(
+      `[StudentCourses] Failed to load course_classes for selected course ${courseRow.id}:`,
+      classesResult.reason,
+    );
+  }
+  if (modulesResult.status === "rejected") {
+    console.error(
+      `[StudentCourses] Failed to load modules for selected course ${courseRow.id}:`,
+      modulesResult.reason,
+    );
+  }
+  const normalizedCourse = {
+    ...normalizeCourse(
+      courseRow,
+      [studentId],
+      modulesResult.status === "fulfilled" ? modulesResult.value : [],
+      classesResult.status === "fulfilled" ? classesResult.value : [],
+    ),
+    detailsLoadFailed:
+      classesResult.status === "rejected" ||
+      modulesResult.status === "rejected",
+  };
 
   if (normalizeCourseStatus(courseRow.status) !== "published") {
     console.error("Student course access failed because the selected course is not published:", courseRow.status);
