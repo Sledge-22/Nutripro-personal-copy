@@ -3321,7 +3321,7 @@ function ModuleEditor({
   toggleCollapsed,
   updateModule,
   updateAssignment,
-  deleteModule,
+  archiveModule = () => {},
   restoreModule = () => {},
   requestDeleteModule = () => {},
   deleting = false,
@@ -3418,12 +3418,12 @@ function ModuleEditor({
           ) : (
             <>
               <button
-                type="button"
-                className="secondary-btn mini-action"
-                onClick={() => deleteModule(module.id)}
-                disabled={archiving || deleting}
-              >
-                {t("common.archive")}
+              type="button"
+              className="secondary-btn mini-action"
+              onClick={() => archiveModule(module.id)}
+              disabled={archiving || deleting}
+            >
+              {t("admin.archiveLesson")}
               </button>
               <button
                 type="button"
@@ -4265,7 +4265,7 @@ function CourseManagerOverviewPage({ courses = [], studentOptions = [], onDelete
                         if (confirmed) void onDeleteCourse(course.id);
                       }}
                     >
-                      {t("common.archive")}
+                      {t("admin.archiveCourse")}
                     </button>
                   </div>
                 </div>
@@ -4666,7 +4666,7 @@ function CourseBuilderPage({
     setCollapsedClassIds((current) => current.filter((id) => id !== classId));
   };
 
-  const archiveModule = async (moduleId) => {
+  const archiveLesson = async (moduleId) => {
     const confirmed = window.confirm(
       language === "es"
         ? "¿Archivar este módulo? Sus archivos, tarea, entregas y progreso se conservarán."
@@ -5388,7 +5388,7 @@ function CourseBuilderPage({
                           toggleCollapsed={toggleCollapsed}
                           updateModule={updateModule}
                           updateAssignment={updateAssignment}
-                          deleteModule={archiveModule}
+                          archiveModule={archiveLesson}
                           restoreModule={restoreModule}
                           requestDeleteModule={requestDeleteModule}
                           deleting={String(deletingModuleId) === String(module.id)}
@@ -5426,7 +5426,7 @@ function CourseBuilderPage({
           <button
             type="button"
             className="secondary-btn"
-            onClick={() => void archiveModule(blockedDeleteModule.id)}
+            onClick={() => void archiveLesson(blockedDeleteModule.id)}
             disabled={String(archivingModuleId) === String(blockedDeleteModule.id)}
           >
             {language === "es" ? "Archivar lección" : "Archive lesson"}
@@ -5455,7 +5455,7 @@ function CourseBuilderPage({
             if (confirmed) void onDeleteCourse(course.id);
           }}
         >
-          {t("common.archive")}
+          {t("admin.archiveCourse")}
         </button>
       </div>
 
