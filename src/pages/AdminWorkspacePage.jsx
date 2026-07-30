@@ -3431,7 +3431,7 @@ function ModuleEditor({
                 onClick={() => requestDeleteModule(module)}
                 disabled={deleting}
               >
-                {t("common.delete")}
+                {t("admin.deleteDuplicatePermanently")}
               </button>
             </>
           )}
@@ -4901,11 +4901,11 @@ function CourseBuilderPage({
         modules: mergeRefetchedModules(current?.modules, finalModules),
       }));
       setPendingDeleteModule(null);
-      setSaveMessage(language === "es" ? "Lección eliminada." : "Lesson deleted.");
+      setSaveMessage(language === "es" ? "Lección duplicada eliminada." : "Duplicate lesson deleted.");
 
       await recordAdminAuditLog({
         adminUser: currentUser,
-        action: "module_deleted",
+        action: "module_duplicate_deleted",
         targetType: "module",
         targetId: target.id,
         details: {
@@ -4923,18 +4923,28 @@ function CourseBuilderPage({
             : "The lesson was deleted, but the list could not be refreshed. Reload the page to retry.",
         );
       } else if (error?.code === "MODULE_HAS_RELATED_ACTIVITY") {
+        const counts = error?.safety?.counts ?? {};
         setPendingDeleteModule(null);
-        setBlockedDeleteModule(target);
+        setBlockedDeleteModule({ ...target, safety: error?.safety ?? null });
         setSaveError(
           language === "es"
-            ? "Esta lección tiene actividad de estudiantes relacionada. Archivala en lugar de eliminarla."
-            : "This lesson has related student activity. Archive it instead of deleting.",
+            ? "Esta lección específica tiene actividad de estudiantes asociada. Archivala en lugar de eliminarla."
+            : "This specific lesson has student activity attached to it. Archive it instead of deleting.",
+        );
+        setSaveDetails(
+          [
+            `${language === "es" ? "Registros de progreso" : "Progress records"}: ${counts.progress ?? 0}`,
+            `${language === "es" ? "Entregas de tareas" : "Assignment submissions"}: ${counts.assignmentSubmissions ?? 0}`,
+            `${language === "es" ? "Registros de tarea del módulo" : "Module assignment records"}: ${counts.moduleAssignments ?? 0}`,
+          ].join("\n"),
         );
       } else {
         setPendingDeleteModule(null);
-        setSaveError(language === "es" ? "No se pudo eliminar la lección." : "Lesson could not be deleted.");
+        setSaveError(language === "es" ? "No se pudo eliminar la lección duplicada." : "Duplicate lesson could not be deleted.");
       }
-      setSaveDetails(error?.message || "");
+      if (error?.code !== "MODULE_HAS_RELATED_ACTIVITY") {
+        setSaveDetails(error?.message || "");
+      }
     } finally {
       setDeletingModuleId("");
     }
@@ -5485,10 +5495,20 @@ function CourseBuilderPage({
             <span className="eyebrow">{language === "es" ? "Eliminar lección" : "Delete lesson"}</span>
             <h2 id="delete-lesson-title">
               {language === "es"
-                ? "¿Seguro que querés eliminar esta lección? Esta acción no se puede deshacer."
-                : "Are you sure you want to delete this lesson? This action cannot be undone."}
+                ? "¿Eliminar esta lección duplicada permanentemente?"
+                : "Delete this duplicated lesson permanently?"}
             </h2>
-            {pendingDeleteModule.title ? <p><strong>{pendingDeleteModule.title}</strong></p> : null}
+            <p>
+              {language === "es"
+                ? "Esto solo eliminará la lección seleccionada:"
+                : "This will only delete the selected lesson:"}
+            </p>
+            {pendingDeleteModule.title ? <p><strong>“{pendingDeleteModule.title}”</strong></p> : null}
+            <p>
+              {language === "es"
+                ? "Esta acción no se puede deshacer."
+                : "This cannot be undone."}
+            </p>
             <div className="form-actions compact confirm-modal-actions">
               <button
                 type="button"
@@ -5507,8 +5527,8 @@ function CourseBuilderPage({
                 {deletingModuleId
                   ? t("common.saving")
                   : language === "es"
-                    ? "Eliminar lección"
-                    : "Delete lesson"}
+                    ? "Eliminar duplicado permanentemente"
+                    : "Delete duplicate permanently"}
               </button>
             </div>
           </div>

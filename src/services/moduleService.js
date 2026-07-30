@@ -551,13 +551,19 @@ export async function getModuleDeletionSafety(moduleId) {
       canDelete: !module?.assignment && !hasProgress,
       hasAssignment: Boolean(module?.assignment),
       hasProgress,
+      counts: {
+        progress: hasProgress ? 1 : 0,
+        assignmentSubmissions: 0,
+        moduleAssignments: module?.assignment ? 1 : 0,
+      },
     };
   }
 
-  const [moduleResult, assignmentResult, progressResult] = await Promise.all([
-    supabase.from("modules").select("id, course_id").eq("id", moduleId).maybeSingle(),
-    supabase.from("module_assignments").select("id").eq("module_id", moduleId),
-    supabase.from("student_progress").select("module_id").eq("module_id", moduleId).limit(1),
+  const [moduleResult, assignmentResult, progressResult, directSubmissionResult] = await Promise.all([
+    supabase.from("modules").select("id").eq("id", moduleId).maybeSingle(),
+    supabase.from("module_assignments").select("id", { count: "exact" }).eq("module_id", moduleId),
+    supabase.from("student_progress").select("module_id", { count: "exact" }).eq("module_id", moduleId),
+    supabase.from("assignment_submissions").select("id", { count: "exact" }).eq("module_id", moduleId),
   ]);
 
   if (moduleResult.error) {
@@ -572,44 +578,47 @@ export async function getModuleDeletionSafety(moduleId) {
     console.error("Checking lesson progress before delete failed:", progressResult.error);
     throw progressResult.error;
   }
+  if (directSubmissionResult.error && directSubmissionResult.error.code !== "42703") {
+    console.error("Checking lesson submissions by module id before delete failed:", directSubmissionResult.error);
+    throw directSubmissionResult.error;
+  }
 
   const assignmentIds = (assignmentResult.data ?? []).map((assignment) => assignment.id).filter(Boolean);
-  const [submissionResult, certificateResult] = await Promise.all([
-    assignmentIds.length
-      ? supabase
-          .from("assignment_submissions")
-          .select("id")
-          .in("assignment_id", assignmentIds)
-          .limit(1)
-      : Promise.resolve({ data: [], error: null }),
-    moduleResult.data?.course_id
-      ? supabase
-          .from("certificates")
-          .select("id")
-          .eq("course_id", moduleResult.data.course_id)
-          .limit(1)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
+  const submissionResult = assignmentIds.length
+    ? await supabase
+        .from("assignment_submissions")
+        .select("id", { count: "exact" })
+        .in("assignment_id", assignmentIds)
+    : { data: [], error: null, count: 0 };
+
+  if (directSubmissionResult.error?.code === "42703") {
+    console.warn("assignment_submissions.module_id is not available; checked submissions through module assignments instead.");
+  }
 
   if (submissionResult.error) {
     console.error("Checking lesson submissions before delete failed:", submissionResult.error);
     throw submissionResult.error;
   }
-  if (certificateResult.error) {
-    console.error("Checking course certificates before lesson delete failed:", certificateResult.error);
-    throw certificateResult.error;
-  }
 
-  const hasAssignment = Boolean(assignmentResult.data?.length);
-  const hasProgress = Boolean(progressResult.data?.length);
-  const hasSubmissions = Boolean(submissionResult.data?.length);
-  const hasCertificates = Boolean(certificateResult.data?.length);
+  const directSubmissionCount = directSubmissionResult.error?.code === "42703"
+    ? 0
+    : Number(directSubmissionResult.count ?? directSubmissionResult.data?.length ?? 0);
+  const assignmentSubmissionCount = Number(submissionResult.count ?? submissionResult.data?.length ?? 0);
+  const counts = {
+    progress: Number(progressResult.count ?? progressResult.data?.length ?? 0),
+    assignmentSubmissions: Math.max(directSubmissionCount, assignmentSubmissionCount),
+    moduleAssignments: Number(assignmentResult.count ?? assignmentResult.data?.length ?? 0),
+  };
+  const hasAssignment = counts.moduleAssignments > 0;
+  const hasProgress = counts.progress > 0;
+  const hasSubmissions = counts.assignmentSubmissions > 0;
+
   return {
-    canDelete: !hasAssignment && !hasProgress && !hasSubmissions && !hasCertificates,
+    canDelete: !hasAssignment && !hasProgress && !hasSubmissions,
     hasAssignment,
     hasProgress,
     hasSubmissions,
-    hasCertificates,
+    counts,
   };
 }
 
@@ -700,8 +709,9 @@ export async function deleteModuleById(moduleId, { confirmed = false } = {}) {
   });
   const safety = await getModuleDeletionSafety(confirmedModuleId);
   if (!safety.canDelete) {
-    const activityError = new Error("This lesson has related student activity. Archive it instead of deleting.");
+    const activityError = new Error("This specific lesson has student activity attached to it. Archive it instead of deleting.");
     activityError.code = "MODULE_HAS_RELATED_ACTIVITY";
+    activityError.safety = safety;
     throw activityError;
   }
 
