@@ -17,6 +17,7 @@ export const ROUTES = {
     courseBuilder: (courseId) => `/admin/post-courses/${courseId}`,
     courseEdit: (courseId) => `/admin/post-courses/${courseId}/edit`,
     community: "/admin/community",
+    teamApplications: "/admin/team-applications",
     assignmentReviews: "/admin/assignment-reviews",
     certificates: "/admin/certificates",
     settings: "/admin/settings",

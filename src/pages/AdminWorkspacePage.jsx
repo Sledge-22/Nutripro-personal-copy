@@ -6,6 +6,7 @@ import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
 import { getSubmissionsForAdmin, reviewSubmission } from "../services/assignmentService.js";
 import { recordAdminAuditLog, getAdminAuditLogs } from "../services/auditLogService.js";
 import { deleteCourseDraft, getCourseDrafts, markCourseDraftPublished, saveCourseDraft } from "../services/courseDraftService.js";
+import { getTeamApplications, updateTeamApplication } from "../services/teamApplicationService.js";
 import {
   createGdprDataRequest,
   exportUserDataBundle,
@@ -922,6 +923,56 @@ function formatDisplayDate(value, language = "es") {
   }
 }
 
+function createTeamApplicationCopy(language) {
+  if (language === "es") {
+    return {
+      description: "Revisá postulaciones de profesionales que quieren sumarse al equipo docente de Nutripro.",
+      empty: "Todavía no hay solicitudes del equipo.",
+      refresh: "Actualizar",
+      applicant: "Postulante",
+      topic: "Tema",
+      submitted: "Enviada",
+      details: "Detalles de la solicitud",
+      select: "Seleccioná una solicitud para revisar.",
+      experience: "Experiencia / certificaciones",
+      portfolio: "Links / portfolio",
+      message: "Mensaje",
+      adminNotes: "Notas administrativas",
+      markInReview: "Marcar en revisión",
+      approve: "Aprobar",
+      reject: "Rechazar",
+      saveNotes: "Guardar notas",
+      updated: "Solicitud actualizada.",
+      loadFailed: "No se pudieron cargar las solicitudes del equipo.",
+      updateFailed: "No se pudo actualizar la solicitud.",
+      noDetails: "Sin información adicional.",
+    };
+  }
+
+  return {
+    description: "Review applications from professionals who want to join the Nutripro teaching team.",
+    empty: "No team applications yet.",
+    refresh: "Refresh",
+    applicant: "Applicant",
+    topic: "Topic",
+    submitted: "Submitted",
+    details: "Application details",
+    select: "Select an application to review.",
+    experience: "Experience / certifications",
+    portfolio: "Links / portfolio",
+    message: "Message",
+    adminNotes: "Admin notes",
+    markInReview: "Mark in review",
+    approve: "Approve",
+    reject: "Reject",
+    saveNotes: "Save notes",
+    updated: "Application updated.",
+    loadFailed: "Team applications could not be loaded.",
+    updateFailed: "Application could not be updated.",
+    noDetails: "No additional information.",
+  };
+}
+
 function createReviewDraft(submission = null) {
   return {
     status: submission?.status || "submitted",
@@ -1038,6 +1089,10 @@ export function AdminWorkspacePage({
         onUpdateComment={onUpdateComment}
       />
     );
+  }
+
+  if (pathname === "/admin/team-applications") {
+    return <TeamApplicationsPage currentUser={currentUser} />;
   }
 
   if (pathname === "/admin/assignment-reviews") {
@@ -6819,6 +6874,235 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
         </div>
       ) : null}
 
+    </div>
+  );
+}
+
+function TeamApplicationsPage({ currentUser }) {
+  const { t, language } = useLanguage();
+  const copy = createTeamApplicationCopy(language);
+  const [applications, setApplications] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [message, setMessage] = useState("");
+  const [updateError, setUpdateError] = useState("");
+  const [selectedApplicationId, setSelectedApplicationId] = useState(null);
+  const [notesById, setNotesById] = useState({});
+  const [updatingId, setUpdatingId] = useState(null);
+
+  const loadApplications = async (keepSelectedId = selectedApplicationId) => {
+    setLoading(true);
+    setLoadError("");
+
+    try {
+      const rows = await getTeamApplications();
+      setApplications(rows);
+      setNotesById((current) => ({
+        ...Object.fromEntries(rows.map((application) => [application.id, current[application.id] ?? application.adminNotes ?? ""])),
+      }));
+      setSelectedApplicationId(rows.some((application) => application.id === keepSelectedId) ? keepSelectedId : rows[0]?.id ?? null);
+    } catch (error) {
+      console.error("Loading team applications failed:", error);
+      setLoadError(buildAdminErrorState(error, copy.loadFailed));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadApplications();
+  }, []);
+
+  const selectedApplication = applications.find((application) => application.id === selectedApplicationId) ?? null;
+  const selectedNotes = selectedApplication ? notesById[selectedApplication.id] ?? selectedApplication.adminNotes ?? "" : "";
+
+  const saveApplicationUpdate = async (application, status = application.status) => {
+    if (!application?.id) return;
+
+    setMessage("");
+    setUpdateError("");
+    setUpdatingId(application.id);
+
+    try {
+      const updatedApplication = await updateTeamApplication(application.id, {
+        status,
+        adminNotes: notesById[application.id] ?? application.adminNotes ?? "",
+        reviewedBy: currentUser?.id ?? currentUser?.auth_user_id ?? currentUser?.email ?? "",
+      });
+
+      if (updatedApplication) {
+        setApplications((current) =>
+          current.map((entry) => (entry.id === application.id ? updatedApplication : entry)),
+        );
+      }
+
+      await recordAdminAuditLog({
+        adminUser: currentUser,
+        action: "team_application_updated",
+        targetType: "team_application",
+        targetId: application.id,
+        targetEmail: application.email,
+        details: {
+          status,
+          applicant_name: application.fullName,
+        },
+      });
+
+      setMessage(copy.updated);
+    } catch (error) {
+      console.error("Updating team application failed:", error);
+      setUpdateError(buildAdminErrorState(error, copy.updateFailed));
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  return (
+    <div className="split-layout team-applications-layout">
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{t("common.teamApplications")}</span>
+            <h2>{t("common.teamApplications")}</h2>
+            <p>{copy.description}</p>
+          </div>
+          <div className="section-heading-actions">
+            <span className="count-badge">{applications.length}</span>
+            <button type="button" className="secondary-btn" onClick={() => void loadApplications()} disabled={loading}>
+              {copy.refresh}
+            </button>
+          </div>
+        </div>
+
+        {loading ? <small className="field-note">{t("common.loading")}</small> : null}
+        {loadError ? <AdminErrorMessage error={loadError} detailsLabel={t("common.details")} /> : null}
+        {message ? <small className="field-note success-text">{message}</small> : null}
+        {updateError ? <AdminErrorMessage error={updateError} detailsLabel={t("common.details")} /> : null}
+
+        {!loading && !applications.length ? (
+          <div className="empty-state-card">
+            <p>{copy.empty}</p>
+          </div>
+        ) : (
+          <div className="team-application-list">
+            {applications.map((application) => (
+              <button
+                type="button"
+                key={application.id}
+                className={`team-application-row ${application.id === selectedApplicationId ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedApplicationId(application.id);
+                  setMessage("");
+                  setUpdateError("");
+                }}
+              >
+                <span>
+                  <strong>{application.fullName || copy.applicant}</strong>
+                  <small>{application.email || "â€”"}</small>
+                </span>
+                <span>
+                  <small>{copy.topic}</small>
+                  <strong>{application.teachingTopic || "â€”"}</strong>
+                </span>
+                <span>
+                  <small>{copy.submitted}</small>
+                  <strong>{formatDisplayDate(application.createdAt || application.created_at, language)}</strong>
+                </span>
+                <Status status={application.status || "pending"} />
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="section-card team-application-detail">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{copy.details}</span>
+            <h2>{selectedApplication ? selectedApplication.fullName || copy.applicant : copy.details}</h2>
+            <p>{selectedApplication ? selectedApplication.email : copy.select}</p>
+          </div>
+          {selectedApplication ? <Status status={selectedApplication.status || "pending"} /> : null}
+        </div>
+
+        {selectedApplication ? (
+          <div className="team-application-detail-body">
+            <div className="review-meta-grid">
+              <div>
+                <small>{copy.topic}</small>
+                <strong>{selectedApplication.teachingTopic || "â€”"}</strong>
+              </div>
+              <div>
+                <small>{copy.submitted}</small>
+                <strong>{formatDisplayDate(selectedApplication.createdAt || selectedApplication.created_at, language)}</strong>
+              </div>
+            </div>
+
+            <div className="response-block">
+              <strong>{copy.experience}</strong>
+              <p>{selectedApplication.experience || copy.noDetails}</p>
+            </div>
+
+            {selectedApplication.portfolioUrl ? (
+              <div className="response-block">
+                <strong>{copy.portfolio}</strong>
+                <p><a href={selectedApplication.portfolioUrl} target="_blank" rel="noreferrer">{selectedApplication.portfolioUrl}</a></p>
+              </div>
+            ) : null}
+
+            <div className="response-block">
+              <strong>{copy.message}</strong>
+              <p>{selectedApplication.message || copy.noDetails}</p>
+            </div>
+
+            <label>
+              {copy.adminNotes}
+              <textarea
+                rows="5"
+                value={selectedNotes}
+                onChange={(event) => setNotesById((current) => ({ ...current, [selectedApplication.id]: event.target.value }))}
+              />
+            </label>
+
+            <div className="form-actions team-application-review-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => void saveApplicationUpdate(selectedApplication, "in_review")}
+                disabled={updatingId === selectedApplication.id}
+              >
+                {copy.markInReview}
+              </button>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => void saveApplicationUpdate(selectedApplication, "approved")}
+                disabled={updatingId === selectedApplication.id}
+              >
+                {copy.approve}
+              </button>
+              <button
+                type="button"
+                className="danger-btn"
+                onClick={() => void saveApplicationUpdate(selectedApplication, "rejected")}
+                disabled={updatingId === selectedApplication.id}
+              >
+                {copy.reject}
+              </button>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => void saveApplicationUpdate(selectedApplication)}
+                disabled={updatingId === selectedApplication.id}
+              >
+                {copy.saveNotes}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="empty-copy">{copy.select}</p>
+        )}
+      </section>
     </div>
   );
 }

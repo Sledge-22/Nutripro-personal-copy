@@ -1,7 +1,8 @@
 ﻿import React, { useState } from "react";
-import { Brand } from "../components/ui.jsx";
+import { Brand, Icon } from "../components/ui.jsx";
 import { LanguageDropdown } from "../components/LanguageDropdown.jsx";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+import { submitTeamApplication } from "../services/teamApplicationService.js";
 
 const HERO_IMAGE_SRC = "/assets/homepage-hero.png";
 
@@ -16,6 +17,18 @@ export function LoginPage({
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [teamFormOpen, setTeamFormOpen] = useState(false);
+  const [teamForm, setTeamForm] = useState({
+    fullName: "",
+    email: "",
+    teachingTopic: "",
+    experience: "",
+    portfolioUrl: "",
+    message: "",
+  });
+  const [teamSubmitting, setTeamSubmitting] = useState(false);
+  const [teamMessage, setTeamMessage] = useState("");
+  const [teamError, setTeamError] = useState("");
   const eyebrow = language === "es" ? "BIENVENIDO A NUTRIPRO" : "WELCOME TO NUTRIPRO";
   const title = language === "es" ? "Hacete experto en tu deporte." : "Become an expert in your sport.";
   const description = language === "es"
@@ -41,6 +54,47 @@ export function LoginPage({
       identifier: identifier.trim(),
       password,
     });
+  };
+
+  const updateTeamField = (field, value) => {
+    setTeamForm((current) => ({ ...current, [field]: value }));
+    setTeamError("");
+    setTeamMessage("");
+  };
+
+  const handleTeamSubmit = async (event) => {
+    event.preventDefault();
+    const emailValue = teamForm.email.trim();
+    if (!teamForm.fullName.trim() || !emailValue || !teamForm.teachingTopic.trim()) {
+      setTeamError(t("login.teamApplicationRequired"));
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
+      setTeamError(t("login.teamApplicationInvalidEmail"));
+      return;
+    }
+
+    setTeamSubmitting(true);
+    setTeamError("");
+    setTeamMessage("");
+
+    try {
+      await submitTeamApplication(teamForm);
+      setTeamMessage(t("login.teamApplicationSubmitted"));
+      setTeamForm({
+        fullName: "",
+        email: "",
+        teachingTopic: "",
+        experience: "",
+        portfolioUrl: "",
+        message: "",
+      });
+    } catch (submitError) {
+      console.error("Team application submission failed:", submitError);
+      setTeamError(t("login.teamApplicationFailed"));
+    } finally {
+      setTeamSubmitting(false);
+    }
   };
 
   return <main className="login-page">
@@ -104,6 +158,66 @@ export function LoginPage({
           </button>
         </div>
       </form>
+
+      <section className={`team-application-card ${teamFormOpen ? "is-open" : ""}`}>
+        <button
+          type="button"
+          className="team-application-summary"
+          onClick={() => setTeamFormOpen((current) => !current)}
+          aria-expanded={teamFormOpen}
+        >
+          <span className="team-application-icon"><Icon name="users" /></span>
+          <span className="team-application-copy">
+            <strong>{t("login.joinTeachingTeam")}</strong>
+            <small>{t("login.joinTeachingTeamText")}</small>
+          </span>
+          <span className="team-application-cta">
+            {t("login.joinNutriproTeam")}
+            <Icon name="chevron" size={16} />
+          </span>
+        </button>
+
+        {teamFormOpen ? (
+          <form className="team-application-form" onSubmit={(event) => void handleTeamSubmit(event)}>
+            <div className="team-application-grid">
+              <label>
+                {t("login.teamFullName")}
+                <input value={teamForm.fullName} onChange={(event) => updateTeamField("fullName", event.target.value)} required />
+              </label>
+              <label>
+                {t("login.teamEmail")}
+                <input type="email" value={teamForm.email} onChange={(event) => updateTeamField("email", event.target.value)} required />
+              </label>
+              <label>
+                {t("login.teamTeachingTopic")}
+                <input value={teamForm.teachingTopic} onChange={(event) => updateTeamField("teachingTopic", event.target.value)} required />
+              </label>
+              <label>
+                {t("login.teamPortfolio")}
+                <input value={teamForm.portfolioUrl} onChange={(event) => updateTeamField("portfolioUrl", event.target.value)} />
+              </label>
+            </div>
+            <label>
+              {t("login.teamExperience")}
+              <textarea rows="3" value={teamForm.experience} onChange={(event) => updateTeamField("experience", event.target.value)} />
+            </label>
+            <label>
+              {t("login.teamMessage")}
+              <textarea rows="3" value={teamForm.message} onChange={(event) => updateTeamField("message", event.target.value)} />
+            </label>
+            {teamError ? <small className="field-note danger-text">{teamError}</small> : null}
+            {teamMessage ? <small className="field-note success-text">{teamMessage}</small> : null}
+            <div className="form-actions team-application-actions">
+              <button type="button" className="secondary-btn" onClick={() => setTeamFormOpen(false)} disabled={teamSubmitting}>
+                {t("common.close")}
+              </button>
+              <button type="submit" className="primary-btn" disabled={teamSubmitting}>
+                {teamSubmitting ? t("common.saving") : t("login.submitApplication")}
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </section>
 
       <footer className="login-footer">{t("login.footer")}</footer>
     </section>
