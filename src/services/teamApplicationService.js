@@ -56,7 +56,6 @@ export async function submitTeamApplication(applicationData) {
     portfolio_url: String(applicationData.portfolioUrl ?? applicationData.portfolio_url ?? "").trim(),
     message: String(applicationData.message ?? "").trim(),
     status: "pending",
-    updated_at: now,
   };
 
   if (!isSupabaseConfigured || !supabase) {
@@ -71,13 +70,19 @@ export async function submitTeamApplication(applicationData) {
 
   const { data, error } = await supabase
     .from("team_applications")
-    .insert([payload])
-    .select("*")
+    .insert(payload)
+    .select()
     .single();
 
   if (error) {
     console.error("Submitting team application failed:", error);
     throw error;
+  }
+
+  if (!data?.id) {
+    const insertError = new Error("Team application insert did not return an inserted row.");
+    console.error("Submitting team application failed:", insertError);
+    throw insertError;
   }
 
   return normalizeApplication(data);

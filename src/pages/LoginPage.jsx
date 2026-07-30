@@ -3,6 +3,7 @@ import { Brand, Icon } from "../components/ui.jsx";
 import { LanguageDropdown } from "../components/LanguageDropdown.jsx";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 import { submitTeamApplication } from "../services/teamApplicationService.js";
+import { sanitizeErrorDetails } from "../utils/errorDisplay.js";
 
 const HERO_IMAGE_SRC = "/assets/homepage-hero.png";
 
@@ -29,6 +30,7 @@ export function LoginPage({
   const [teamSubmitting, setTeamSubmitting] = useState(false);
   const [teamMessage, setTeamMessage] = useState("");
   const [teamError, setTeamError] = useState("");
+  const [teamErrorDetails, setTeamErrorDetails] = useState("");
   const eyebrow = language === "es" ? "BIENVENIDO A NUTRIPRO" : "WELCOME TO NUTRIPRO";
   const title = language === "es" ? "Hacete experto en tu deporte." : "Become an expert in your sport.";
   const description = language === "es"
@@ -59,6 +61,7 @@ export function LoginPage({
   const updateTeamField = (field, value) => {
     setTeamForm((current) => ({ ...current, [field]: value }));
     setTeamError("");
+    setTeamErrorDetails("");
     setTeamMessage("");
   };
 
@@ -67,19 +70,25 @@ export function LoginPage({
     const emailValue = teamForm.email.trim();
     if (!teamForm.fullName.trim() || !emailValue || !teamForm.teachingTopic.trim()) {
       setTeamError(t("login.teamApplicationRequired"));
+      setTeamErrorDetails("");
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
       setTeamError(t("login.teamApplicationInvalidEmail"));
+      setTeamErrorDetails("");
       return;
     }
 
     setTeamSubmitting(true);
     setTeamError("");
+    setTeamErrorDetails("");
     setTeamMessage("");
 
     try {
-      await submitTeamApplication(teamForm);
+      const submittedApplication = await submitTeamApplication(teamForm);
+      if (!submittedApplication?.id) {
+        throw new Error("Team application was not confirmed by Supabase.");
+      }
       setTeamMessage(t("login.teamApplicationSubmitted"));
       setTeamForm({
         fullName: "",
@@ -92,6 +101,7 @@ export function LoginPage({
     } catch (submitError) {
       console.error("Team application submission failed:", submitError);
       setTeamError(t("login.teamApplicationFailed"));
+      setTeamErrorDetails(sanitizeErrorDetails(submitError));
     } finally {
       setTeamSubmitting(false);
     }
@@ -206,6 +216,12 @@ export function LoginPage({
               <textarea rows="3" value={teamForm.message} onChange={(event) => updateTeamField("message", event.target.value)} />
             </label>
             {teamError ? <small className="field-note danger-text">{teamError}</small> : null}
+            {teamErrorDetails ? (
+              <details className="field-note login-error-details">
+                <summary>{language === "es" ? "Detalles técnicos" : "Technical details"}</summary>
+                <pre>{teamErrorDetails}</pre>
+              </details>
+            ) : null}
             {teamMessage ? <small className="field-note success-text">{teamMessage}</small> : null}
             <div className="form-actions team-application-actions">
               <button type="button" className="secondary-btn" onClick={() => setTeamFormOpen(false)} disabled={teamSubmitting}>
