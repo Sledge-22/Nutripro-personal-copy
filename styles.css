@@ -570,7 +570,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
 }
 .bulk-upload-meta { display: grid; justify-items: end; gap: 6px; }
 .module-editor-card { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--green-50); }
-.module-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.module-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
 .compact-toggle { padding: 0; font-size: 12px; }
 .module-editor-summary { display: grid; gap: 10px; margin-top: 16px; color: var(--muted); font-size: 13px; line-height: 1.55; }
 .module-editor-grid, .nested-builder-grid, .module-items { display: grid; gap: 16px; }
@@ -597,6 +597,27 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-500); back
 .preview-item strong { font-size: 12px; }
 .preview-item small { display: block; margin-left: auto; color: var(--muted); font-size: 11px; }
 .mini-action { padding: 0; border: 0; background: none; cursor: pointer; font-weight: 700; }
+.module-editor-actions .mini-action,
+.module-editor-actions .compact-toggle {
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.module-editor-actions .compact-toggle {
+  border-radius: 999px;
+}
+.module-editor-actions .secondary-btn.mini-action {
+  border: 1px solid var(--color-border);
+  color: var(--color-text-soft);
+  background: var(--color-surface-2);
+}
+.module-editor-actions .danger-btn.mini-action {
+  border: 1px solid rgba(214, 106, 92, .25);
+  color: #f79b8f;
+  background: rgba(214, 106, 92, .08);
+}
 .empty-copy { margin: 0; font-size: 12px; }
 .course-admin-list { display: grid; gap: 12px; }
 .course-admin-list article { display: grid; grid-template-columns: auto 1fr auto; gap: 15px; padding: 16px; border: 1px solid #e6ece9; border-radius: 13px; }

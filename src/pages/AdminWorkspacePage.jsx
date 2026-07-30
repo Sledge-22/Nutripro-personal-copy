@@ -3431,15 +3431,7 @@ function ModuleEditor({
                 onClick={() => requestDeleteModule(module)}
                 disabled={deleting}
               >
-                {t("admin.deleteLessonPermanently")}
-              </button>
-              <button
-                type="button"
-                className="danger-btn mini-action"
-                onClick={() => requestDeleteModule(module)}
-                disabled={deleting}
-              >
-                {t("admin.deleteDuplicatePermanently")}
+                {t("admin.deleteLesson")}
               </button>
             </>
           )}
@@ -5555,8 +5547,8 @@ function CourseBuilderPage({
             <span className="eyebrow">{language === "es" ? "Eliminar lección" : "Delete lesson"}</span>
             <h2 id="delete-lesson-title">
               {language === "es"
-                ? "¿Eliminar esta lección duplicada permanentemente?"
-                : "Delete this duplicated lesson permanently?"}
+                ? "¿Eliminar esta lección/módulo permanentemente?"
+                : "Delete this lesson/module permanently?"}
             </h2>
             <p>
               {language === "es"
@@ -5587,8 +5579,8 @@ function CourseBuilderPage({
                 {deletingModuleId
                   ? t("common.saving")
                   : language === "es"
-                    ? "Eliminar duplicado permanentemente"
-                    : "Delete duplicate permanently"}
+                    ? "Eliminar permanentemente"
+                    : "Delete permanently"}
               </button>
             </div>
           </div>
