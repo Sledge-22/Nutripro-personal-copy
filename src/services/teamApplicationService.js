@@ -68,24 +68,20 @@ export async function submitTeamApplication(applicationData) {
     return created;
   }
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from("team_applications")
-    .insert(payload)
-    .select()
-    .single();
+    .insert(payload);
 
   if (error) {
     console.error("Submitting team application failed:", error);
     throw error;
   }
 
-  if (!data?.id) {
-    const insertError = new Error("Team application insert did not return an inserted row.");
-    console.error("Submitting team application failed:", insertError);
-    throw insertError;
-  }
-
-  return normalizeApplication(data);
+  return normalizeApplication({
+    ...payload,
+    id: "submitted",
+    created_at: now,
+  });
 }
 
 export async function getTeamApplications() {
