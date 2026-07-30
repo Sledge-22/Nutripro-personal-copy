@@ -548,7 +548,7 @@ export async function getModuleDeletionSafety(moduleId) {
       mockProgress?.[`video-${moduleId}`],
     );
     return {
-      canDelete: !module?.assignment && !hasProgress,
+      canDelete: !hasProgress,
       hasAssignment: Boolean(module?.assignment),
       hasProgress,
       counts: {
@@ -560,7 +560,7 @@ export async function getModuleDeletionSafety(moduleId) {
   }
 
   const [moduleResult, assignmentResult, progressResult, directSubmissionResult] = await Promise.all([
-    supabase.from("modules").select("id").eq("id", moduleId).maybeSingle(),
+    supabase.from("modules").select("id, title, course_id, class_id").eq("id", moduleId).maybeSingle(),
     supabase.from("module_assignments").select("id", { count: "exact" }).eq("module_id", moduleId),
     supabase.from("student_progress").select("module_id", { count: "exact" }).eq("module_id", moduleId),
     supabase.from("assignment_submissions").select("id", { count: "exact" }).eq("module_id", moduleId),
@@ -614,10 +614,11 @@ export async function getModuleDeletionSafety(moduleId) {
   const hasSubmissions = counts.assignmentSubmissions > 0;
 
   return {
-    canDelete: !hasAssignment && !hasProgress && !hasSubmissions,
+    canDelete: !hasProgress && !hasSubmissions,
     hasAssignment,
     hasProgress,
     hasSubmissions,
+    module: moduleResult.data,
     counts,
   };
 }
@@ -708,6 +709,12 @@ export async function deleteModuleById(moduleId, { confirmed = false } = {}) {
     reason: "Explicit Admin lesson deletion",
   });
   const safety = await getModuleDeletionSafety(confirmedModuleId);
+  console.log("[ModuleDelete] selected module", {
+    id: safety.module?.id ?? confirmedModuleId,
+    title: safety.module?.title ?? null,
+    course_id: safety.module?.course_id ?? null,
+    class_id: safety.module?.class_id ?? null,
+  });
   if (!safety.canDelete) {
     const activityError = new Error("This specific lesson has student activity attached to it. Archive it instead of deleting.");
     activityError.code = "MODULE_HAS_RELATED_ACTIVITY";
@@ -731,15 +738,19 @@ export async function deleteModuleById(moduleId, { confirmed = false } = {}) {
     .from("modules")
     .delete()
     .eq("id", confirmedModuleId)
-    .select("id")
+    .select("id, title")
     .maybeSingle();
+
+  console.log("[ModuleDelete] delete result", { data, error });
 
   if (error) {
     console.error("Deleting the selected lesson failed:", error);
     throw error;
   }
   if (!data) {
-    throw new Error("The selected lesson was not deleted.");
+    const noRowError = new Error("No lesson/module was deleted. The selected item may not match an existing module row.");
+    noRowError.code = "MODULE_DELETE_NO_ROW";
+    throw noRowError;
   }
 
   return data;

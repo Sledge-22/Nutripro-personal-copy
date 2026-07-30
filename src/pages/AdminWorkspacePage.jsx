@@ -3431,6 +3431,14 @@ function ModuleEditor({
                 onClick={() => requestDeleteModule(module)}
                 disabled={deleting}
               >
+                {t("admin.deleteLessonPermanently")}
+              </button>
+              <button
+                type="button"
+                className="danger-btn mini-action"
+                onClick={() => requestDeleteModule(module)}
+                disabled={deleting}
+              >
                 {t("admin.deleteDuplicatePermanently")}
               </button>
             </>
@@ -4812,12 +4820,17 @@ function CourseBuilderPage({
 
   const requestDeleteModule = (module) => {
     if (!module?.id) {
-      setSaveError(language === "es" ? "No se pudo eliminar la lección." : "Lesson could not be deleted.");
+      setSaveError(
+        language === "es"
+          ? "Falta el ID de la lección/módulo. No se ejecutó la eliminación."
+          : "Missing lesson/module ID. Delete was not run.",
+      );
       return;
     }
     setPendingDeleteModule({
       id: module.id,
       classId: module.class_id || module.classId || "",
+      courseId: module.course_id || module.courseId || course?.id || "",
       title: module.title || "",
     });
     setBlockedDeleteModule(null);
@@ -4844,14 +4857,47 @@ function CourseBuilderPage({
       };
     });
 
+  const getDeleteErrorDetails = (error) =>
+    [
+      error?.message ? `message: ${error.message}` : "",
+      error?.code ? `code: ${error.code}` : "",
+      error?.details ? `details: ${error.details}` : "",
+      error?.hint ? `hint: ${error.hint}` : "",
+    ].filter(Boolean).join("\n");
+
+  const isModuleDeleteBlockedByDatabase = (error) => {
+    const text = [
+      error?.message,
+      error?.details,
+      error?.hint,
+      error?.code,
+    ].filter(Boolean).join(" ").toLowerCase();
+    return (
+      text.includes("row-level security") ||
+      text.includes("permission denied") ||
+      text.includes("42501") ||
+      text.includes("rls")
+    );
+  };
+
   const confirmDeleteModule = async () => {
     const target = pendingDeleteModule;
     if (!target?.id || !course?.id) {
-      setSaveError(language === "es" ? "No se pudo eliminar la lección." : "Lesson could not be deleted.");
+      setSaveError(
+        language === "es"
+          ? "Falta el ID de la lección/módulo. No se ejecutó la eliminación."
+          : "Missing lesson/module ID. Delete was not run.",
+      );
       setPendingDeleteModule(null);
       return;
     }
 
+    console.log("[ModuleDelete] selected module", {
+      id: target.id,
+      title: target.title || null,
+      course_id: target.courseId || course?.id || null,
+      class_id: target.classId || null,
+    });
     setDeletingModuleId(target.id);
     setSaveError("");
     setSaveDetails("");
@@ -4901,7 +4947,7 @@ function CourseBuilderPage({
         modules: mergeRefetchedModules(current?.modules, finalModules),
       }));
       setPendingDeleteModule(null);
-      setSaveMessage(language === "es" ? "Lección duplicada eliminada." : "Duplicate lesson deleted.");
+      setSaveMessage(language === "es" ? "Lección/módulo eliminado." : "Lesson/module deleted.");
 
       await recordAdminAuditLog({
         adminUser: currentUser,
@@ -4940,10 +4986,24 @@ function CourseBuilderPage({
         );
       } else {
         setPendingDeleteModule(null);
-        setSaveError(language === "es" ? "No se pudo eliminar la lección duplicada." : "Duplicate lesson could not be deleted.");
+        if (error?.code === "MODULE_DELETE_NO_ROW") {
+          setSaveError(
+            language === "es"
+              ? "No se eliminó ninguna lección/módulo. Es posible que el elemento seleccionado no coincida con un módulo existente."
+              : "No lesson/module was deleted. The selected item may not match an existing module row.",
+          );
+        } else if (isModuleDeleteBlockedByDatabase(error)) {
+          setSaveError(
+            language === "es"
+              ? "No se pudo eliminar la lección/módulo porque la base de datos bloqueó esta acción. Revisá la política RLS de eliminación para public.modules."
+              : "Lesson/module delete failed because the database blocked this action. Check Supabase RLS delete policy for public.modules.",
+          );
+        } else {
+          setSaveError(language === "es" ? "No se pudo eliminar la lección duplicada." : "Duplicate lesson could not be deleted.");
+        }
       }
       if (error?.code !== "MODULE_HAS_RELATED_ACTIVITY") {
-        setSaveDetails(error?.message || "");
+        setSaveDetails(getDeleteErrorDetails(error));
       }
     } finally {
       setDeletingModuleId("");
