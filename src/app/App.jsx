@@ -668,14 +668,7 @@ export function App() {
 
   const navigationByRole = useMemo(() => ({
     admin: [
-      {
-        id: "dashboard",
-        label: t("common.dashboard"),
-        icon: "dashboard",
-        children: [
-          { path: ROUTES.admin.dashboard, label: t("common.dashboard"), icon: "dashboard" },
-        ],
-      },
+      { path: ROUTES.admin.dashboard, label: t("common.dashboard"), icon: "dashboard" },
       {
         id: "learning",
         label: t("common.learning"),
@@ -714,14 +707,7 @@ export function App() {
       },
     ],
     student: [
-      {
-        id: "dashboard",
-        label: t("common.dashboard"),
-        icon: "dashboard",
-        children: [
-          { path: ROUTES.student.dashboard, label: t("common.dashboard"), icon: "dashboard" },
-        ],
-      },
+      { path: ROUTES.student.dashboard, label: t("common.dashboard"), icon: "dashboard" },
       {
         id: "learning",
         label: t("common.learning"),
