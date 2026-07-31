@@ -668,15 +668,43 @@ export function App() {
 
   const adminNav = useMemo(() => ([
     { path: ROUTES.admin.dashboard, label: t("common.dashboard"), icon: "dashboard" },
-    { path: ROUTES.admin.users, label: t("common.usersAdmin"), icon: "users" },
-    { path: ROUTES.admin.postCourses, label: t("common.postCourses"), icon: "courses" },
-    { path: ROUTES.admin.community, label: t("common.community"), icon: "community" },
-    { path: ROUTES.admin.messages, label: t("common.messages"), icon: "community" },
-    { path: ROUTES.admin.teamApplications, label: t("common.teamApplications"), icon: "users" },
-    { path: ROUTES.admin.assignmentReviews, label: t("common.assignmentReviews"), icon: "certificate" },
-    { path: ROUTES.admin.certificates, label: t("common.certificatesGenerator"), icon: "certificate" },
-    { path: ROUTES.admin.settings, label: language === "es" ? "ConfiguraciÃ³n" : "Settings", icon: "dashboard" },
-  ]), [language, t]);
+    {
+      id: "learning",
+      label: t("common.learning"),
+      icon: "courses",
+      children: [
+        { path: ROUTES.admin.postCourses, label: t("common.courses"), icon: "courses" },
+        { path: ROUTES.admin.assignmentReviews, label: t("common.assignmentReviews"), icon: "certificate" },
+        { path: ROUTES.admin.certificates, label: t("common.certificates"), icon: "certificate" },
+      ],
+    },
+    {
+      id: "people",
+      label: t("common.people"),
+      icon: "users",
+      children: [
+        { path: ROUTES.admin.users, label: t("common.users"), icon: "users" },
+        { path: ROUTES.admin.teamApplications, label: t("common.teamApplications"), icon: "users" },
+      ],
+    },
+    {
+      id: "communication",
+      label: t("common.communication"),
+      icon: "community",
+      children: [
+        { path: ROUTES.admin.messages, label: t("common.messages"), icon: "community" },
+        { path: ROUTES.admin.community, label: t("common.community"), icon: "community" },
+      ],
+    },
+    {
+      id: "system",
+      label: t("common.system"),
+      icon: "dashboard",
+      children: [
+        { path: ROUTES.admin.settings, label: t("common.settings"), icon: "dashboard" },
+      ],
+    },
+  ]), [t]);
 
   const studentNav = useMemo(() => ([
     { path: ROUTES.student.dashboard, label: t("common.dashboard"), icon: "dashboard" },

@@ -63,6 +63,18 @@ export function OverviewCard({ icon, title, text }) {
   return <article className="overview-card"><span><Icon name={icon} /></span><h3>{title}</h3><p>{text}</p></article>;
 }
 
+function isNavGroup(item) {
+  return Array.isArray(item?.children);
+}
+
+function isNavItemActive(item, currentPath) {
+  if (isNavGroup(item)) {
+    return item.children.some((child) => child.path === currentPath);
+  }
+
+  return item.path === currentPath;
+}
+
 export function Header({ role, title, detailTitle, profile, navItems = [], currentPath = "", onNavigate, onLogout }) {
   const { t, translateRole } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -159,15 +171,32 @@ export function Header({ role, title, detailTitle, profile, navItems = [], curre
 
             <nav className="mobile-nav-list" aria-label={`${translateRole(role)} navigation`}>
               {navItems.map((item) => (
-                <button
-                  key={item.path}
-                  className={`nav-item ${currentPath === item.path ? "active" : ""}`}
-                  aria-current={currentPath === item.path ? "page" : undefined}
-                  onClick={() => handleMobileNavigate(item.path)}
-                >
-                  <Icon name={item.icon} />
-                  {item.label}
-                </button>
+                isNavGroup(item) ? (
+                  <div key={item.id} className={`mobile-nav-group ${isNavItemActive(item, currentPath) ? "active" : ""}`}>
+                    <span className="mobile-nav-group-label"><Icon name={item.icon} />{item.label}</span>
+                    {item.children.map((child) => (
+                      <button
+                        key={child.path}
+                        className={`nav-item nav-child-item ${currentPath === child.path ? "active" : ""}`}
+                        aria-current={currentPath === child.path ? "page" : undefined}
+                        onClick={() => handleMobileNavigate(child.path)}
+                      >
+                        <Icon name={child.icon} />
+                        {child.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <button
+                    key={item.path}
+                    className={`nav-item ${currentPath === item.path ? "active" : ""}`}
+                    aria-current={currentPath === item.path ? "page" : undefined}
+                    onClick={() => handleMobileNavigate(item.path)}
+                  >
+                    <Icon name={item.icon} />
+                    {item.label}
+                  </button>
+                )
               ))}
             </nav>
 
@@ -184,7 +213,65 @@ export function Header({ role, title, detailTitle, profile, navItems = [], curre
 
 export function Sidebar({ role, navItems, currentPath, onNavigate, onLogout }) {
   const { t, translateRole } = useLanguage();
-  return <aside className="sidebar"><Brand /><div className="role-pill"><span className="role-dot" />{t("common.roleArea", { role: translateRole(role) })}</div><nav aria-label={`${translateRole(role)} navigation`}>{navItems.map((item) => <button key={item.path} className={`nav-item ${currentPath === item.path ? "active" : ""}`} onClick={() => onNavigate(item.path)}><Icon name={item.icon} />{item.label}</button>)}</nav><button className="logout" onClick={onLogout}><Icon name="logout" />{t("common.signOut")}</button></aside>;
+  const activeGroupId = navItems.find((item) => isNavGroup(item) && isNavItemActive(item, currentPath))?.id ?? "";
+  const [closedGroups, setClosedGroups] = useState({});
+
+  const toggleGroup = (groupId) => {
+    if (groupId === activeGroupId) return;
+    setClosedGroups((current) => ({ ...current, [groupId]: !current[groupId] }));
+  };
+
+  return (
+    <aside className="sidebar">
+      <Brand />
+      <div className="role-pill"><span className="role-dot" />{t("common.roleArea", { role: translateRole(role) })}</div>
+      <nav aria-label={`${translateRole(role)} navigation`}>
+        {navItems.map((item) => {
+          if (!isNavGroup(item)) {
+            return (
+              <button key={item.path} className={`nav-item ${currentPath === item.path ? "active" : ""}`} onClick={() => onNavigate(item.path)}>
+                <Icon name={item.icon} />{item.label}
+              </button>
+            );
+          }
+
+          const groupActive = isNavItemActive(item, currentPath);
+          const groupOpen = groupActive || !closedGroups[item.id];
+          const panelId = `sidebar-group-${item.id}`;
+
+          return (
+            <div key={item.id} className={`nav-group ${groupActive ? "active" : ""}`}>
+              <button
+                type="button"
+                className={`nav-group-toggle ${groupActive ? "active" : ""}`}
+                aria-expanded={groupOpen}
+                aria-controls={panelId}
+                onClick={() => toggleGroup(item.id)}
+              >
+                <Icon name={item.icon} />
+                <span>{item.label}</span>
+                <span className={`nav-group-chevron ${groupOpen ? "open" : ""}`}><Icon name="chevron" size={16} /></span>
+              </button>
+              {groupOpen ? (
+                <div id={panelId} className="nav-group-children">
+                  {item.children.map((child) => (
+                    <button
+                      key={child.path}
+                      className={`nav-item nav-child-item ${currentPath === child.path ? "active" : ""}`}
+                      onClick={() => onNavigate(child.path)}
+                    >
+                      <Icon name={child.icon} />{child.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </nav>
+      <button className="logout" onClick={onLogout}><Icon name="logout" />{t("common.signOut")}</button>
+    </aside>
+  );
 }
 
 export function CertificateModal({ certificate, onClose }) {
