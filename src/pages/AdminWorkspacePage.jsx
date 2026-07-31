@@ -2,6 +2,7 @@
 import CountryFlag from "../components/CountryFlag.jsx";
 import { Icon, OverviewCard, Stat, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
+import { PrivateMessagesPage } from "../components/PrivateMessagesPage.jsx";
 import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
 import { getSubmissionsForAdmin, reviewSubmission } from "../services/assignmentService.js";
 import { recordAdminAuditLog, getAdminAuditLogs } from "../services/auditLogService.js";
@@ -946,6 +947,8 @@ function createTeamApplicationCopy(language) {
       loadFailed: "No se pudieron cargar las solicitudes del equipo.",
       updateFailed: "No se pudo actualizar la solicitud.",
       noDetails: "Sin información adicional.",
+      messageApplicant: "Enviar mensaje al postulante",
+      applicantNoAccount: "El postulante todavía no tiene una cuenta.",
     };
   }
 
@@ -970,6 +973,8 @@ function createTeamApplicationCopy(language) {
     loadFailed: "Team applications could not be loaded.",
     updateFailed: "Application could not be updated.",
     noDetails: "No additional information.",
+    messageApplicant: "Message applicant",
+    applicantNoAccount: "Applicant does not have an account yet.",
   };
 }
 
@@ -1091,8 +1096,12 @@ export function AdminWorkspacePage({
     );
   }
 
+  if (pathname === ROUTES.admin.messages) {
+    return <PrivateMessagesPage currentUser={currentUser} />;
+  }
+
   if (pathname === "/admin/team-applications") {
-    return <TeamApplicationsPage currentUser={currentUser} />;
+    return <TeamApplicationsPage currentUser={currentUser} users={users} />;
   }
 
   if (pathname === "/admin/assignment-reviews") {
@@ -6878,7 +6887,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   );
 }
 
-function TeamApplicationsPage({ currentUser }) {
+function TeamApplicationsPage({ currentUser, users = [] }) {
   const { t, language } = useLanguage();
   const copy = createTeamApplicationCopy(language);
   const [applications, setApplications] = useState([]);
@@ -6915,6 +6924,9 @@ function TeamApplicationsPage({ currentUser }) {
 
   const selectedApplication = applications.find((application) => application.id === selectedApplicationId) ?? null;
   const selectedNotes = selectedApplication ? notesById[selectedApplication.id] ?? selectedApplication.adminNotes ?? "" : "";
+  const applicantUser = selectedApplication
+    ? users.find((user) => `${user.email ?? ""}`.trim().toLowerCase() === `${selectedApplication.email ?? ""}`.trim().toLowerCase())
+    : null;
 
   const saveApplicationUpdate = async (application, status = application.status) => {
     if (!application?.id) return;
@@ -7065,6 +7077,15 @@ function TeamApplicationsPage({ currentUser }) {
             </label>
 
             <div className="form-actions team-application-review-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => navigateTo(ROUTES.admin.messages)}
+                disabled={!applicantUser}
+                title={!applicantUser ? copy.applicantNoAccount : ""}
+              >
+                {copy.messageApplicant}
+              </button>
               <button
                 type="button"
                 className="secondary-btn"

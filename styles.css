@@ -1383,7 +1383,9 @@ td,
   .assignment-summary-grid,
   .assignment-course-card,
   .team-applications-layout,
-  .team-application-row {
+  .team-application-row,
+  .messages-layout,
+  .messages-compose-form {
     grid-template-columns: 1fr;
   }
 }
@@ -1416,9 +1418,9 @@ td,
 }
 
 .team-application-card {
-  margin-top: 22px;
+  margin-top: 16px;
   border: 1px solid var(--color-border);
-  border-radius: 20px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, .03);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
@@ -1429,8 +1431,8 @@ td,
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  padding: 18px;
+  gap: 12px;
+  padding: 12px 14px;
   border: 0;
   background: transparent;
   color: var(--color-text);
@@ -1439,11 +1441,11 @@ td,
 }
 
 .team-application-icon {
-  width: 48px;
-  height: 48px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
-  border-radius: 18px;
+  border-radius: 14px;
   color: #06292b;
   background: var(--color-primary);
   box-shadow: var(--shadow-glow);
@@ -1458,31 +1460,33 @@ td,
 .team-application-copy strong {
   color: var(--color-text);
   font-family: var(--font-heading);
-  font-size: 1rem;
+  font-size: .94rem;
 }
 
 .team-application-copy small {
   color: var(--color-muted);
   line-height: 1.45;
+  font-size: .78rem;
 }
 
 .team-application-cta {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: 1px solid rgba(79, 202, 214, .36);
   border-radius: var(--radius-pill);
   color: var(--color-text);
   background: rgba(79, 202, 214, .08);
   font-weight: 700;
+  font-size: .86rem;
   white-space: nowrap;
 }
 
 .team-application-form {
   display: grid;
   gap: 14px;
-  padding: 0 18px 18px;
+  padding: 0 14px 14px;
 }
 
 .team-application-grid {
@@ -1548,6 +1552,152 @@ td,
 
 .status.pending { color: var(--color-warning); background: rgba(217, 183, 111, .14); border-color: rgba(217, 183, 111, .18); }
 .status.in_review { color: var(--color-primary); background: rgba(79, 202, 214, .14); border-color: rgba(79, 202, 214, .18); }
+
+.messages-page {
+  display: grid;
+  gap: 18px;
+}
+
+.messages-compose-card,
+.messages-list-card,
+.messages-thread-card {
+  min-width: 0;
+}
+
+.messages-compose-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.messages-compose-form .wide-field {
+  grid-column: 1 / -1;
+}
+
+.messages-tabs {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px;
+  gap: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, .03);
+  overflow-x: auto;
+}
+
+.messages-tabs button {
+  padding: 9px 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-muted);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.messages-tabs button.active,
+.messages-tabs button:hover {
+  color: #06292b;
+  background: var(--color-primary);
+}
+
+.messages-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, .78fr) minmax(0, 1.22fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.messages-conversation-list,
+.messages-thread {
+  display: grid;
+  gap: 10px;
+}
+
+.messages-conversation-row {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  color: var(--color-text);
+  background: rgba(255, 255, 255, .03);
+  text-align: left;
+  cursor: pointer;
+}
+
+.messages-conversation-row:hover,
+.messages-conversation-row.active {
+  border-color: rgba(79, 202, 214, .34);
+  background: rgba(79, 202, 214, .08);
+}
+
+.messages-conversation-row span,
+.messages-conversation-row small,
+.messages-conversation-row em,
+.messages-thread-header p {
+  color: var(--color-muted);
+}
+
+.messages-conversation-row em {
+  font-style: normal;
+  font-size: .78rem;
+}
+
+.messages-thread-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.messages-thread {
+  max-height: 520px;
+  overflow-y: auto;
+  padding: 4px 4px 12px;
+}
+
+.message-bubble {
+  justify-self: start;
+  max-width: min(680px, 86%);
+  padding: 13px 15px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px 18px 18px 6px;
+  background: rgba(255, 255, 255, .04);
+}
+
+.message-bubble.own {
+  justify-self: end;
+  border-color: rgba(79, 202, 214, .24);
+  border-radius: 18px 18px 6px 18px;
+  background: rgba(79, 202, 214, .12);
+}
+
+.message-bubble p {
+  margin: 6px 0;
+  color: var(--color-text);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.message-bubble small {
+  color: var(--color-muted);
+}
+
+.messages-reply-form,
+.message-request-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
 
 .profile-password-form {
   margin-top: 24px;
@@ -2424,6 +2574,7 @@ select:focus {
   .community-pdf-preview iframe { height: 420px; }
   .team-application-summary {
     grid-template-columns: auto minmax(0, 1fr);
+    padding: 12px;
   }
   .team-application-cta {
     grid-column: 1 / -1;
@@ -2432,6 +2583,21 @@ select:focus {
   }
   .team-application-grid {
     grid-template-columns: 1fr;
+  }
+  .messages-tabs {
+    width: 100%;
+  }
+  .messages-tabs button {
+    flex: 1 0 auto;
+  }
+  .messages-thread-header {
+    flex-direction: column;
+  }
+  .messages-thread {
+    max-height: 420px;
+  }
+  .message-bubble {
+    max-width: 94%;
   }
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .table-actions,

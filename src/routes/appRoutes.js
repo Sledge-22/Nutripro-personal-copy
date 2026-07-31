@@ -17,6 +17,7 @@ export const ROUTES = {
     courseBuilder: (courseId) => `/admin/post-courses/${courseId}`,
     courseEdit: (courseId) => `/admin/post-courses/${courseId}/edit`,
     community: "/admin/community",
+    messages: "/admin/messages",
     teamApplications: "/admin/team-applications",
     assignmentReviews: "/admin/assignment-reviews",
     certificates: "/admin/certificates",
@@ -28,6 +29,7 @@ export const ROUTES = {
     certificates: "/student/certificates",
     courses: "/student/courses",
     community: "/student/community",
+    messages: "/student/messages",
     courseDetail: (courseId) => `/student/courses/${courseId}`,
   },
 };

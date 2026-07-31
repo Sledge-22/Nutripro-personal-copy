@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { CertificateModal, Icon, Progress, Stat, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
+import { PrivateMessagesPage } from "../components/PrivateMessagesPage.jsx";
 import CountryFlag from "../components/CountryFlag.jsx";
 import CountrySelect from "../components/CountrySelect.jsx";
 import { ROUTES } from "../routes/appRoutes.js";
@@ -413,6 +414,10 @@ export function StudentWorkspacePage({
         onUpdateComment={onUpdateComment}
       />
     );
+  }
+
+  if (pathname === ROUTES.student.messages) {
+    return <PrivateMessagesPage currentUser={studentProfile} />;
   }
 
   if (pathname === ROUTES.student.courses) {

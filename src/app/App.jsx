@@ -671,6 +671,7 @@ export function App() {
     { path: ROUTES.admin.users, label: t("common.usersAdmin"), icon: "users" },
     { path: ROUTES.admin.postCourses, label: t("common.postCourses"), icon: "courses" },
     { path: ROUTES.admin.community, label: t("common.community"), icon: "community" },
+    { path: ROUTES.admin.messages, label: t("common.messages"), icon: "community" },
     { path: ROUTES.admin.teamApplications, label: t("common.teamApplications"), icon: "users" },
     { path: ROUTES.admin.assignmentReviews, label: t("common.assignmentReviews"), icon: "certificate" },
     { path: ROUTES.admin.certificates, label: t("common.certificatesGenerator"), icon: "certificate" },
@@ -683,6 +684,7 @@ export function App() {
     { path: ROUTES.student.certificates, label: t("common.certificates"), icon: "certificate" },
     { path: ROUTES.student.courses, label: t("common.courses"), icon: "courses" },
     { path: ROUTES.student.community, label: t("common.community"), icon: "community" },
+    { path: ROUTES.student.messages, label: t("common.messages"), icon: "community" },
   ]), [t]);
 
   const title = useMemo(() => {
@@ -691,6 +693,7 @@ export function App() {
       [ROUTES.admin.users]: t("common.usersAdmin"),
       [ROUTES.admin.postCourses]: t("common.postCourses"),
       [ROUTES.admin.community]: t("common.community"),
+      [ROUTES.admin.messages]: t("common.messages"),
       [ROUTES.admin.teamApplications]: t("common.teamApplications"),
       [ROUTES.admin.assignmentReviews]: t("common.assignmentReviews"),
       [ROUTES.admin.certificates]: t("common.certificatesGenerator"),
@@ -700,6 +703,7 @@ export function App() {
       [ROUTES.student.certificates]: t("common.certificates"),
       [ROUTES.student.courses]: t("common.courses"),
       [ROUTES.student.community]: t("common.community"),
+      [ROUTES.student.messages]: t("common.messages"),
       [ROUTES.auth.changePassword]: t("auth.changePassword"),
       [ROUTES.auth.access]: t("auth.accessRestricted"),
     };
