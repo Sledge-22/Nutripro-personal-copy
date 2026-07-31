@@ -954,6 +954,19 @@ function createTeamApplicationCopy(language) {
       noDetails: "Sin información adicional.",
       messageApplicant: "Enviar mensaje al postulante",
       applicantNoAccount: "El postulante todavía no tiene una cuenta.",
+      createInstructorAccount: "Crear cuenta de instructor",
+      creatingInstructor: "Creando cuenta...",
+      confirmCreateInstructor:
+        "¿Crear una cuenta de instructor para este postulante? Se generará una contraseña temporal que se mostrará solo una vez.",
+      instructorCreated: "Cuenta de instructor creada. Copiá la contraseña temporal y compartila de forma segura.",
+      instructorCreateFailed: "No se pudo crear la cuenta de instructor.",
+      instructorCreationUnavailable: "La creación de usuarios de producción no está disponible en este momento.",
+      instructorAlreadyExists: "Este postulante ya tiene una cuenta.",
+      temporaryPassword: "Contraseña temporal",
+      copyTemporaryPassword: "Copiar contraseña",
+      temporaryPasswordCopied: "Contraseña temporal copiada.",
+      temporaryPasswordCopyFailed: "No se pudo copiar la contraseña.",
+      temporaryPasswordSecurityNote: "La contraseña temporal se muestra solo para esta acción. No se guarda en el perfil ni en auditoría.",
     };
   }
 
@@ -980,6 +993,19 @@ function createTeamApplicationCopy(language) {
     noDetails: "No additional information.",
     messageApplicant: "Message applicant",
     applicantNoAccount: "Applicant does not have an account yet.",
+    createInstructorAccount: "Create instructor account",
+    creatingInstructor: "Creating account...",
+    confirmCreateInstructor:
+      "Create an instructor account for this applicant? A temporary password will be generated and shown only once.",
+    instructorCreated: "Instructor account created. Copy the temporary password and share it securely.",
+    instructorCreateFailed: "Instructor account could not be created.",
+    instructorCreationUnavailable: "Production user creation is not available right now.",
+    instructorAlreadyExists: "This applicant already has an account.",
+    temporaryPassword: "Temporary password",
+    copyTemporaryPassword: "Copy password",
+    temporaryPasswordCopied: "Temporary password copied.",
+    temporaryPasswordCopyFailed: "Password could not be copied.",
+    temporaryPasswordSecurityNote: "The temporary password is shown only for this action. It is not stored on the profile or in audit logs.",
   };
 }
 
@@ -1579,7 +1605,7 @@ export function AdminWorkspacePage({
   }
 
   if (pathname === "/admin/team-applications") {
-    return <TeamApplicationsPage currentUser={currentUser} users={users} />;
+    return <TeamApplicationsPage currentUser={currentUser} users={users} onCreateUser={onCreateUser} />;
   }
 
   if (pathname === "/admin/assignment-reviews") {
@@ -7456,7 +7482,7 @@ function PostCoursesPage({ users, courses, onSaveCourse, onDeleteCourse }) {
   );
 }
 
-function TeamApplicationsPage({ currentUser, users = [] }) {
+function TeamApplicationsPage({ currentUser, users = [], onCreateUser }) {
   const { t, language } = useLanguage();
   const copy = createTeamApplicationCopy(language);
   const [applications, setApplications] = useState([]);
@@ -7467,6 +7493,8 @@ function TeamApplicationsPage({ currentUser, users = [] }) {
   const [selectedApplicationId, setSelectedApplicationId] = useState(null);
   const [notesById, setNotesById] = useState({});
   const [updatingId, setUpdatingId] = useState(null);
+  const [creatingInstructorId, setCreatingInstructorId] = useState(null);
+  const [createdInstructorPassword, setCreatedInstructorPassword] = useState("");
 
   const loadApplications = async (keepSelectedId = selectedApplicationId) => {
     setLoading(true);
@@ -7496,6 +7524,8 @@ function TeamApplicationsPage({ currentUser, users = [] }) {
   const applicantUser = selectedApplication
     ? users.find((user) => `${user.email ?? ""}`.trim().toLowerCase() === `${selectedApplication.email ?? ""}`.trim().toLowerCase())
     : null;
+  const canCreateInstructorAccount =
+    selectedApplication?.status === "approved" && Boolean(selectedApplication?.email) && !applicantUser;
 
   const saveApplicationUpdate = async (application, status = application.status) => {
     if (!application?.id) return;
@@ -7538,6 +7568,94 @@ function TeamApplicationsPage({ currentUser, users = [] }) {
     }
   };
 
+  const copyCreatedInstructorPassword = async () => {
+    if (!createdInstructorPassword) return;
+
+    try {
+      await navigator.clipboard.writeText(createdInstructorPassword);
+      setMessage(copy.temporaryPasswordCopied);
+    } catch (error) {
+      console.error("Copying instructor temporary password failed:", error);
+      setUpdateError(buildAdminErrorState(error, copy.temporaryPasswordCopyFailed));
+    }
+  };
+
+  const createInstructorFromApplication = async (application) => {
+    if (!application?.id) return;
+
+    setMessage("");
+    setUpdateError("");
+    setCreatedInstructorPassword("");
+
+    if (applicantUser) {
+      setUpdateError({ message: copy.instructorAlreadyExists, details: "" });
+      return;
+    }
+
+    if (typeof onCreateUser !== "function") {
+      setUpdateError({ message: copy.instructorCreationUnavailable, details: "" });
+      return;
+    }
+
+    if (!window.confirm(copy.confirmCreateInstructor)) return;
+
+    setCreatingInstructorId(application.id);
+
+    try {
+      const temporaryPassword = generateTemporaryPassword();
+      const applicantName = `${application.fullName ?? ""}`.trim();
+      const applicantEmail = `${application.email ?? ""}`.trim().toLowerCase();
+      const username = applicantEmail.split("@")[0]?.replace(/[^a-z0-9._-]/gi, "").toLowerCase() || "instructor";
+      const teachingTopic = `${application.teachingTopic ?? ""}`.trim();
+      const applicantMessage = `${application.message ?? ""}`.trim();
+      const instructorBio = [teachingTopic ? `Specialty: ${teachingTopic}` : "", applicantMessage]
+        .filter(Boolean)
+        .join("\n\n");
+
+      const result = await onCreateUser(
+        {
+          name: applicantName,
+          email: applicantEmail,
+          username,
+          role: "instructor",
+          status: "active",
+          bio: instructorBio,
+          must_change_password: true,
+          privacy_policy_accepted: false,
+          temporaryPassword,
+          language,
+        },
+        {
+          productionOnboardingTest: true,
+          productionCreate: true,
+          temporaryPassword,
+        },
+      );
+
+      await recordAdminAuditLog({
+        adminUser: currentUser,
+        action: "instructor_account_created_from_application",
+        targetType: "team_application",
+        targetId: application.id,
+        targetEmail: applicantEmail,
+        details: {
+          applicant_name: applicantName,
+          teaching_topic: teachingTopic,
+          created_user_id: result?.user?.id ?? "",
+          role: "instructor",
+        },
+      });
+
+      setCreatedInstructorPassword(temporaryPassword);
+      setMessage(copy.instructorCreated);
+    } catch (error) {
+      console.error("Creating instructor account from team application failed:", error);
+      setUpdateError(buildAdminErrorState(error, copy.instructorCreateFailed));
+    } finally {
+      setCreatingInstructorId(null);
+    }
+  };
+
   return (
     <div className="split-layout team-applications-layout">
       <section className="section-card">
@@ -7575,6 +7693,7 @@ function TeamApplicationsPage({ currentUser, users = [] }) {
                   setSelectedApplicationId(application.id);
                   setMessage("");
                   setUpdateError("");
+                  setCreatedInstructorPassword("");
                 }}
               >
                 <span>
@@ -7687,7 +7806,35 @@ function TeamApplicationsPage({ currentUser, users = [] }) {
               >
                 {copy.saveNotes}
               </button>
+              {canCreateInstructorAccount ? (
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => void createInstructorFromApplication(selectedApplication)}
+                  disabled={creatingInstructorId === selectedApplication.id}
+                >
+                  {creatingInstructorId === selectedApplication.id ? copy.creatingInstructor : copy.createInstructorAccount}
+                </button>
+              ) : null}
             </div>
+
+            {selectedApplication.status === "approved" && applicantUser ? (
+              <small className="field-note">{copy.instructorAlreadyExists}</small>
+            ) : null}
+
+            {createdInstructorPassword ? (
+              <div className="credential-card">
+                <strong>{copy.temporaryPassword}</strong>
+                <p>{selectedApplication.email}</p>
+                <code>{createdInstructorPassword}</code>
+                <small className="field-note">{copy.temporaryPasswordSecurityNote}</small>
+                <div className="form-actions compact">
+                  <button type="button" className="secondary-btn" onClick={() => void copyCreatedInstructorPassword()}>
+                    {copy.copyTemporaryPassword}
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : (
           <p className="empty-copy">{copy.select}</p>

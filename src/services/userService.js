@@ -1032,6 +1032,7 @@ export async function createAdminUser(payload = {}, options = {}) {
     bio: normalizeOptionalString(payload.bio) || null,
     profile_picture_url: normalizeOptionalString(payload.profile_picture_url ?? payload.profilePictureUrl) || null,
     must_change_password: true,
+    privacy_policy_accepted: false,
     temporaryPassword: normalizeOptionalString(payload.temporaryPassword) || null,
     language: normalizeOptionalString(payload.language) || "es",
   };
@@ -1072,6 +1073,7 @@ export async function createAdminUser(payload = {}, options = {}) {
       bio: normalizedPayload.bio,
       profile_picture_url: normalizedPayload.profile_picture_url,
       must_change_password: true,
+      privacy_policy_accepted: false,
       password_updated_at: null,
     };
 
