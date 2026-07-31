@@ -201,24 +201,23 @@ function NotificationCenter({ profile, role, onNavigate }) {
         <div className="notification-panel" role="dialog" aria-label={t("notifications.title")}>
           <div className="notification-panel-header">
             <div>
-              <span className="eyebrow">{t("notifications.eyebrow")}</span>
               <h3>{t("notifications.title")}</h3>
             </div>
             <span className="notification-count">{t("notifications.unreadCount", { count: unreadCount })}</span>
           </div>
 
           <div className="notification-actions">
-            <button type="button" className="subtle-btn" onClick={handleMarkAllRead} disabled={!unreadCount}>
+            <button type="button" className="notification-action-btn" onClick={handleMarkAllRead} disabled={!unreadCount}>
               {t("notifications.markAllRead")}
             </button>
-            <button type="button" className="subtle-btn" onClick={handleClearRead} disabled={!notifications.some((notification) => notification.readAt)}>
+            <button type="button" className="notification-action-btn" onClick={handleClearRead} disabled={!notifications.some((notification) => notification.readAt)}>
               {t("notifications.clearRead")}
             </button>
           </div>
 
           <div className="notification-list">
             {loading ? <p className="field-note">{t("common.loading")}</p> : null}
-            {!loading && !notifications.length ? <p className="field-note">{t("notifications.empty")}</p> : null}
+            {!loading && !notifications.length ? <p className="notification-empty-state">{t("notifications.empty")}</p> : null}
             {notifications.map((notification) => {
               const title = notification.title || t(notification.titleKey);
               const description = notification.description || t(notification.descriptionKey);

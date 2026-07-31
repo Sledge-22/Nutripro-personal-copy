@@ -9,14 +9,13 @@
       en: "ðŸ‡¬ðŸ‡§ English",
     },
     notifications: {
-      eyebrow: "Centro",
       title: "Notificaciones",
       open: "Abrir notificaciones",
       unreadCount: "{count} sin leer",
       markRead: "Marcar como leída",
       markAllRead: "Marcar todo como leído",
       clearRead: "Limpiar leídas",
-      empty: "No hay notificaciones recientes.",
+      empty: "Estás al día.",
       types: {
         new_private_message: {
           title: "Nuevo mensaje",
@@ -1080,14 +1079,13 @@ createdAt: "Creado",
       en: "ðŸ‡¬ðŸ‡§ English",
     },
     notifications: {
-      eyebrow: "Center",
       title: "Notifications",
       open: "Open notifications",
       unreadCount: "{count} unread",
       markRead: "Mark read",
       markAllRead: "Mark all read",
       clearRead: "Clear read",
-      empty: "No recent notifications.",
+      empty: "You’re all caught up.",
       types: {
         new_private_message: {
           title: "New message",
