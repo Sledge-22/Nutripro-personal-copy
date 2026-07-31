@@ -496,12 +496,6 @@ function StudentDashboardPage({ courses, certificates, progressFor, lessonSummar
   const unreadMessages = unreadNotifications.filter((notification) =>
     ["new_private_message", "new_message_request"].includes(notification.type),
   );
-  const recentFeedback = dashboardData.submissions
-    .filter((submission) => submission?.adminFeedback || submission?.admin_feedback || submission?.grade !== null)
-    .slice(0, 4);
-  const recentMessages = dashboardData.notifications
-    .filter((notification) => ["new_private_message", "new_message_request"].includes(notification.type))
-    .slice(0, 4);
 
   useEffect(() => {
     let mounted = true;
@@ -533,25 +527,12 @@ function StudentDashboardPage({ courses, certificates, progressFor, lessonSummar
 
   const summaryCards = [
     {
-      icon: "courses",
-      title: t("dashboard.coursesInProgress"),
-      value: courseSummaries.filter((entry) => entry.progress < 100).length,
-      text: t("dashboard.coursesInProgressText"),
-      path: ROUTES.student.courses,
-    },
-    {
-      icon: "play",
-      title: t("dashboard.nextLesson"),
-      value: nextLearningItem?.summary?.nextLesson ? "1" : "0",
-      text: nextLearningItem?.summary?.nextLesson?.title || t("dashboard.noNextLesson"),
-      path: nextLearningItem?.course?.id ? ROUTES.student.courseDetail(nextLearningItem.course.id) : ROUTES.student.courses,
-    },
-    {
       icon: "certificate",
       title: t("dashboard.pendingAssignments"),
       value: pendingAssignments.length,
       text: t("dashboard.pendingAssignmentsText"),
       path: ROUTES.student.courses,
+      visible: pendingAssignments.length > 0,
     },
     {
       icon: "community",
@@ -559,13 +540,7 @@ function StudentDashboardPage({ courses, certificates, progressFor, lessonSummar
       value: unreadMessages.length,
       text: t("dashboard.unreadMessagesText"),
       path: ROUTES.student.messages,
-    },
-    {
-      icon: "certificate",
-      title: t("dashboard.certificatesEarned"),
-      value: certificates.length,
-      text: t("dashboard.certificatesEarnedText"),
-      path: ROUTES.student.certificates,
+      visible: unreadMessages.length > 0,
     },
     {
       icon: "dashboard",
@@ -573,107 +548,91 @@ function StudentDashboardPage({ courses, certificates, progressFor, lessonSummar
       value: `${average}%`,
       text: t("dashboard.overallProgressText"),
       path: ROUTES.student.courses,
+      visible: courses.length > 0,
     },
-  ];
+  ].filter((card) => card.visible);
 
   return (
     <>
       <Welcome title={t("dashboard.studentWelcomeTitle")} text={t("dashboard.studentWelcomeText")} />
       {studentCoursesError ? <small className="field-note danger-text">{studentCoursesError}</small> : null}
       {!studentCoursesError && studentCourseDetailsWarning ? <small className="field-note">{studentCourseDetailsWarning}</small> : null}
-      <div className="dashboard-overview-grid">
-        {summaryCards.map((card) => (
-          <button key={card.title} type="button" className="dashboard-summary-card" onClick={() => goTo(card.path)}>
-            <span className="dashboard-summary-icon"><Icon name={card.icon} /></span>
-            <span>
-              <small>{card.title}</small>
-              <strong>{card.value}</strong>
-              <em>{card.text}</em>
-            </span>
-          </button>
-        ))}
-      </div>
-      <section className="section-card">
+      <section className="section-card dashboard-primary-action">
         <div className="section-heading">
           <div>
             <span className="eyebrow">{t("dashboard.continueLearning")}</span>
-            <h2>{t("dashboard.yourCourses")}</h2>
+            <h2>{nextLearningItem?.summary?.nextLesson?.title || t("dashboard.noNextLesson")}</h2>
+            <p>{nextLearningItem?.course?.title || t("dashboard.noUrgentStudentText")}</p>
           </div>
+          {nextLearningItem?.course?.id ? (
+            <button type="button" className="primary-btn" onClick={() => goTo(ROUTES.student.courseDetail(nextLearningItem.course.id))}>
+              {t("dashboard.continueCourse")} <Icon name="arrow" />
+            </button>
+          ) : null}
         </div>
-        <div className="mini-course-grid">
-          {courseSummaries.slice(0, 4).map(({ course, progress, summary }, index) => {
-            return (
-              <article key={course.id} className="clickable-mini-card" onClick={() => goTo(ROUTES.student.courseDetail(course.id))}>
-                <div className="course-index">{String(index + 1).padStart(2, "0")}</div>
-                <h3>{course.title}</h3>
-                <Progress value={progress} />
-                <span>{t("common.lessonsCompletedCount", { completed: summary.completedCount, total: summary.totalCount })}</span>
-                <span>
-                  {summary.courseComplete
-                    ? t("common.courseComplete")
-                    : summary.nextLesson
-                      ? t("common.nextLessonLabel", { title: summary.nextLesson.title })
-                      : t("common.noCourseYet")}
-                </span>
-              </article>
-            );
-          })}
-        </div>
+        {nextLearningItem ? (
+          <div className="dashboard-next-lesson-card">
+            <div className="course-index">01</div>
+            <div>
+              <strong>{nextLearningItem.course.title}</strong>
+              <span>
+                {nextLearningItem.summary.courseComplete
+                  ? t("common.courseComplete")
+                  : nextLearningItem.summary.nextLesson
+                    ? t("common.nextLessonLabel", { title: nextLearningItem.summary.nextLesson.title })
+                    : t("common.noCourseYet")}
+              </span>
+            </div>
+            <Progress value={nextLearningItem.progress} />
+          </div>
+        ) : (
+          <div className="dashboard-empty-state compact">
+            <span className="dashboard-summary-icon"><Icon name="check" /></span>
+            <div>
+              <strong>{t("dashboard.allCaughtUp")}</strong>
+              <p>{t("dashboard.noUrgentStudentText")}</p>
+            </div>
+          </div>
+        )}
       </section>
-      <div className="dashboard-detail-grid">
+      {summaryCards.length ? (
+        <div className="dashboard-overview-grid compact-dashboard-grid">
+          {summaryCards.map((card) => (
+            <button key={card.title} type="button" className="dashboard-summary-card" onClick={() => goTo(card.path)}>
+              <span className="dashboard-summary-icon"><Icon name={card.icon} /></span>
+              <span>
+                <small>{card.title}</small>
+                <strong>{card.value}</strong>
+                <em>{card.text}</em>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <section className="section-card dashboard-empty-state">
+          <span className="dashboard-summary-icon"><Icon name="check" /></span>
+          <div>
+            <span className="eyebrow">{t("dashboard.allCaughtUp")}</span>
+            <h2>{t("dashboard.noUrgentItems")}</h2>
+            <p>{t("dashboard.noUrgentStudentText")}</p>
+          </div>
+        </section>
+      )}
+      {pendingAssignments.length ? (
         <section className="section-card dashboard-feed-card">
           <span className="eyebrow">{t("dashboard.upcomingAssignments")}</span>
           <h2>{t("dashboard.pendingAssignments")}</h2>
           <div className="dashboard-feed-list">
-            {pendingAssignments.slice(0, 4).length ? pendingAssignments.slice(0, 4).map((entry) => (
+            {pendingAssignments.slice(0, 3).map((entry) => (
               <article key={`${entry.course.id}-${entry.module.id}`}>
                 <strong>{entry.assignment?.title || entry.module.title || t("common.assignment")}</strong>
                 <span>{entry.course.title}</span>
                 <small>{entry.module.title}</small>
               </article>
-            )) : <p className="field-note">{t("dashboard.noPendingAssignments")}</p>}
+            ))}
           </div>
         </section>
-        <section className="section-card dashboard-feed-card">
-          <span className="eyebrow">{t("dashboard.recentFeedback")}</span>
-          <h2>{t("common.feedback")}</h2>
-          <div className="dashboard-feed-list">
-            {recentFeedback.length ? recentFeedback.map((submission) => (
-              <article key={submission.id}>
-                <strong>{submission.assignmentTitle || t("common.assignment")}</strong>
-                <span>{submission.adminFeedback || submission.admin_feedback || t("dashboard.gradeReturned")}</span>
-                <small>{submission.grade !== null && submission.grade !== undefined ? `${t("common.grade")}: ${submission.grade}/100` : submission.status}</small>
-              </article>
-            )) : <p className="field-note">{t("dashboard.noRecentFeedback")}</p>}
-          </div>
-        </section>
-        <section className="section-card dashboard-feed-card">
-          <span className="eyebrow">{t("dashboard.recentMessages")}</span>
-          <h2>{t("common.messages")}</h2>
-          <div className="dashboard-feed-list">
-            {recentMessages.length ? recentMessages.map((notification) => (
-              <article key={notification.id}>
-                <strong>{notification.title || t(notification.titleKey)}</strong>
-                <span>{notification.description || t(notification.descriptionKey)}</span>
-                <small>{notification.createdAt || ""}</small>
-              </article>
-            )) : <p className="field-note">{t("dashboard.noUnreadMessages")}</p>}
-          </div>
-        </section>
-        <section className="section-card dashboard-feed-card">
-          <span className="eyebrow">{t("dashboard.earnedCertificates")}</span>
-          <h2>{t("common.certificates")}</h2>
-          <div className="dashboard-feed-list">
-            {certificates.slice(0, 4).length ? certificates.slice(0, 4).map((certificate) => (
-              <article key={certificate.id}>
-                <strong>{certificate.course}</strong>
-                <span>{certificate.number}</span>
-                <small>{certificate.issueDate}</small>
-              </article>
-            )) : <p className="field-note">{t("dashboard.noCertificatesYet")}</p>}
-          </div>
-        </section>
-      </div>
+      ) : null}
     </>
   );
 }

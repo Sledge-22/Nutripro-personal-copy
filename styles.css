@@ -370,6 +370,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   margin: 22px 0;
 }
 
+.compact-dashboard-grid {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 320px));
+}
+
 .dashboard-summary-card {
   min-height: 150px;
   display: flex;
@@ -434,6 +438,66 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 .dashboard-quick-actions {
   margin-top: 8px;
+}
+
+.dashboard-primary-action {
+  margin-top: 18px;
+}
+
+.dashboard-primary-action .section-heading {
+  align-items: center;
+  gap: 1rem;
+}
+
+.dashboard-next-lesson-card {
+  display: grid;
+  grid-template-columns: auto 1fr minmax(140px, 240px);
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid rgba(80, 210, 225, .22);
+  border-radius: 20px;
+  background: rgba(80, 210, 225, .06);
+}
+
+.dashboard-next-lesson-card strong,
+.dashboard-next-lesson-card span {
+  display: block;
+}
+
+.dashboard-next-lesson-card strong {
+  color: var(--color-text);
+  font-family: var(--font-heading);
+}
+
+.dashboard-next-lesson-card span {
+  margin-top: 4px;
+  color: var(--color-muted);
+}
+
+.dashboard-empty-state {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.dashboard-empty-state.compact {
+  margin-top: 0;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 18px;
+  background: rgba(255,255,255,.035);
+}
+
+.dashboard-empty-state h2,
+.dashboard-empty-state p {
+  margin: 0;
+}
+
+.dashboard-empty-state p {
+  margin-top: 6px;
+  color: var(--color-muted);
 }
 
 .dashboard-action-card {
@@ -528,6 +592,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
   .dashboard-summary-card {
     min-height: 132px;
+  }
+
+  .dashboard-primary-action .section-heading,
+  .dashboard-empty-state {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboard-next-lesson-card {
+    grid-template-columns: 1fr;
   }
 
   .preview-mode-banner {
