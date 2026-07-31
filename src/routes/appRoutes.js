@@ -22,6 +22,7 @@ export const ROUTES = {
     teamApplications: "/admin/team-applications",
     assignmentReviews: "/admin/assignment-reviews",
     certificates: "/admin/certificates",
+    courseVisibilityChecker: "/admin/course-visibility-checker",
     settings: "/admin/settings",
   },
   student: {

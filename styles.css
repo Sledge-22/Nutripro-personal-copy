@@ -3806,3 +3806,158 @@ select:focus {
   font-family: var(--font-body);
   font-size: 0.82rem;
 }
+
+.visibility-checker {
+  display: grid;
+  gap: 18px;
+}
+
+.visibility-checker-hero,
+.visibility-course-summary,
+.visibility-class-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.visibility-checker-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.visibility-checker-controls label {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  font-weight: 800;
+}
+
+.visibility-summary-meta,
+.visibility-card-actions,
+.visibility-module-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.visibility-summary-meta {
+  justify-content: flex-end;
+  color: var(--color-muted);
+  font-size: .86rem;
+}
+
+.visibility-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 999px;
+  color: var(--color-text);
+  background: rgba(255,255,255,.055);
+  font-size: .74rem;
+  font-weight: 900;
+}
+
+.visibility-badge.visible {
+  color: var(--color-success);
+  border-color: rgba(138, 208, 163, .24);
+  background: rgba(138, 208, 163, .12);
+}
+
+.visibility-badge.hidden,
+.visibility-badge.draft {
+  color: var(--color-warning);
+  border-color: rgba(217, 183, 111, .24);
+  background: rgba(217, 183, 111, .12);
+}
+
+.visibility-badge.locked,
+.visibility-badge.missing,
+.visibility-badge.archived {
+  color: var(--color-danger);
+  border-color: rgba(240, 139, 127, .24);
+  background: rgba(240, 139, 127, .12);
+}
+
+.visibility-badge.readonly {
+  color: var(--color-primary);
+  border-color: rgba(79, 202, 214, .26);
+  background: rgba(79, 202, 214, .12);
+}
+
+.visibility-why {
+  margin-top: 14px;
+  color: var(--color-muted);
+  font-size: .86rem;
+}
+
+.visibility-why strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-text);
+}
+
+.visibility-why ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.visibility-class-list,
+.visibility-module-list,
+.visibility-mini-list {
+  display: grid;
+  gap: 12px;
+}
+
+.visibility-module-list {
+  margin-top: 16px;
+}
+
+.visibility-module-row,
+.visibility-mini-list article {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 18px;
+  background: rgba(255,255,255,.035);
+}
+
+.visibility-module-row h4,
+.visibility-class-card h3,
+.visibility-course-summary h3 {
+  margin: 4px 0 0;
+}
+
+.visibility-module-row p,
+.visibility-course-summary p,
+.visibility-class-card p {
+  color: var(--color-muted);
+}
+
+.visibility-query-errors {
+  display: grid;
+  gap: 10px;
+}
+
+@media (max-width: 760px) {
+  .visibility-checker-hero,
+  .visibility-course-summary,
+  .visibility-class-header {
+    flex-direction: column;
+  }
+
+  .visibility-checker-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .visibility-summary-meta,
+  .visibility-card-actions {
+    justify-content: flex-start;
+  }
+}

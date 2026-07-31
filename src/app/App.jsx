@@ -684,6 +684,7 @@ export function App() {
         icon: "courses",
         children: [
           { path: ROUTES.admin.postCourses, label: t("common.courses"), icon: "courses" },
+          { path: ROUTES.admin.courseVisibilityChecker, label: t("common.courseVisibilityChecker"), icon: "courses" },
           { path: ROUTES.admin.assignmentReviews, label: t("common.assignmentReviews"), icon: "certificate" },
           { path: ROUTES.admin.certificates, label: t("common.certificates"), icon: "certificate" },
         ],
@@ -754,6 +755,7 @@ export function App() {
       [ROUTES.admin.dashboard]: t("common.dashboard"),
       [ROUTES.admin.users]: t("common.usersAdmin"),
       [ROUTES.admin.postCourses]: t("common.postCourses"),
+      [ROUTES.admin.courseVisibilityChecker]: t("common.courseVisibilityChecker"),
       [ROUTES.admin.community]: t("common.community"),
       [ROUTES.admin.messages]: t("common.messages"),
       [ROUTES.admin.teamApplications]: t("common.teamApplications"),

@@ -4,11 +4,14 @@ import { Icon, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
 import { PrivateMessagesPage } from "../components/PrivateMessagesPage.jsx";
 import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
-import { getSubmissionsForAdmin, reviewSubmission } from "../services/assignmentService.js";
+import { getStudentSubmission, getSubmissionsForAdmin, reviewSubmission } from "../services/assignmentService.js";
 import { recordAdminAuditLog, getAdminAuditLogs } from "../services/auditLogService.js";
 import { deleteCourseDraft, getCourseDrafts, markCourseDraftPublished, saveCourseDraft } from "../services/courseDraftService.js";
 import { getTeamApplications, updateTeamApplication } from "../services/teamApplicationService.js";
 import { getNotifications } from "../services/notificationService.js";
+import { getClassesByCourse } from "../services/courseClassService.js";
+import { getCourseEnrollments } from "../services/enrollmentService.js";
+import { getStudentProgress } from "../services/progressService.js";
 import {
   createGdprDataRequest,
   exportUserDataBundle,
@@ -34,6 +37,7 @@ import {
   isVimeoUrl,
 } from "../utils/mediaLinks.js";
 import { buildAdminErrorState, buildUserFacingError } from "../utils/errorDisplay.js";
+import { getSequentialLessonStates } from "../utils/sequentialLessonProgress.js";
 
 function createId() {
   return Date.now() + Math.floor(Math.random() * 100000);
@@ -1016,6 +1020,475 @@ function createUserDraft() {
   };
 }
 
+function normalizeVisibilityStatus(status, fallback = "draft") {
+  const normalizedStatus = `${status ?? ""}`.trim().toLowerCase();
+  if (["published", "draft", "archived", "active", "inactive", "suspended"].includes(normalizedStatus)) {
+    return normalizedStatus;
+  }
+  return fallback;
+}
+
+function isActiveUser(user) {
+  return normalizeVisibilityStatus(user?.statusKey ?? user?.status, "active") === "active";
+}
+
+function getUserDisplayName(user) {
+  return firstFilledValue(user?.full_name, user?.fullName, user?.name, user?.displayName, user?.username, user?.email);
+}
+
+function isStudentUser(user) {
+  return `${user?.roleKey ?? user?.role ?? ""}`.trim().toLowerCase() === "student";
+}
+
+function sortVisibilityEntries(left, right) {
+  const leftOrder = Number(left?.sort_order ?? left?.sortOrder ?? 0);
+  const rightOrder = Number(right?.sort_order ?? right?.sortOrder ?? 0);
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+  return String(left?.title ?? left?.id ?? "").localeCompare(String(right?.title ?? right?.id ?? ""), undefined, { numeric: true });
+}
+
+function errorLooksLikeRls(error) {
+  const details = `${error?.message ?? ""} ${error?.details ?? ""} ${error?.hint ?? ""}`.toLowerCase();
+  return details.includes("row-level security") || details.includes("permission denied") || details.includes("policy");
+}
+
+function getVisibilityErrorDetail(error) {
+  return [error?.message, error?.code, error?.details, error?.hint].filter(Boolean).join("\n");
+}
+
+function CourseVisibilityBadge({ tone, children }) {
+  return <span className={`visibility-badge ${tone}`}>{children}</span>;
+}
+
+function CourseVisibilityCheckerPage({ courses, users }) {
+  const { t, translateStatus } = useLanguage();
+  const safeCourses = React.useMemo(() => safeArray(courses), [courses]);
+  const students = React.useMemo(() => safeArray(users).filter(isStudentUser), [users]);
+  const [selectedCourseId, setSelectedCourseId] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [report, setReport] = useState(null);
+  const [queryErrors, setQueryErrors] = useState([]);
+
+  useEffect(() => {
+    if (!selectedCourseId && safeCourses[0]?.id) {
+      setSelectedCourseId(String(safeCourses[0].id));
+    }
+  }, [safeCourses, selectedCourseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadReport() {
+      const selectedCourse = safeCourses.find((course) => String(course?.id) === String(selectedCourseId)) ?? null;
+      if (!selectedCourse) {
+        setReport(null);
+        setQueryErrors([]);
+        return;
+      }
+
+      setLoading(true);
+      const nextErrors = [];
+
+      const [classesResult, modulesResult, enrollmentsResult] = await Promise.allSettled([
+        getClassesByCourse(selectedCourse.id),
+        getModulesByCourse(selectedCourse.id),
+        getCourseEnrollments(selectedCourse.id),
+      ]);
+
+      if (cancelled) return;
+
+      if (classesResult.status === "rejected") {
+        console.error("[CourseVisibilityChecker] Loading classes failed:", classesResult.reason);
+        nextErrors.push({ key: "classes", error: classesResult.reason });
+      }
+      if (modulesResult.status === "rejected") {
+        console.error("[CourseVisibilityChecker] Loading modules failed:", modulesResult.reason);
+        nextErrors.push({ key: "modules", error: modulesResult.reason });
+      }
+      if (enrollmentsResult.status === "rejected") {
+        console.error("[CourseVisibilityChecker] Loading enrollments failed:", enrollmentsResult.reason);
+        nextErrors.push({ key: "enrollments", error: enrollmentsResult.reason });
+      }
+
+      const loadedClasses = classesResult.status === "fulfilled" ? classesResult.value : [];
+      const loadedModules = modulesResult.status === "fulfilled" ? modulesResult.value : [];
+      const classes = (loadedClasses.length ? loadedClasses : selectedCourse.classes ?? []).sort(sortVisibilityEntries);
+      const modules = (loadedModules.length ? loadedModules : selectedCourse.modules ?? []).sort(sortVisibilityEntries);
+      const enrollments = enrollmentsResult.status === "fulfilled" ? enrollmentsResult.value : [];
+      const selectedStudent = students.find((student) => String(student?.id) === String(selectedStudentId)) ?? null;
+      let progress = {};
+      const submissions = new Map();
+
+      if (selectedStudent?.id) {
+        try {
+          progress = await getStudentProgress(selectedStudent.id);
+        } catch (error) {
+          console.error("[CourseVisibilityChecker] Loading student progress failed:", error);
+          nextErrors.push({ key: "progress", error });
+        }
+
+        const assignmentModules = modules.filter((module) => module?.assignment?.id);
+        const submissionResults = await Promise.allSettled(
+          assignmentModules.map(async (module) => [
+            String(module.assignment.id),
+            await getStudentSubmission(module.assignment.id, selectedStudent.id),
+          ]),
+        );
+
+        submissionResults.forEach((submissionResult) => {
+          if (submissionResult.status === "fulfilled") {
+            submissions.set(submissionResult.value[0], submissionResult.value[1]);
+          } else {
+            console.error("[CourseVisibilityChecker] Loading student assignment submission failed:", submissionResult.reason);
+            nextErrors.push({ key: "submissions", error: submissionResult.reason });
+          }
+        });
+      }
+
+      const courseStatus = normalizeVisibilityStatus(selectedCourse.status, "draft");
+      const activeEnrollment = selectedStudent
+        ? enrollments.find(
+          (enrollment) =>
+            String(enrollment?.student_id ?? enrollment?.studentId) === String(selectedStudent.id) &&
+            normalizeVisibilityStatus(enrollment?.status, "active") === "active",
+        ) ?? null
+        : null;
+      const studentBlocked = selectedStudent ? !isActiveUser(selectedStudent) : false;
+      const enrollmentBlocked = Boolean(selectedStudent) && !activeEnrollment;
+      const courseHidden = courseStatus !== "published";
+      const classById = new Map(classes.map((courseClass) => [String(courseClass.id), courseClass]));
+      const activeClasses = classes.filter((courseClass) => normalizeVisibilityStatus(courseClass.status, "published") === "published");
+      const activeModules = modules.filter((module) => {
+        const moduleStatus = normalizeVisibilityStatus(module.status, "published");
+        const classId = String(module.class_id ?? module.classId ?? "");
+        const moduleCourseId = module.course_id ?? module.courseId;
+        return (
+          moduleStatus === "published" &&
+          moduleCourseId &&
+          String(moduleCourseId) === String(selectedCourse.id) &&
+          classId &&
+          normalizeVisibilityStatus(classById.get(classId)?.status, "published") === "published"
+        );
+      });
+      const sequentialState = getSequentialLessonStates({
+        classes: activeClasses,
+        modules: activeModules,
+        progress,
+        submissions: selectedStudent ? submissions : null,
+      });
+
+      const moduleReports = modules.map((module) => {
+        const moduleStatus = normalizeVisibilityStatus(module.status, "published");
+        const moduleCourseId = module.course_id ?? module.courseId ?? "";
+        const classId = String(module.class_id ?? module.classId ?? "");
+        const linkedClass = classById.get(classId) ?? null;
+        const linkedClassStatus = normalizeVisibilityStatus(linkedClass?.status, "published");
+        const sequentialLessonState = sequentialState.lessonStates.get(String(module.id));
+        const reasons = [];
+        let tone = "visible";
+        let labelKey = "visible";
+
+        if (courseHidden) reasons.push(t("visibilityChecker.whyCourseNotPublished"));
+        if (selectedStudent && studentBlocked) reasons.push(t("visibilityChecker.whyStudentInactive"));
+        if (selectedStudent && enrollmentBlocked) reasons.push(t("visibilityChecker.whyNotEnrolled"));
+        if (!moduleCourseId) reasons.push(t("visibilityChecker.whyMissingCourseId"));
+        if (moduleCourseId && String(moduleCourseId) !== String(selectedCourse.id)) reasons.push(t("visibilityChecker.whyWrongCourseId"));
+        if (!classId) reasons.push(t("visibilityChecker.whyMissingClassId"));
+        if (classId && !linkedClass) reasons.push(t("visibilityChecker.whyUnknownClass"));
+        if (linkedClassStatus === "archived") reasons.push(t("visibilityChecker.whyClassArchived"));
+        if (linkedClassStatus === "draft") reasons.push(t("visibilityChecker.whyClassDraft"));
+        if (moduleStatus === "archived") reasons.push(t("visibilityChecker.whyModuleArchived"));
+        if (moduleStatus === "draft") reasons.push(t("visibilityChecker.whyModuleDraft"));
+
+        if (moduleStatus === "archived") {
+          tone = "archived";
+          labelKey = "archived";
+        } else if (!moduleCourseId || !classId || (classId && !linkedClass) || (moduleCourseId && String(moduleCourseId) !== String(selectedCourse.id))) {
+          tone = "missing";
+          labelKey = "missingSetup";
+        } else if (courseHidden || studentBlocked || enrollmentBlocked || linkedClassStatus !== "published" || moduleStatus !== "published") {
+          tone = "hidden";
+          labelKey = courseStatus === "draft" || moduleStatus === "draft" || linkedClassStatus === "draft" ? "draft" : "hidden";
+        } else if (selectedStudent && sequentialLessonState?.isLocked) {
+          tone = "locked";
+          labelKey = "locked";
+          reasons.push(
+            sequentialLessonState.lockReason === "previous-class"
+              ? t("visibilityChecker.whyPreviousClass")
+              : t("visibilityChecker.whyPreviousLesson"),
+          );
+        }
+
+        return {
+          module,
+          classId,
+          linkedClass,
+          labelKey,
+          tone,
+          reasons: reasons.length ? reasons : [t("visibilityChecker.whyVisible")],
+          sequentialLessonState,
+          assignmentRequired: Boolean(module.requires_assignment ?? module.requiresAssignment ?? module.assignment?.id),
+          assignment: module.assignment ?? null,
+        };
+      });
+
+      const classReports = classes.map((courseClass) => {
+        const classStatus = normalizeVisibilityStatus(courseClass.status, "published");
+        const reasons = [];
+        let tone = "visible";
+        let labelKey = "visible";
+
+        if (courseHidden) reasons.push(t("visibilityChecker.whyCourseNotPublished"));
+        if (selectedStudent && studentBlocked) reasons.push(t("visibilityChecker.whyStudentInactive"));
+        if (selectedStudent && enrollmentBlocked) reasons.push(t("visibilityChecker.whyNotEnrolled"));
+        if (classStatus === "archived") reasons.push(t("visibilityChecker.whyClassArchived"));
+        if (classStatus === "draft") reasons.push(t("visibilityChecker.whyClassDraft"));
+
+        if (classStatus === "archived") {
+          tone = "archived";
+          labelKey = "archived";
+        } else if (courseHidden || studentBlocked || enrollmentBlocked || classStatus !== "published") {
+          tone = "hidden";
+          labelKey = classStatus === "draft" ? "draft" : "hidden";
+        }
+
+        return {
+          courseClass,
+          labelKey,
+          tone,
+          reasons: reasons.length ? reasons : [t("visibilityChecker.whyVisible")],
+          modules: moduleReports.filter((moduleReport) => String(moduleReport.classId) === String(courseClass.id)),
+        };
+      });
+
+      const ungroupedModuleReports = moduleReports.filter((moduleReport) => !moduleReport.linkedClass);
+      const setupIssues = moduleReports.filter((moduleReport) => moduleReport.tone === "missing");
+
+      setQueryErrors(nextErrors);
+      setReport({
+        course: selectedCourse,
+        courseStatus,
+        selectedStudent,
+        activeEnrollment,
+        courseTone: courseHidden || studentBlocked || enrollmentBlocked ? "hidden" : "visible",
+        courseLabelKey: courseStatus === "archived" ? "archived" : courseStatus === "draft" ? "draft" : courseHidden || enrollmentBlocked || studentBlocked ? "hidden" : "visible",
+        courseReasons: [
+          ...(courseHidden ? [t("visibilityChecker.whyCourseNotPublished")] : []),
+          ...(selectedStudent && studentBlocked ? [t("visibilityChecker.whyStudentInactive")] : []),
+          ...(selectedStudent && enrollmentBlocked ? [t("visibilityChecker.whyNotEnrolled")] : []),
+        ],
+        classReports,
+        moduleReports,
+        ungroupedModuleReports,
+        setupIssues,
+        sequentialState,
+      });
+      setLoading(false);
+    }
+
+    void loadReport();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCourseId, selectedStudentId, safeCourses, students, t]);
+
+  const selectedCourse = safeCourses.find((course) => String(course?.id) === String(selectedCourseId)) ?? null;
+
+  return (
+    <div className="visibility-checker">
+      <section className="section-card visibility-checker-hero">
+        <div>
+          <span className="eyebrow">{t("visibilityChecker.eyebrow")}</span>
+          <h2>{t("visibilityChecker.title")}</h2>
+          <p>{t("visibilityChecker.description")}</p>
+        </div>
+        <CourseVisibilityBadge tone="readonly">{t("visibilityChecker.readOnly")}</CourseVisibilityBadge>
+      </section>
+
+      <section className="section-card visibility-checker-controls">
+        <label>
+          <span>{t("visibilityChecker.selectCourse")}</span>
+          <select value={selectedCourseId} onChange={(event) => setSelectedCourseId(event.target.value)}>
+            {safeCourses.map((course) => (
+              <option key={course.id} value={course.id}>{course.title || t("common.course")}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>{t("visibilityChecker.selectStudent")}</span>
+          <select value={selectedStudentId} onChange={(event) => setSelectedStudentId(event.target.value)}>
+            <option value="">{t("visibilityChecker.noStudentSelected")}</option>
+            {students.map((student) => (
+              <option key={student.id} value={student.id}>
+                {getUserDisplayName(student)} · {translateStatus(student.statusKey ?? student.status)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+
+      {!safeCourses.length ? (
+        <section className="empty-state-card"><p>{t("visibilityChecker.noCourses")}</p></section>
+      ) : null}
+
+      {loading ? <section className="section-card"><p className="field-note">{t("common.loading")}</p></section> : null}
+
+      {queryErrors.length ? (
+        <section className="section-card visibility-query-errors">
+          <span className="eyebrow">{t("visibilityChecker.queryWarnings")}</span>
+          <h3>{t("visibilityChecker.databaseAccessWarnings")}</h3>
+          {queryErrors.map((entry, index) => (
+            <AdminErrorMessage
+              key={`${entry.key}-${index}`}
+              detailsLabel={t("common.details")}
+              error={{
+                message: errorLooksLikeRls(entry.error)
+                  ? t("visibilityChecker.rlsMayBeBlocking", { area: t(`visibilityChecker.queryAreas.${entry.key}`) })
+                  : t("visibilityChecker.queryFailed", { area: t(`visibilityChecker.queryAreas.${entry.key}`) }),
+                details: getVisibilityErrorDetail(entry.error),
+              }}
+            />
+          ))}
+        </section>
+      ) : null}
+
+      {selectedCourse && report && !loading ? (
+        <>
+          <section className="section-card visibility-course-summary">
+            <div>
+              <span className="eyebrow">{t("common.course")}</span>
+              <h3>{selectedCourse.title}</h3>
+              <p>{selectedCourse.description}</p>
+            </div>
+            <div className="visibility-summary-meta">
+              <CourseVisibilityBadge tone={report.courseTone}>{t(`visibilityChecker.labels.${report.courseLabelKey}`)}</CourseVisibilityBadge>
+              <span>{t("visibilityChecker.courseStatus", { status: translateStatus(report.courseStatus) })}</span>
+              <span>
+                {report.selectedStudent
+                  ? report.activeEnrollment
+                    ? t("visibilityChecker.enrollmentActive", { student: getUserDisplayName(report.selectedStudent) })
+                    : t("visibilityChecker.enrollmentMissing", { student: getUserDisplayName(report.selectedStudent) })
+                  : t("visibilityChecker.studentOptional")}
+              </span>
+            </div>
+            <div className="visibility-why">
+              <strong>{t("visibilityChecker.why")}</strong>
+              <ul>
+                {(report.courseReasons.length ? report.courseReasons : [t("visibilityChecker.whyVisible")]).map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          </section>
+
+          {report.setupIssues.length ? (
+            <section className="section-card visibility-setup-issues">
+              <span className="eyebrow">{t("visibilityChecker.missingSetup")}</span>
+              <h3>{t("visibilityChecker.setupIssuesTitle")}</h3>
+              <div className="visibility-mini-list">
+                {report.setupIssues.map(({ module, reasons }) => (
+                  <article key={module.id}>
+                    <strong>{module.title || t("common.module")}</strong>
+                    <small>{reasons.join(" ")}</small>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="visibility-class-list">
+            {report.classReports.map(({ courseClass, labelKey, tone, reasons, modules }) => (
+              <article className="section-card visibility-class-card" key={courseClass.id}>
+                <div className="visibility-class-header">
+                  <div>
+                    <span className="eyebrow">{t("common.class")}</span>
+                    <h3>{courseClass.title}</h3>
+                    {courseClass.description ? <p>{courseClass.description}</p> : null}
+                  </div>
+                  <div className="visibility-card-actions">
+                    <CourseVisibilityBadge tone={tone}>{t(`visibilityChecker.labels.${labelKey}`)}</CourseVisibilityBadge>
+                    <span className="subtle-badge">{t("visibilityChecker.lessonCount", { count: modules.length })}</span>
+                  </div>
+                </div>
+                <div className="visibility-why">
+                  <strong>{t("visibilityChecker.why")}</strong>
+                  <ul>{reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+                </div>
+                <div className="visibility-module-list">
+                  {modules.length ? modules.map((moduleReport) => <VisibilityModuleRow key={moduleReport.module.id} report={moduleReport} />) : (
+                    <p className="empty-copy">{t("visibilityChecker.noLessonsInClass")}</p>
+                  )}
+                </div>
+              </article>
+            ))}
+
+            {report.ungroupedModuleReports.length ? (
+              <article className="section-card visibility-class-card">
+                <div className="visibility-class-header">
+                  <div>
+                    <span className="eyebrow">{t("visibilityChecker.missingSetup")}</span>
+                    <h3>{t("visibilityChecker.ungroupedLessons")}</h3>
+                  </div>
+                  <CourseVisibilityBadge tone="missing">{t("visibilityChecker.labels.missingSetup")}</CourseVisibilityBadge>
+                </div>
+                <div className="visibility-module-list">
+                  {report.ungroupedModuleReports.map((moduleReport) => <VisibilityModuleRow key={moduleReport.module.id} report={moduleReport} />)}
+                </div>
+              </article>
+            ) : null}
+          </section>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function VisibilityModuleRow({ report }) {
+  const { t, translateStatus } = useLanguage();
+  const module = report.module;
+  const assignmentTitle = firstFilledValue(
+    report.assignment?.title_es,
+    report.assignment?.titleEs,
+    report.assignment?.title_en,
+    report.assignment?.titleEn,
+    report.assignment?.title,
+    module.assignment_instructions,
+    module.assignmentInstructions,
+  );
+
+  return (
+    <article className="visibility-module-row">
+      <div>
+        <span className="eyebrow">{t("common.module")}</span>
+        <h4>{module.title || t("common.module")}</h4>
+        {module.description ? <p>{module.description}</p> : null}
+      </div>
+      <div className="visibility-module-meta">
+        <CourseVisibilityBadge tone={report.tone}>{t(`visibilityChecker.labels.${report.labelKey}`)}</CourseVisibilityBadge>
+        <span>{t("visibilityChecker.moduleStatus", { status: translateStatus(module.status || "published") })}</span>
+        <span>
+          {report.assignmentRequired
+            ? t("visibilityChecker.assignmentRequired", { title: assignmentTitle || t("common.assignment") })
+            : t("visibilityChecker.assignmentNotRequired")}
+        </span>
+        {report.sequentialLessonState ? (
+          <span>
+            {report.sequentialLessonState.isLocked
+              ? t("visibilityChecker.sequentialLocked")
+              : t("visibilityChecker.sequentialUnlocked")}
+          </span>
+        ) : null}
+      </div>
+      <div className="visibility-why">
+        <strong>{t("visibilityChecker.why")}</strong>
+        <ul>{report.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+      </div>
+    </article>
+  );
+}
+
 export function AdminWorkspacePage({
   pathname,
   users,
@@ -1080,6 +1553,10 @@ export function AdminWorkspacePage({
         />
       </>
     );
+  }
+
+  if (pathname === ROUTES.admin.courseVisibilityChecker) {
+    return <CourseVisibilityCheckerPage courses={courses} users={users} />;
   }
 
   if (pathname === "/admin/community") {
