@@ -1991,12 +1991,26 @@ dt,
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 4px 6px;
+  border: 0;
   color: var(--color-primary);
+  background: transparent;
   font-size: .75rem;
   font-weight: 900;
   letter-spacing: .08em;
   text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mobile-nav-group-label span:not(.nav-group-chevron) {
+  flex: 1;
+}
+
+.mobile-nav-group-children {
+  display: grid;
+  gap: 6px;
 }
 
 .content {

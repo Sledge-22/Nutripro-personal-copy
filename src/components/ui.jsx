@@ -78,7 +78,9 @@ function isNavItemActive(item, currentPath) {
 export function Header({ role, title, detailTitle, profile, navItems = [], currentPath = "", onNavigate, onLogout }) {
   const { t, translateRole } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileClosedGroups, setMobileClosedGroups] = useState({});
   const mobileMenuRef = useRef(null);
+  const activeMobileGroupId = navItems.find((item) => isNavGroup(item) && isNavItemActive(item, currentPath))?.id ?? "";
   const profileName = profile?.name || (role === "Admin" ? t("header.AlexMorgan") : t("header.MayaLaurent"));
   const initials = (profileName || "")
     .split(" ")
@@ -117,6 +119,11 @@ export function Header({ role, title, detailTitle, profile, navItems = [], curre
   const handleMobileLogout = () => {
     setMobileMenuOpen(false);
     onLogout?.();
+  };
+
+  const toggleMobileGroup = (groupId) => {
+    if (groupId === activeMobileGroupId) return;
+    setMobileClosedGroups((current) => ({ ...current, [groupId]: !current[groupId] }));
   };
 
   return (
@@ -172,20 +179,42 @@ export function Header({ role, title, detailTitle, profile, navItems = [], curre
             <nav className="mobile-nav-list" aria-label={`${translateRole(role)} navigation`}>
               {navItems.map((item) => (
                 isNavGroup(item) ? (
-                  <div key={item.id} className={`mobile-nav-group ${isNavItemActive(item, currentPath) ? "active" : ""}`}>
-                    <span className="mobile-nav-group-label"><Icon name={item.icon} />{item.label}</span>
-                    {item.children.map((child) => (
-                      <button
-                        key={child.path}
-                        className={`nav-item nav-child-item ${currentPath === child.path ? "active" : ""}`}
-                        aria-current={currentPath === child.path ? "page" : undefined}
-                        onClick={() => handleMobileNavigate(child.path)}
-                      >
-                        <Icon name={child.icon} />
-                        {child.label}
-                      </button>
-                    ))}
-                  </div>
+                  (() => {
+                    const groupActive = isNavItemActive(item, currentPath);
+                    const groupOpen = groupActive || !mobileClosedGroups[item.id];
+                    const panelId = `mobile-nav-group-${item.id}`;
+
+                    return (
+                      <div key={item.id} className={`mobile-nav-group ${groupActive ? "active" : ""}`}>
+                        <button
+                          type="button"
+                          className="mobile-nav-group-label"
+                          aria-expanded={groupOpen}
+                          aria-controls={panelId}
+                          onClick={() => toggleMobileGroup(item.id)}
+                        >
+                          <Icon name={item.icon} />
+                          <span>{item.label}</span>
+                          <span className={`nav-group-chevron ${groupOpen ? "open" : ""}`}><Icon name="chevron" size={16} /></span>
+                        </button>
+                        {groupOpen ? (
+                          <div id={panelId} className="mobile-nav-group-children">
+                            {item.children.map((child) => (
+                              <button
+                                key={child.path}
+                                className={`nav-item nav-child-item ${currentPath === child.path ? "active" : ""}`}
+                                aria-current={currentPath === child.path ? "page" : undefined}
+                                onClick={() => handleMobileNavigate(child.path)}
+                              >
+                                <Icon name={child.icon} />
+                                {child.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })()
                 ) : (
                   <button
                     key={item.path}

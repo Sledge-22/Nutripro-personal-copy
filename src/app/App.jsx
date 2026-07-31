@@ -666,54 +666,93 @@ export function App() {
     return toRoleLabel(currentUser?.roleKey ?? currentUser?.role);
   }, [currentUser]);
 
-  const adminNav = useMemo(() => ([
-    { path: ROUTES.admin.dashboard, label: t("common.dashboard"), icon: "dashboard" },
-    {
-      id: "learning",
-      label: t("common.learning"),
-      icon: "courses",
-      children: [
-        { path: ROUTES.admin.postCourses, label: t("common.courses"), icon: "courses" },
-        { path: ROUTES.admin.assignmentReviews, label: t("common.assignmentReviews"), icon: "certificate" },
-        { path: ROUTES.admin.certificates, label: t("common.certificates"), icon: "certificate" },
-      ],
-    },
-    {
-      id: "people",
-      label: t("common.people"),
-      icon: "users",
-      children: [
-        { path: ROUTES.admin.users, label: t("common.users"), icon: "users" },
-        { path: ROUTES.admin.teamApplications, label: t("common.teamApplications"), icon: "users" },
-      ],
-    },
-    {
-      id: "communication",
-      label: t("common.communication"),
-      icon: "community",
-      children: [
-        { path: ROUTES.admin.messages, label: t("common.messages"), icon: "community" },
-        { path: ROUTES.admin.community, label: t("common.community"), icon: "community" },
-      ],
-    },
-    {
-      id: "system",
-      label: t("common.system"),
-      icon: "dashboard",
-      children: [
-        { path: ROUTES.admin.settings, label: t("common.settings"), icon: "dashboard" },
-      ],
-    },
-  ]), [t]);
+  const navigationByRole = useMemo(() => ({
+    admin: [
+      {
+        id: "dashboard",
+        label: t("common.dashboard"),
+        icon: "dashboard",
+        children: [
+          { path: ROUTES.admin.dashboard, label: t("common.dashboard"), icon: "dashboard" },
+        ],
+      },
+      {
+        id: "learning",
+        label: t("common.learning"),
+        icon: "courses",
+        children: [
+          { path: ROUTES.admin.postCourses, label: t("common.courses"), icon: "courses" },
+          { path: ROUTES.admin.assignmentReviews, label: t("common.assignmentReviews"), icon: "certificate" },
+          { path: ROUTES.admin.certificates, label: t("common.certificates"), icon: "certificate" },
+        ],
+      },
+      {
+        id: "people",
+        label: t("common.people"),
+        icon: "users",
+        children: [
+          { path: ROUTES.admin.users, label: t("common.users"), icon: "users" },
+          { path: ROUTES.admin.teamApplications, label: t("common.teamApplications"), icon: "users" },
+        ],
+      },
+      {
+        id: "communication",
+        label: t("common.communication"),
+        icon: "community",
+        children: [
+          { path: ROUTES.admin.messages, label: t("common.messages"), icon: "community" },
+          { path: ROUTES.admin.community, label: t("common.community"), icon: "community" },
+        ],
+      },
+      {
+        id: "system",
+        label: t("common.system"),
+        icon: "dashboard",
+        children: [
+          { path: ROUTES.admin.settings, label: t("common.settings"), icon: "dashboard" },
+        ],
+      },
+    ],
+    student: [
+      {
+        id: "dashboard",
+        label: t("common.dashboard"),
+        icon: "dashboard",
+        children: [
+          { path: ROUTES.student.dashboard, label: t("common.dashboard"), icon: "dashboard" },
+        ],
+      },
+      {
+        id: "learning",
+        label: t("common.learning"),
+        icon: "courses",
+        children: [
+          { path: ROUTES.student.courses, label: t("common.myCourses"), icon: "courses" },
+          { path: ROUTES.student.certificates, label: t("common.certificates"), icon: "certificate" },
+        ],
+      },
+      {
+        id: "communication",
+        label: t("common.communication"),
+        icon: "community",
+        children: [
+          { path: ROUTES.student.messages, label: t("common.messages"), icon: "community" },
+          { path: ROUTES.student.community, label: t("common.community"), icon: "community" },
+        ],
+      },
+      {
+        id: "account",
+        label: t("common.account"),
+        icon: "users",
+        children: [
+          { path: ROUTES.student.profile, label: t("common.profile"), icon: "users" },
+        ],
+      },
+    ],
+  }), [t]);
 
-  const studentNav = useMemo(() => ([
-    { path: ROUTES.student.dashboard, label: t("common.dashboard"), icon: "dashboard" },
-    { path: ROUTES.student.profile, label: t("common.myProfile"), icon: "users" },
-    { path: ROUTES.student.certificates, label: t("common.certificates"), icon: "certificate" },
-    { path: ROUTES.student.courses, label: t("common.courses"), icon: "courses" },
-    { path: ROUTES.student.community, label: t("common.community"), icon: "community" },
-    { path: ROUTES.student.messages, label: t("common.messages"), icon: "community" },
-  ]), [t]);
+  const activeNavRole = normalizeRoleKey(currentUser?.roleKey ?? currentUser?.role);
+  const activeNavItems = navigationByRole[activeNavRole] ?? [];
 
   const title = useMemo(() => {
     const map = {
@@ -1526,5 +1565,5 @@ export function App() {
       ? title
       : null;
 
-    return <div className="app-shell"><Sidebar role={role} navItems={role === "Admin" ? adminNav : studentNav} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={headerTitle} detailTitle={detailTitle} profile={currentUser} navItems={role === "Admin" ? adminNav : studentNav} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} coursesError={coursesError} certificates={certificates} posts={posts} currentUser={currentUser} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} studentCourseDetailsWarning={studentCourseDetailsWarning} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+    return <div className="app-shell"><Sidebar role={role} navItems={activeNavItems} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={headerTitle} detailTitle={detailTitle} profile={currentUser} navItems={activeNavItems} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} coursesError={coursesError} certificates={certificates} posts={posts} currentUser={currentUser} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} studentCourseDetailsWarning={studentCourseDetailsWarning} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
 }
