@@ -8,6 +8,7 @@ import {
   getPrivateMessages,
   reportPrivateConversation,
   respondToMessageRequest,
+  searchPrivateMessageUsersForAdmin,
   sendPrivateMessage,
 } from "../services/privateMessagingService.js";
 
@@ -24,6 +25,12 @@ function getMessagesCopy(language) {
       subject: "Asunto",
       recipient: "Destinatario",
       selectRecipient: "Seleccionar destinatario",
+      searchRecipient: "Buscar por nombre, usuario o email",
+      selectedRecipient: "Destinatario seleccionado",
+      changeRecipient: "Cambiar",
+      selectRecipientRequired: "SeleccionÃ¡ un destinatario.",
+      noMatchingUsers: "No se encontraron usuarios.",
+      searching: "Buscando...",
       admins: "Administradores",
       classmates: "Compañeros",
       users: "Usuarios",
@@ -71,6 +78,12 @@ function getMessagesCopy(language) {
     subject: "Subject",
     recipient: "Recipient",
     selectRecipient: "Select recipient",
+    searchRecipient: "Search by name, username, or email",
+    selectedRecipient: "Selected recipient",
+    changeRecipient: "Change",
+    selectRecipientRequired: "Please select a recipient.",
+    noMatchingUsers: "No matching users found.",
+    searching: "Searching...",
     admins: "Admins",
     classmates: "Classmates",
     users: "Users",
@@ -126,6 +139,13 @@ function displayNameForUser(user = {}) {
   return user.name || user.username || user.email || "User";
 }
 
+function displayRoleForUser(user = {}, language = "es") {
+  const role = `${user.roleKey ?? user.role ?? ""}`.toLowerCase();
+  if (role === "admin") return language === "es" ? "Administrador" : "Admin";
+  if (role === "student") return language === "es" ? "Estudiante" : "Student";
+  return role ? role.charAt(0).toUpperCase() + role.slice(1) : "";
+}
+
 function getConversationTitle(conversation, copy) {
   return conversation?.participantNames || conversation?.subject || copy.noConversationSelected;
 }
@@ -160,11 +180,17 @@ export function PrivateMessagesPage({ currentUser }) {
   const [error, setError] = useState("");
   const [errorDetails, setErrorDetails] = useState("");
   const [notice, setNotice] = useState("");
-  const [composeDraft, setComposeDraft] = useState({ recipientId: "", subject: "", body: "" });
+  const [composeDraft, setComposeDraft] = useState({ subject: "", body: "" });
+  const [recipientSearchText, setRecipientSearchText] = useState("");
+  const [selectedRecipient, setSelectedRecipient] = useState(null);
+  const [recipientSearchResults, setRecipientSearchResults] = useState([]);
+  const [recipientSearchOpen, setRecipientSearchOpen] = useState(false);
+  const [recipientSearchLoading, setRecipientSearchLoading] = useState(false);
   const [replyDraft, setReplyDraft] = useState("");
   const [sending, setSending] = useState(false);
 
   const currentUserId = currentUser?.id ?? "";
+  const currentUserIsAdmin = isAdmin(currentUser);
   const userCanSend = isActive(currentUser);
   const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId) ?? null;
   const selectedIsPendingRequest =
@@ -178,7 +204,7 @@ export function PrivateMessagesPage({ currentUser }) {
     !selectedConversation ||
     !userCanSend ||
     selectedIsDeclined ||
-    (!isAdmin(currentUser) && selectedConversation.requestStatus === "pending");
+    (!currentUserIsAdmin && selectedConversation.requestStatus === "pending");
 
   const groupedRecipients = useMemo(() => {
     const groups = {
@@ -188,13 +214,28 @@ export function PrivateMessagesPage({ currentUser }) {
     };
 
     recipients.forEach((recipient) => {
-      const group = recipient.group || (recipient.role === "admin" ? "admins" : isAdmin(currentUser) ? "users" : "classmates");
+      const group = recipient.group || (recipient.role === "admin" ? "admins" : currentUserIsAdmin ? "users" : "classmates");
       if (!groups[group]) groups[group] = [];
       groups[group].push(recipient);
     });
 
     return groups;
-  }, [currentUser, recipients]);
+  }, [currentUserIsAdmin, recipients]);
+
+  const filteredStudentRecipients = useMemo(() => {
+    if (currentUserIsAdmin) return [];
+
+    const term = recipientSearchText.trim().toLowerCase();
+    const allowedRecipients = recipients.filter((recipient) => String(recipient.id) !== String(currentUserId));
+
+    if (!term) return allowedRecipients;
+
+    return allowedRecipients.filter((recipient) =>
+      `${recipient.name} ${recipient.username} ${recipient.email} ${recipient.role} ${recipient.sharedCourseTitle}`
+        .toLowerCase()
+        .includes(term),
+    );
+  }, [currentUserId, currentUserIsAdmin, recipientSearchText, recipients]);
 
   const visibleConversations = useMemo(() => {
     return conversations.filter((conversation) => {
@@ -270,6 +311,51 @@ export function PrivateMessagesPage({ currentUser }) {
     void loadSelectedMessages(selectedConversationId);
   }, [selectedConversationId]);
 
+  useEffect(() => {
+    if (!currentUserIsAdmin || !composeOpen || selectedRecipient) {
+      setRecipientSearchResults([]);
+      setRecipientSearchLoading(false);
+      return undefined;
+    }
+
+    const term = recipientSearchText.trim();
+    if (term.length < 2) {
+      setRecipientSearchResults([]);
+      setRecipientSearchLoading(false);
+      return undefined;
+    }
+
+    setRecipientSearchLoading(true);
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const results = await searchPrivateMessageUsersForAdmin(term, currentUser);
+        setRecipientSearchResults(results);
+        setRecipientSearchOpen(true);
+      } catch (caughtError) {
+        showError(copy.recipientLoadFailed, caughtError);
+      } finally {
+        setRecipientSearchLoading(false);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [composeOpen, copy.recipientLoadFailed, currentUser, currentUserIsAdmin, recipientSearchText, selectedRecipient]);
+
+  const handleSelectRecipient = (recipient) => {
+    setSelectedRecipient(recipient);
+    setRecipientSearchText(displayNameForUser(recipient));
+    setRecipientSearchOpen(false);
+    setRecipientSearchResults([]);
+    clearError();
+  };
+
+  const handleClearRecipient = () => {
+    setSelectedRecipient(null);
+    setRecipientSearchText("");
+    setRecipientSearchResults([]);
+    setRecipientSearchOpen(false);
+  };
+
   const handleCreateConversation = async (event) => {
     event.preventDefault();
     clearError();
@@ -280,7 +366,12 @@ export function PrivateMessagesPage({ currentUser }) {
       return;
     }
 
-    if (!composeDraft.recipientId || !composeDraft.body.trim()) {
+    if (!selectedRecipient?.id) {
+      setError(copy.selectRecipientRequired);
+      return;
+    }
+
+    if (!composeDraft.body.trim()) {
       setError(copy.messageFailed);
       return;
     }
@@ -290,13 +381,14 @@ export function PrivateMessagesPage({ currentUser }) {
     try {
       const result = await createPrivateConversation(
         {
-          recipientId: composeDraft.recipientId,
+          recipientId: selectedRecipient.id,
           subject: composeDraft.subject.trim(),
           body: composeDraft.body.trim(),
         },
         currentUser,
       );
-      setComposeDraft({ recipientId: "", subject: "", body: "" });
+      setComposeDraft({ subject: "", body: "" });
+      handleClearRecipient();
       setComposeOpen(false);
       setNotice(result.requestStatus === "pending" ? copy.messageRequestSent : copy.messageSent);
       await loadMessagingData();
@@ -386,6 +478,96 @@ export function PrivateMessagesPage({ currentUser }) {
     );
   };
 
+  const renderRecipientRow = (recipient) => (
+    <button
+      type="button"
+      key={recipient.id}
+      className="recipient-search-option"
+      onClick={() => handleSelectRecipient(recipient)}
+    >
+      <strong>{displayNameForUser(recipient)}</strong>
+      <span>
+        {recipient.username ? `@${recipient.username} · ` : ""}
+        {recipient.email}
+        {recipient.email ? " · " : ""}
+        {displayRoleForUser(recipient, language)}
+      </span>
+      {recipient.sharedCourseTitle ? <small>{recipient.sharedCourseTitle}</small> : null}
+    </button>
+  );
+
+  const renderRecipientPicker = () => {
+    const dropdownResults = currentUserIsAdmin ? recipientSearchResults : filteredStudentRecipients;
+    const showStudentGroups = !currentUserIsAdmin && !recipientSearchText.trim();
+    const hasDropdown = recipientSearchOpen && !selectedRecipient;
+
+    return (
+      <label className="recipient-search-field">
+        {copy.recipient}
+        <div className="recipient-search-shell">
+          <input
+            value={recipientSearchText}
+            onChange={(event) => {
+              setRecipientSearchText(event.target.value);
+              setSelectedRecipient(null);
+              setRecipientSearchOpen(true);
+            }}
+            onFocus={() => setRecipientSearchOpen(true)}
+            placeholder={currentUserIsAdmin ? copy.searchRecipient : copy.selectRecipient}
+            autoComplete="off"
+          />
+          {hasDropdown ? (
+            <div className="recipient-search-menu">
+              {recipientSearchLoading ? <small className="field-note">{copy.searching}</small> : null}
+              {showStudentGroups ? (
+                <>
+                  {groupedRecipients.admins?.length ? (
+                    <div className="recipient-search-group">
+                      <span>{copy.admins}</span>
+                      {groupedRecipients.admins.map(renderRecipientRow)}
+                    </div>
+                  ) : null}
+                  {groupedRecipients.classmates?.length ? (
+                    <div className="recipient-search-group">
+                      <span>{copy.classmates}</span>
+                      {groupedRecipients.classmates.map(renderRecipientRow)}
+                    </div>
+                  ) : (
+                    <small className="field-note">{copy.noClassmates}</small>
+                  )}
+                </>
+              ) : null}
+              {!showStudentGroups && !recipientSearchLoading ? (
+                dropdownResults.length ? (
+                  dropdownResults.map(renderRecipientRow)
+                ) : (
+                  <small className="field-note">{copy.noMatchingUsers}</small>
+                )
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        {selectedRecipient ? (
+          <div className="selected-recipient-card">
+            <div>
+              <small>{copy.selectedRecipient}</small>
+              <strong>{displayNameForUser(selectedRecipient)}</strong>
+              <span>
+                {selectedRecipient.username ? `@${selectedRecipient.username} · ` : ""}
+                {selectedRecipient.email}
+                {selectedRecipient.email ? " · " : ""}
+                {displayRoleForUser(selectedRecipient, language)}
+              </span>
+            </div>
+            <button type="button" className="secondary-btn compact-btn" onClick={handleClearRecipient}>
+              {copy.changeRecipient}
+            </button>
+          </div>
+        ) : null}
+      </label>
+    );
+  };
+
   return (
     <div className="messages-page">
       <section className="section-card messages-compose-card">
@@ -402,19 +584,7 @@ export function PrivateMessagesPage({ currentUser }) {
 
         {composeOpen ? (
           <form className="messages-compose-form" onSubmit={(event) => void handleCreateConversation(event)}>
-            <label>
-              {copy.recipient}
-              <select
-                value={composeDraft.recipientId}
-                onChange={(event) => setComposeDraft((current) => ({ ...current, recipientId: event.target.value }))}
-                required
-              >
-                <option value="">{copy.selectRecipient}</option>
-                {renderRecipientOptions("admins", copy.admins)}
-                {renderRecipientOptions("classmates", copy.classmates)}
-                {renderRecipientOptions("users", copy.users)}
-              </select>
-            </label>
+            {renderRecipientPicker()}
             <label>
               {copy.subject}
               <input
@@ -435,7 +605,7 @@ export function PrivateMessagesPage({ currentUser }) {
               <button type="button" className="secondary-btn" onClick={() => setComposeOpen(false)}>
                 {language === "es" ? "Cancelar" : "Cancel"}
               </button>
-              <button type="submit" className="primary-btn" disabled={sending || !userCanSend}>
+              <button type="submit" className="primary-btn" disabled={sending || !userCanSend || !selectedRecipient?.id}>
                 {copy.send}
               </button>
             </div>

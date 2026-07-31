@@ -90,6 +90,47 @@ function normalizeRecipient(row = {}) {
   };
 }
 
+function sanitizeSearchTerm(value = "") {
+  return String(value).trim().replace(/[,%]/g, " ").replace(/\s+/g, " ");
+}
+
+export async function searchPrivateMessageUsersForAdmin(searchTerm, currentUser) {
+  const term = sanitizeSearchTerm(searchTerm);
+
+  if (!term || term.length < 2) {
+    return [];
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    const mockUsers = [
+      { id: "student-mock", name: "Maya Laurent", username: "maya", email: "maya@nutripro.demo", role: "student", status: "active" },
+      { id: "admin-mock", name: "Alex Morgan", username: "admin", email: "admin@nutripro.demo", role: "admin", status: "active" },
+    ];
+    return mockUsers
+      .filter((user) => user.id !== currentUser?.id)
+      .filter((user) =>
+        `${user.name} ${user.username} ${user.email}`.toLowerCase().includes(term.toLowerCase()),
+      )
+      .map((user) => ({ ...user, group: "users" }));
+  }
+
+  const pattern = `%${term}%`;
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, name, username, email, role, status")
+    .eq("status", "active")
+    .neq("id", currentUser?.id)
+    .or(`name.ilike.${pattern},username.ilike.${pattern},email.ilike.${pattern}`)
+    .limit(10);
+
+  if (error) {
+    console.error("Searching private message recipients failed:", error);
+    throw error;
+  }
+
+  return (data ?? []).map((user) => normalizeRecipient({ ...user, group: "users" }));
+}
+
 export async function getPrivateMessageRecipients(currentUser) {
   const role = `${currentUser?.roleKey ?? currentUser?.role ?? ""}`.toLowerCase();
 
