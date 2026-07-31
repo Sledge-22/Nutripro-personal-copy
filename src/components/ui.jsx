@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 import { LanguageDropdown } from "./LanguageDropdown.jsx";
+import {
+  clearReadNotifications,
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "../services/notificationService.js";
 
 const BRAND_LOGO_SRC = "/assets/nutripro-logo.png";
 
@@ -19,6 +25,7 @@ const icons = {
   chevron: <path d="m9 18 6-6-6-6" />,
   menu: <><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></>,
   close: <><path d="M6 6l12 12" /><path d="M18 6 6 18" /></>,
+  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
 };
 
 export function Icon({ name, size = 20 }) {
@@ -73,6 +80,188 @@ function isNavItemActive(item, currentPath) {
   }
 
   return item.path === currentPath;
+}
+
+function notificationIconFor(type) {
+  if (type === "assignment_submitted" || type === "assignment_review_returned") return "certificate";
+  if (type === "team_application_submitted" || type === "team_application_reviewed") return "users";
+  if (type === "new_course_assigned" || type === "lesson_unlocked") return "courses";
+  if (type === "certificate_generated") return "certificate";
+  return "community";
+}
+
+function formatNotificationTime(value, language) {
+  if (!value) return "";
+
+  try {
+    return new Intl.DateTimeFormat(language === "en" ? "en-US" : "es-ES", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return "";
+  }
+}
+
+function NotificationCenter({ profile, role, onNavigate }) {
+  const { t, language } = useLanguage();
+  const [open, setOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const panelRef = useRef(null);
+  const unreadCount = notifications.filter((notification) => !notification.readAt).length;
+  const unreadLabel = unreadCount > 9 ? "9+" : String(unreadCount);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadNotifications() {
+      if (!profile) {
+        setNotifications([]);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const nextNotifications = await getNotifications(profile);
+        if (mounted) setNotifications(nextNotifications);
+      } catch (error) {
+        console.error("Loading notifications failed:", error);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    void loadNotifications();
+
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.id, profile?.roleKey, profile?.role]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    const handlePointerDown = (event) => {
+      if (!panelRef.current?.contains(event.target)) setOpen(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("mousedown", handlePointerDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [open]);
+
+  const handleOpenNotification = async (notification) => {
+    const nextNotifications = await markNotificationRead(profile, notification.id);
+    setNotifications(nextNotifications);
+    setOpen(false);
+    if (notification.linkPath) onNavigate?.(notification.linkPath);
+  };
+
+  const handleMarkOneRead = async (event, notification) => {
+    event.stopPropagation();
+    const nextNotifications = await markNotificationRead(profile, notification.id);
+    setNotifications(nextNotifications);
+  };
+
+  const handleMarkAllRead = async () => {
+    const nextNotifications = await markAllNotificationsRead(profile, notifications);
+    setNotifications(nextNotifications);
+  };
+
+  const handleClearRead = async () => {
+    const nextNotifications = await clearReadNotifications(profile, notifications);
+    setNotifications(nextNotifications);
+  };
+
+  return (
+    <div className="notification-center" ref={panelRef}>
+      <button
+        type="button"
+        className="notification-bell"
+        aria-label={t("notifications.open")}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Icon name="bell" size={19} />
+        {unreadCount > 0 ? <span className="notification-badge">{unreadLabel}</span> : null}
+      </button>
+
+      {open ? (
+        <div className="notification-panel" role="dialog" aria-label={t("notifications.title")}>
+          <div className="notification-panel-header">
+            <div>
+              <span className="eyebrow">{t("notifications.eyebrow")}</span>
+              <h3>{t("notifications.title")}</h3>
+            </div>
+            <span className="notification-count">{t("notifications.unreadCount", { count: unreadCount })}</span>
+          </div>
+
+          <div className="notification-actions">
+            <button type="button" className="subtle-btn" onClick={handleMarkAllRead} disabled={!unreadCount}>
+              {t("notifications.markAllRead")}
+            </button>
+            <button type="button" className="subtle-btn" onClick={handleClearRead} disabled={!notifications.some((notification) => notification.readAt)}>
+              {t("notifications.clearRead")}
+            </button>
+          </div>
+
+          <div className="notification-list">
+            {loading ? <p className="field-note">{t("common.loading")}</p> : null}
+            {!loading && !notifications.length ? <p className="field-note">{t("notifications.empty")}</p> : null}
+            {notifications.map((notification) => {
+              const title = notification.title || t(notification.titleKey);
+              const description = notification.description || t(notification.descriptionKey);
+              const unread = !notification.readAt;
+
+              return (
+                <article
+                  key={notification.id}
+                  role="button"
+                  tabIndex={0}
+                  className={`notification-item ${unread ? "unread" : "read"}`}
+                  onClick={() => void handleOpenNotification(notification)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") void handleOpenNotification(notification);
+                  }}
+                >
+                  <span className="notification-type-icon"><Icon name={notificationIconFor(notification.type)} size={18} /></span>
+                  <span className="notification-copy">
+                    <strong>{title}</strong>
+                    <small>{description}</small>
+                    <em>{formatNotificationTime(notification.createdAt, language)}</em>
+                  </span>
+                  {unread ? (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="notification-read-action"
+                      onClick={(event) => void handleMarkOneRead(event, notification)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") void handleMarkOneRead(event, notification);
+                      }}
+                    >
+                      {t("notifications.markRead")}
+                    </span>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function Header({ role, title, detailTitle, profile, navItems = [], currentPath = "", onNavigate, onLogout }) {
@@ -149,6 +338,7 @@ export function Header({ role, title, detailTitle, profile, navItems = [], curre
 
       <div className="topbar-actions">
         <LanguageDropdown />
+        <NotificationCenter profile={profile} role={role} onNavigate={onNavigate} />
         <div className="profile">
           {profile?.profilePictureUrl || profile?.profile_picture_url ? <img className="avatar avatar-image" src={profile.profilePictureUrl || profile.profile_picture_url} alt={profileName} /> : <div className="avatar">{initials}</div>}
           <div><strong>{profileName}</strong><small>{translateRole(role)}</small></div>
@@ -173,7 +363,10 @@ export function Header({ role, title, detailTitle, profile, navItems = [], curre
                 {profile?.profilePictureUrl || profile?.profile_picture_url ? <img className="avatar avatar-image" src={profile.profilePictureUrl || profile.profile_picture_url} alt={profileName} /> : <div className="avatar">{initials}</div>}
                 <div><strong>{profileName}</strong><small>{translateRole(role)}</small></div>
               </div>
-              <LanguageDropdown />
+              <div className="mobile-nav-actions">
+                <LanguageDropdown />
+                <NotificationCenter profile={profile} role={role} onNavigate={onNavigate} />
+              </div>
             </div>
 
             <nav className="mobile-nav-list" aria-label={`${translateRole(role)} navigation`}>

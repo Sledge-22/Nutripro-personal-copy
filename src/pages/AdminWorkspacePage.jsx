@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useState } from "react";
 import CountryFlag from "../components/CountryFlag.jsx";
-import { Icon, OverviewCard, Stat, Status, Welcome } from "../components/ui.jsx";
+import { Icon, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
 import { PrivateMessagesPage } from "../components/PrivateMessagesPage.jsx";
 import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
@@ -8,6 +8,7 @@ import { getSubmissionsForAdmin, reviewSubmission } from "../services/assignment
 import { recordAdminAuditLog, getAdminAuditLogs } from "../services/auditLogService.js";
 import { deleteCourseDraft, getCourseDrafts, markCourseDraftPublished, saveCourseDraft } from "../services/courseDraftService.js";
 import { getTeamApplications, updateTeamApplication } from "../services/teamApplicationService.js";
+import { getNotifications } from "../services/notificationService.js";
 import {
   createGdprDataRequest,
   exportUserDataBundle,
@@ -1133,35 +1134,200 @@ export function AdminWorkspacePage({
 }
 function AdminDashboardPage({ users, courses, certificates, currentUser }) {
   const { t } = useLanguage();
-  const students = users.filter((user) => user.role === "Student");
+  const firstPreviewCourse = courses.find((course) => course?.id) ?? null;
+  const [dashboardData, setDashboardData] = useState({
+    submissions: [],
+    applications: [],
+    auditLogs: [],
+    notifications: [],
+  });
+  const students = users.filter((user) => String(user.role ?? user.roleKey ?? "").toLowerCase() === "student");
+  const activeStudents = students.filter((user) => String(user.status ?? "").toLowerCase() === "active");
+  const publishedCourses = courses.filter((course) => String(course.status ?? "").toLowerCase() === "published");
+  const pendingSubmissions = dashboardData.submissions.filter((submission) => submission.status === "submitted");
+  const pendingApplications = dashboardData.applications.filter((application) => application.status === "pending");
+  const unreadNotifications = dashboardData.notifications.filter((notification) => !notification.readAt);
+  const unreadMessages = unreadNotifications.filter((notification) =>
+    ["new_private_message", "new_message_request"].includes(notification.type),
+  );
+  const recentActivity = dashboardData.auditLogs.slice(0, 5);
+  const latestSubmissions = dashboardData.submissions.slice(0, 4);
+  const latestApplications = dashboardData.applications.slice(0, 4);
+  const messagePreviews = dashboardData.notifications
+    .filter((notification) => ["new_private_message", "new_message_request"].includes(notification.type))
+    .slice(0, 4);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadDashboardData() {
+      const [submissionsResult, applicationsResult, auditLogsResult, notificationsResult] = await Promise.allSettled([
+        getSubmissionsForAdmin(),
+        getTeamApplications(),
+        getAdminAuditLogs({ limit: 8 }),
+        getNotifications(currentUser),
+      ]);
+
+      if (!mounted) return;
+
+      if (submissionsResult.status === "rejected") console.error("Loading dashboard submissions failed:", submissionsResult.reason);
+      if (applicationsResult.status === "rejected") console.error("Loading dashboard team applications failed:", applicationsResult.reason);
+      if (auditLogsResult.status === "rejected") console.error("Loading dashboard audit logs failed:", auditLogsResult.reason);
+      if (notificationsResult.status === "rejected") console.error("Loading dashboard notifications failed:", notificationsResult.reason);
+
+      setDashboardData({
+        submissions: submissionsResult.status === "fulfilled" ? submissionsResult.value : [],
+        applications: applicationsResult.status === "fulfilled" ? applicationsResult.value : [],
+        auditLogs: auditLogsResult.status === "fulfilled" ? auditLogsResult.value : [],
+        notifications: notificationsResult.status === "fulfilled" ? notificationsResult.value : [],
+      });
+    }
+
+    void loadDashboardData();
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentUser?.id]);
+
+  const summaryCards = [
+    {
+      icon: "certificate",
+      title: t("dashboard.pendingAssignmentReviews"),
+      value: pendingSubmissions.length,
+      text: t("dashboard.pendingAssignmentReviewsText"),
+      path: ROUTES.admin.assignmentReviews,
+    },
+    {
+      icon: "community",
+      title: t("dashboard.unreadMessages"),
+      value: unreadMessages.length,
+      text: t("dashboard.unreadMessagesText"),
+      path: ROUTES.admin.messages,
+    },
+    {
+      icon: "users",
+      title: t("dashboard.pendingTeamApplications"),
+      value: pendingApplications.length,
+      text: t("dashboard.pendingTeamApplicationsText"),
+      path: ROUTES.admin.teamApplications,
+    },
+    {
+      icon: "courses",
+      title: t("dashboard.publishedCourses"),
+      value: publishedCourses.length,
+      text: t("dashboard.publishedCoursesText"),
+      path: ROUTES.admin.postCourses,
+    },
+    {
+      icon: "users",
+      title: t("dashboard.activeStudentsLabel"),
+      value: activeStudents.length,
+      text: t("dashboard.activeStudentsText"),
+      path: ROUTES.admin.users,
+    },
+    {
+      icon: "certificate",
+      title: t("dashboard.certificatesGenerated"),
+      value: certificates.length,
+      text: t("dashboard.certificatesGeneratedText"),
+      path: ROUTES.admin.certificates,
+    },
+    {
+      icon: "dashboard",
+      title: t("dashboard.recentActivity"),
+      value: recentActivity.length,
+      text: t("dashboard.recentActivityText"),
+      path: ROUTES.admin.settings,
+    },
+  ];
 
   return (
     <>
       <Welcome title={t("dashboard.adminWelcomeTitle")} text={t("dashboard.adminWelcomeText")} />
-      <div className="stats-grid">
-        <Stat
-          icon="users"
-          label={t("dashboard.totalUsers")}
-          value={users.length}
-          note={t("dashboard.activeStudents", { count: students.filter((user) => user.status === "Active").length })}
-        />
-        <Stat icon="courses" label={t("dashboard.postedCourses")} value={courses.length} note={t("dashboard.readyForStudents")} />
-        <Stat icon="certificate" label={t("dashboard.generatedCertificates")} value={certificates.length} note={t("dashboard.generatedInTotal")} />
+      <div className="dashboard-overview-grid">
+        {summaryCards.map((card) => (
+          <button key={card.title} type="button" className="dashboard-summary-card" onClick={() => navigateTo(card.path)}>
+            <span className="dashboard-summary-icon"><Icon name={card.icon} /></span>
+            <span>
+              <small>{card.title}</small>
+              <strong>{card.value}</strong>
+              <em>{card.text}</em>
+            </span>
+          </button>
+        ))}
       </div>
-      <section className="section-card">
+      <section className="section-card dashboard-quick-actions">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">{t("dashboard.adminOverview")}</span>
-            <h2>{t("dashboard.yourAdminAreas")}</h2>
+            <span className="eyebrow">{t("dashboard.quickActions")}</span>
+            <h2>{t("dashboard.whatNeedsAttention")}</h2>
           </div>
         </div>
         <div className="overview-grid">
-          <OverviewCard icon="users" title={t("common.usersAdmin")} text={t("dashboard.usersAdminText")} />
-          <OverviewCard icon="courses" title={t("common.postCourses")} text={t("dashboard.postCoursesText")} />
-          <OverviewCard icon="certificate" title={t("common.assignmentReviews")} text={t("dashboard.assignmentReviewsText")} />
-          <OverviewCard icon="certificate" title={t("common.certificatesGenerator")} text={t("dashboard.certificatesGeneratorText")} />
+          <button type="button" className="overview-card dashboard-action-card" onClick={() => navigateTo(ROUTES.admin.postCourses)}><span><Icon name="courses" /></span><h3>{t("common.postCourses")}</h3><p>{t("dashboard.postCoursesText")}</p></button>
+          <button type="button" className="overview-card dashboard-action-card" onClick={() => navigateTo(ROUTES.admin.assignmentReviews)}><span><Icon name="certificate" /></span><h3>{t("common.assignmentReviews")}</h3><p>{t("dashboard.assignmentReviewsText")}</p></button>
+          <button type="button" className="overview-card dashboard-action-card" onClick={() => navigateTo(ROUTES.admin.users)}><span><Icon name="users" /></span><h3>{t("common.usersAdmin")}</h3><p>{t("dashboard.usersAdminText")}</p></button>
+          <button type="button" className="overview-card dashboard-action-card" onClick={() => navigateTo(ROUTES.admin.messages)}><span><Icon name="community" /></span><h3>{t("common.messages")}</h3><p>{t("dashboard.messagesText")}</p></button>
+          {firstPreviewCourse ? (
+            <button type="button" className="overview-card dashboard-action-card" onClick={() => navigateTo(ROUTES.admin.studentPreview(firstPreviewCourse.id))}><span><Icon name="play" /></span><h3>{t("admin.previewAsStudent")}</h3><p>{t("admin.previewAsStudentDashboardText")}</p></button>
+          ) : null}
         </div>
       </section>
+      <div className="dashboard-detail-grid">
+        <section className="section-card dashboard-feed-card">
+          <span className="eyebrow">{t("dashboard.recentActivity")}</span>
+          <h2>{t("dashboard.auditSummary")}</h2>
+          <div className="dashboard-feed-list">
+            {recentActivity.length ? recentActivity.map((entry) => (
+              <article key={entry.id}>
+                <strong>{entry.actionLabel || entry.action || t("dashboard.activity")}</strong>
+                <span>{entry.adminEmail || entry.admin_email || t("common.admin")}</span>
+                <small>{entry.createdAt || entry.created_at || ""}</small>
+              </article>
+            )) : <p className="field-note">{t("dashboard.noRecentActivity")}</p>}
+          </div>
+        </section>
+        <section className="section-card dashboard-feed-card">
+          <span className="eyebrow">{t("dashboard.latestSubmissions")}</span>
+          <h2>{t("dashboard.assignmentQueue")}</h2>
+          <div className="dashboard-feed-list">
+            {latestSubmissions.length ? latestSubmissions.map((submission) => (
+              <article key={submission.id}>
+                <strong>{submission.assignmentTitle || t("common.assignment")}</strong>
+                <span>{submission.studentName || submission.studentEmail || t("common.student")}</span>
+                <small>{submission.courseTitle || submission.status}</small>
+              </article>
+            )) : <p className="field-note">{t("dashboard.noLatestSubmissions")}</p>}
+          </div>
+        </section>
+        <section className="section-card dashboard-feed-card">
+          <span className="eyebrow">{t("dashboard.latestTeamApplications")}</span>
+          <h2>{t("common.teamApplications")}</h2>
+          <div className="dashboard-feed-list">
+            {latestApplications.length ? latestApplications.map((application) => (
+              <article key={application.id}>
+                <strong>{application.fullName || application.email}</strong>
+                <span>{application.teachingTopic || application.status}</span>
+                <small>{application.status}</small>
+              </article>
+            )) : <p className="field-note">{t("dashboard.noTeamApplications")}</p>}
+          </div>
+        </section>
+        <section className="section-card dashboard-feed-card">
+          <span className="eyebrow">{t("dashboard.unreadMessagePreviews")}</span>
+          <h2>{t("common.messages")}</h2>
+          <div className="dashboard-feed-list">
+            {messagePreviews.length ? messagePreviews.map((notification) => (
+              <article key={notification.id}>
+                <strong>{notification.title || t(notification.titleKey)}</strong>
+                <span>{notification.description || t(notification.descriptionKey)}</span>
+                <small>{notification.createdAt || ""}</small>
+              </article>
+            )) : <p className="field-note">{t("dashboard.noUnreadMessages")}</p>}
+          </div>
+        </section>
+      </div>
     </>
   );
 }
@@ -4314,6 +4480,9 @@ function CourseManagerOverviewPage({ courses = [], studentOptions = [], onDelete
                     <button type="button" className="np-course-card-button-v2" onClick={() => navigateTo(ROUTES.admin.courseBuilder(course.id))}>
                       {t("admin.openBuilder")}
                     </button>
+                    <button type="button" className="np-course-card-button-v2" onClick={() => navigateTo(ROUTES.admin.studentPreview(course.id))}>
+                      {t("admin.previewAsStudent")}
+                    </button>
                     <button type="button" className="np-course-card-button-v2" onClick={() => navigateTo(ROUTES.admin.courseEdit(course.id))}>
                       {t("common.edit")}
                     </button>
@@ -4505,6 +4674,11 @@ function CourseDetailsPage({ mode = "create", course = null, onSaveCourse }) {
         <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.postCourses)}>
           {t("common.cancel")}
         </button>
+        {isEditing ? (
+          <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.studentPreview(course.id))}>
+            {t("admin.previewAsStudent")}
+          </button>
+        ) : null}
       </div>
     </form>
   );
@@ -5332,6 +5506,9 @@ function CourseBuilderPage({
           </div>
           <div className="row-actions wrap-actions">
             <Status status={course.status || form.status || "draft"} />
+            <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.studentPreview(course.id))}>
+              {t("admin.previewAsStudent")}
+            </button>
             <button type="button" className="secondary-btn" onClick={() => navigateTo(ROUTES.admin.courseEdit(course.id))}>
               {t("admin.editCourse")}
             </button>

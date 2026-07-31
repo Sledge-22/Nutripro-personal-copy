@@ -16,6 +16,7 @@ export const ROUTES = {
     courseCreate: "/admin/post-courses/new",
     courseBuilder: (courseId) => `/admin/post-courses/${courseId}`,
     courseEdit: (courseId) => `/admin/post-courses/${courseId}/edit`,
+    studentPreview: (courseId) => `/admin/student-preview/${courseId}`,
     community: "/admin/community",
     messages: "/admin/messages",
     teamApplications: "/admin/team-applications",
@@ -44,6 +45,15 @@ export function isAdminCourseRoute(pathname) {
     pathname === ROUTES.admin.courseCreate ||
     pathname.startsWith(`${ROUTES.admin.postCourses}/`)
   );
+}
+
+export function isAdminStudentPreviewRoute(pathname) {
+  return pathname.startsWith("/admin/student-preview/");
+}
+
+export function getAdminStudentPreviewCourseId(pathname) {
+  if (!isAdminStudentPreviewRoute(pathname)) return "";
+  return `${pathname.slice("/admin/student-preview/".length)}`.trim();
 }
 
 export function getAdminCourseRouteState(pathname) {

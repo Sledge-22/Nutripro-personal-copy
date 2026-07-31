@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { CertificateModal, Icon, Progress, Stat, Status, Welcome } from "../components/ui.jsx";
+import { CertificateModal, Icon, Progress, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
 import { PrivateMessagesPage } from "../components/PrivateMessagesPage.jsx";
 import CountryFlag from "../components/CountryFlag.jsx";
@@ -8,6 +8,7 @@ import { ROUTES } from "../routes/appRoutes.js";
 import { getStudentSubmission, submitAssignment } from "../services/assignmentService.js";
 import { changePassword } from "../services/authService.js";
 import { getStudentCourseAccess } from "../services/courseService.js";
+import { getNotifications } from "../services/notificationService.js";
 import { uploadAssignmentFile, uploadProfilePicture } from "../services/storageService.js";
 import { normalizeCountrySelection } from "../data/countries.js";
 import { getProfileCountryOptions } from "../data/profileCountries.js";
@@ -240,6 +241,8 @@ export function StudentWorkspacePage({
   progressState,
   studentCoursesError = "",
   studentCourseDetailsWarning = "",
+  previewMode = false,
+  previewReturnPath = ROUTES.admin.postCourses,
   onCreatePost,
   onCreateComment,
   onUpdatePost,
@@ -258,7 +261,8 @@ export function StudentWorkspacePage({
     enrollment: null,
     courseStatus: null,
   });
-  const isCourseDetailRoute = pathname.startsWith("/student/courses/");
+  const isPreviewCourseRoute = previewMode && pathname.startsWith("/admin/student-preview/");
+  const isCourseDetailRoute = pathname.startsWith("/student/courses/") || isPreviewCourseRoute;
   const routeCourseId = isCourseDetailRoute ? `${pathname.split("/").pop() ?? ""}`.trim() : "";
 
   const progressFor = (course) => {
@@ -306,6 +310,19 @@ export function StudentWorkspacePage({
 
       const localCourse = ownedCourses.find((entry) => String(entry?.id) === routeCourseId) ?? null;
 
+      if (previewMode) {
+        if (!cancelled) {
+          setDetailState({
+            loading: false,
+            reason: localCourse ? null : "load-error",
+            course: localCourse,
+            enrollment: localCourse ? { course_id: localCourse.id, preview: true } : null,
+            courseStatus: localCourse?.status ?? null,
+          });
+        }
+        return;
+      }
+
       if (!cancelled) {
         setDetailState({
           loading: true,
@@ -348,7 +365,7 @@ export function StudentWorkspacePage({
     return () => {
       cancelled = true;
     };
-  }, [isCourseDetailRoute, ownedCourses, routeCourseId, studentId]);
+  }, [isCourseDetailRoute, ownedCourses, previewMode, routeCourseId, studentId]);
 
   if (isCourseDetailRoute) {
     const selectedCourse = detailState.course ?? ownedCourses.find((entry) => String(entry?.id) === routeCourseId) ?? null;
@@ -359,6 +376,7 @@ export function StudentWorkspacePage({
 
     return (
       <>
+        {previewMode ? <StudentPreviewBanner returnPath={previewReturnPath} /> : null}
         {detailState.reason === "missing-id" ? (
           <StudentCourseState eyebrow={t("student.courseDetail")} title={t("student.courseIdMissing")} text={t("student.courseLinkMissingId")} />
         ) : detailState.reason === "missing-enrollment" ? (
@@ -376,6 +394,8 @@ export function StudentWorkspacePage({
             completed={progressState}
             onUpdateProgress={onUpdateProgress}
             progress={progressFor(selectedCourse)}
+            previewMode={previewMode}
+            previewReturnPath={previewReturnPath}
           />
         ) : (
           <StudentCourseState eyebrow={t("student.courseDetail")} title={t("student.courseDetailFailed")} text={t("student.selectedCourseRecordMissing")} />
@@ -424,24 +444,154 @@ export function StudentWorkspacePage({
     return <OwnedCoursesPage courses={ownedCourses} progressFor={progressFor} lessonSummaryFor={lessonSummaryFor} studentCoursesError={studentCoursesError} studentCourseDetailsWarning={studentCourseDetailsWarning} />;
   }
 
-  return <StudentDashboardPage courses={ownedCourses} certificates={studentCertificates} progressFor={progressFor} lessonSummaryFor={lessonSummaryFor} studentCoursesError={studentCoursesError} studentCourseDetailsWarning={studentCourseDetailsWarning} />;
+  return <StudentDashboardPage courses={ownedCourses} certificates={studentCertificates} progressFor={progressFor} lessonSummaryFor={lessonSummaryFor} studentProfile={studentProfile} studentId={studentId} studentCoursesError={studentCoursesError} studentCourseDetailsWarning={studentCourseDetailsWarning} />;
 }
 
-function StudentDashboardPage({ courses, certificates, progressFor, lessonSummaryFor, studentCoursesError = "", studentCourseDetailsWarning = "" }) {
+function StudentPreviewBanner({ returnPath }) {
   const { t } = useLanguage();
+
+  return (
+    <section className="preview-mode-banner" aria-label={t("admin.previewModeViewingAsStudent")}>
+      <div>
+        <span className="eyebrow">{t("admin.previewMode")}</span>
+        <strong>{t("admin.previewModeViewingAsStudent")}</strong>
+        <p>{t("admin.previewModeSafeDescription")}</p>
+      </div>
+      <button type="button" className="secondary-btn" onClick={() => goTo(returnPath || ROUTES.admin.postCourses)}>
+        {t("admin.exitPreview")}
+      </button>
+    </section>
+  );
+}
+
+function StudentDashboardPage({ courses, certificates, progressFor, lessonSummaryFor, studentProfile, studentId, studentCoursesError = "", studentCourseDetailsWarning = "" }) {
+  const { t } = useLanguage();
+  const [dashboardData, setDashboardData] = useState({
+    submissions: [],
+    notifications: [],
+  });
   const average = courses.length
     ? Math.round(courses.reduce((sum, course) => sum + progressFor(course), 0) / courses.length)
     : 0;
+  const courseSummaries = courses.map((course) => ({
+    course,
+    progress: progressFor(course),
+    summary: lessonSummaryFor(course),
+  }));
+  const nextLearningItem = courseSummaries.find((entry) => entry.summary.nextLesson) ?? courseSummaries[0] ?? null;
+  const assignmentModules = courses.flatMap((course) =>
+    getCourseModules(course)
+      .filter((module) => module?.assignment?.id || module?.requiresAssignment || module?.requires_assignment)
+      .map((module) => ({ course, module, assignment: module.assignment })),
+  );
+  const submittedAssignmentIds = new Set(
+    dashboardData.submissions
+      .filter((submission) => submission?.assignmentId || submission?.assignment_id)
+      .map((submission) => String(submission.assignmentId ?? submission.assignment_id)),
+  );
+  const pendingAssignments = assignmentModules.filter((entry) =>
+    entry.assignment?.id ? !submittedAssignmentIds.has(String(entry.assignment.id)) : true,
+  );
+  const unreadNotifications = dashboardData.notifications.filter((notification) => !notification.readAt);
+  const unreadMessages = unreadNotifications.filter((notification) =>
+    ["new_private_message", "new_message_request"].includes(notification.type),
+  );
+  const recentFeedback = dashboardData.submissions
+    .filter((submission) => submission?.adminFeedback || submission?.admin_feedback || submission?.grade !== null)
+    .slice(0, 4);
+  const recentMessages = dashboardData.notifications
+    .filter((notification) => ["new_private_message", "new_message_request"].includes(notification.type))
+    .slice(0, 4);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadStudentDashboardData() {
+      const assignments = assignmentModules.filter((entry) => entry.assignment?.id);
+      const [submissionsResult, notificationsResult] = await Promise.allSettled([
+        Promise.all(assignments.map((entry) => getStudentSubmission(entry.assignment.id, studentId))),
+        getNotifications(studentProfile),
+      ]);
+
+      if (!mounted) return;
+
+      if (submissionsResult.status === "rejected") console.error("Loading student dashboard submissions failed:", submissionsResult.reason);
+      if (notificationsResult.status === "rejected") console.error("Loading student dashboard notifications failed:", notificationsResult.reason);
+
+      setDashboardData({
+        submissions: submissionsResult.status === "fulfilled" ? submissionsResult.value.filter(Boolean) : [],
+        notifications: notificationsResult.status === "fulfilled" ? notificationsResult.value : [],
+      });
+    }
+
+    void loadStudentDashboardData();
+
+    return () => {
+      mounted = false;
+    };
+  }, [courses, studentId, studentProfile?.id]);
+
+  const summaryCards = [
+    {
+      icon: "courses",
+      title: t("dashboard.coursesInProgress"),
+      value: courseSummaries.filter((entry) => entry.progress < 100).length,
+      text: t("dashboard.coursesInProgressText"),
+      path: ROUTES.student.courses,
+    },
+    {
+      icon: "play",
+      title: t("dashboard.nextLesson"),
+      value: nextLearningItem?.summary?.nextLesson ? "1" : "0",
+      text: nextLearningItem?.summary?.nextLesson?.title || t("dashboard.noNextLesson"),
+      path: nextLearningItem?.course?.id ? ROUTES.student.courseDetail(nextLearningItem.course.id) : ROUTES.student.courses,
+    },
+    {
+      icon: "certificate",
+      title: t("dashboard.pendingAssignments"),
+      value: pendingAssignments.length,
+      text: t("dashboard.pendingAssignmentsText"),
+      path: ROUTES.student.courses,
+    },
+    {
+      icon: "community",
+      title: t("dashboard.unreadMessages"),
+      value: unreadMessages.length,
+      text: t("dashboard.unreadMessagesText"),
+      path: ROUTES.student.messages,
+    },
+    {
+      icon: "certificate",
+      title: t("dashboard.certificatesEarned"),
+      value: certificates.length,
+      text: t("dashboard.certificatesEarnedText"),
+      path: ROUTES.student.certificates,
+    },
+    {
+      icon: "dashboard",
+      title: t("dashboard.overallProgress"),
+      value: `${average}%`,
+      text: t("dashboard.overallProgressText"),
+      path: ROUTES.student.courses,
+    },
+  ];
 
   return (
     <>
       <Welcome title={t("dashboard.studentWelcomeTitle")} text={t("dashboard.studentWelcomeText")} />
       {studentCoursesError ? <small className="field-note danger-text">{studentCoursesError}</small> : null}
       {!studentCoursesError && studentCourseDetailsWarning ? <small className="field-note">{studentCourseDetailsWarning}</small> : null}
-      <div className="stats-grid student-stats">
-        <Stat icon="courses" label={t("dashboard.ownedCourses")} value={courses.length} note={t("dashboard.inYourLearningArea")} />
-        <Stat icon="dashboard" label={t("dashboard.averageProgress")} value={`${average}%`} note={t("dashboard.acrossOwnedCourses")} />
-        <Stat icon="certificate" label={t("common.certificates")} value={certificates.length} note={t("dashboard.issuedToYou")} />
+      <div className="dashboard-overview-grid">
+        {summaryCards.map((card) => (
+          <button key={card.title} type="button" className="dashboard-summary-card" onClick={() => goTo(card.path)}>
+            <span className="dashboard-summary-icon"><Icon name={card.icon} /></span>
+            <span>
+              <small>{card.title}</small>
+              <strong>{card.value}</strong>
+              <em>{card.text}</em>
+            </span>
+          </button>
+        ))}
       </div>
       <section className="section-card">
         <div className="section-heading">
@@ -451,13 +601,12 @@ function StudentDashboardPage({ courses, certificates, progressFor, lessonSummar
           </div>
         </div>
         <div className="mini-course-grid">
-          {courses.map((course, index) => {
-            const summary = lessonSummaryFor(course);
+          {courseSummaries.slice(0, 4).map(({ course, progress, summary }, index) => {
             return (
-              <article key={course.id}>
+              <article key={course.id} className="clickable-mini-card" onClick={() => goTo(ROUTES.student.courseDetail(course.id))}>
                 <div className="course-index">{String(index + 1).padStart(2, "0")}</div>
                 <h3>{course.title}</h3>
-                <Progress value={progressFor(course)} />
+                <Progress value={progress} />
                 <span>{t("common.lessonsCompletedCount", { completed: summary.completedCount, total: summary.totalCount })}</span>
                 <span>
                   {summary.courseComplete
@@ -471,6 +620,60 @@ function StudentDashboardPage({ courses, certificates, progressFor, lessonSummar
           })}
         </div>
       </section>
+      <div className="dashboard-detail-grid">
+        <section className="section-card dashboard-feed-card">
+          <span className="eyebrow">{t("dashboard.upcomingAssignments")}</span>
+          <h2>{t("dashboard.pendingAssignments")}</h2>
+          <div className="dashboard-feed-list">
+            {pendingAssignments.slice(0, 4).length ? pendingAssignments.slice(0, 4).map((entry) => (
+              <article key={`${entry.course.id}-${entry.module.id}`}>
+                <strong>{entry.assignment?.title || entry.module.title || t("common.assignment")}</strong>
+                <span>{entry.course.title}</span>
+                <small>{entry.module.title}</small>
+              </article>
+            )) : <p className="field-note">{t("dashboard.noPendingAssignments")}</p>}
+          </div>
+        </section>
+        <section className="section-card dashboard-feed-card">
+          <span className="eyebrow">{t("dashboard.recentFeedback")}</span>
+          <h2>{t("common.feedback")}</h2>
+          <div className="dashboard-feed-list">
+            {recentFeedback.length ? recentFeedback.map((submission) => (
+              <article key={submission.id}>
+                <strong>{submission.assignmentTitle || t("common.assignment")}</strong>
+                <span>{submission.adminFeedback || submission.admin_feedback || t("dashboard.gradeReturned")}</span>
+                <small>{submission.grade !== null && submission.grade !== undefined ? `${t("common.grade")}: ${submission.grade}/100` : submission.status}</small>
+              </article>
+            )) : <p className="field-note">{t("dashboard.noRecentFeedback")}</p>}
+          </div>
+        </section>
+        <section className="section-card dashboard-feed-card">
+          <span className="eyebrow">{t("dashboard.recentMessages")}</span>
+          <h2>{t("common.messages")}</h2>
+          <div className="dashboard-feed-list">
+            {recentMessages.length ? recentMessages.map((notification) => (
+              <article key={notification.id}>
+                <strong>{notification.title || t(notification.titleKey)}</strong>
+                <span>{notification.description || t(notification.descriptionKey)}</span>
+                <small>{notification.createdAt || ""}</small>
+              </article>
+            )) : <p className="field-note">{t("dashboard.noUnreadMessages")}</p>}
+          </div>
+        </section>
+        <section className="section-card dashboard-feed-card">
+          <span className="eyebrow">{t("dashboard.earnedCertificates")}</span>
+          <h2>{t("common.certificates")}</h2>
+          <div className="dashboard-feed-list">
+            {certificates.slice(0, 4).length ? certificates.slice(0, 4).map((certificate) => (
+              <article key={certificate.id}>
+                <strong>{certificate.course}</strong>
+                <span>{certificate.number}</span>
+                <small>{certificate.issueDate}</small>
+              </article>
+            )) : <p className="field-note">{t("dashboard.noCertificatesYet")}</p>}
+          </div>
+        </section>
+      </div>
     </>
   );
 }
@@ -794,7 +997,7 @@ function OwnedCoursesPage({ courses, progressFor, lessonSummaryFor, studentCours
   );
 }
 
-function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, progress }) {
+function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, progress, previewMode = false, previewReturnPath = ROUTES.student.courses }) {
   const { t, language, translateSubmissionType } = useLanguage();
   const modules = getCourseModules(course);
   const courseClasses = getCourseClasses(course);
@@ -854,12 +1057,14 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
     const loadCourseSubmissions = async () => {
       try {
-        const rows = await Promise.all(
-          assignments.map(async (assignment) => [
-            String(assignment.id),
-            await getStudentSubmission(assignment.id, studentId),
-          ]),
-        );
+        const rows = previewMode || !studentId
+          ? assignments.map((assignment) => [String(assignment.id), null])
+          : await Promise.all(
+              assignments.map(async (assignment) => [
+                String(assignment.id),
+                await getStudentSubmission(assignment.id, studentId),
+              ]),
+            );
         if (!cancelled) {
           setCourseSubmissions(new Map(rows));
           setCourseSubmissionsLoaded(true);
@@ -878,7 +1083,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     return () => {
       cancelled = true;
     };
-  }, [course?.id, studentId]);
+  }, [course?.id, previewMode, studentId]);
 
   useEffect(() => {
     if (!courseSubmissionsLoaded) return;
@@ -919,7 +1124,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     window.history.replaceState(
       {},
       "",
-      `${ROUTES.student.courseDetail(course.id)}?lesson=${encodeURIComponent(module.id)}`,
+      `${previewMode ? ROUTES.admin.studentPreview(course.id) : ROUTES.student.courseDetail(course.id)}?lesson=${encodeURIComponent(module.id)}`,
     );
   };
 
@@ -927,7 +1132,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     let cancelled = false;
 
     const loadSubmission = async () => {
-      if (!activeAssignment?.id || !studentId) {
+      if (!activeAssignment?.id || !studentId || previewMode) {
         if (!cancelled) {
           setAssignmentState({
             loading: false,
@@ -999,12 +1204,12 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     return () => {
       cancelled = true;
     };
-  }, [activeAssignment?.id, studentId]);
+  }, [activeAssignment?.id, previewMode, studentId]);
 
-  if (course?.status && course.status !== "published") {
+  if (!previewMode && course?.status && course.status !== "published") {
     return (
       <>
-        <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
+        <button className="back-button" onClick={() => goTo(previewMode ? previewReturnPath : ROUTES.student.courses)}>
           ← {t("common.backToCourses")}
         </button>
 
@@ -1077,6 +1282,15 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   };
 
   const handleAssignmentSubmit = async () => {
+    if (previewMode) {
+      setAssignmentState((current) => ({
+        ...current,
+        submitError: t("admin.previewModeNoSubmissions"),
+        submitMessage: "",
+      }));
+      return;
+    }
+
     if (!activeAssignment?.id || !studentId) return;
 
     if (assignmentStatus === "approved") {
@@ -1157,7 +1371,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   if (!modules.length) {
     return (
       <>
-        <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
+        <button className="back-button" onClick={() => goTo(previewMode ? previewReturnPath : ROUTES.student.courses)}>
           ← {t("common.backToCourses")}
         </button>
 
@@ -1210,7 +1424,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
           onClick={() => {
             setBlockedLessonId("");
             setActiveModuleId(sequentialState.nextLesson?.id ?? modules[0]?.id ?? null);
-            window.history.replaceState({}, "", ROUTES.student.courseDetail(course.id));
+            window.history.replaceState({}, "", previewMode ? ROUTES.admin.studentPreview(course.id) : ROUTES.student.courseDetail(course.id));
           }}
         >
           ← {t("common.backToCourse")}
@@ -1226,7 +1440,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
             onClick={() => {
               setBlockedLessonId("");
               setActiveModuleId(sequentialState.nextLesson?.id ?? modules[0]?.id ?? null);
-              window.history.replaceState({}, "", ROUTES.student.courseDetail(course.id));
+              window.history.replaceState({}, "", previewMode ? ROUTES.admin.studentPreview(course.id) : ROUTES.student.courseDetail(course.id));
             }}
           >
             {t("common.backToCourse")}
@@ -1238,7 +1452,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
   return (
     <>
-      <button className="back-button" onClick={() => goTo(ROUTES.student.courses)}>
+      <button className="back-button" onClick={() => goTo(previewMode ? previewReturnPath : ROUTES.student.courses)}>
         ← {t("common.backToCourses")}
       </button>
 
@@ -1523,12 +1737,13 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
               {assignmentState.submitError && (
                 <small className="field-note danger-text">{assignmentState.submitError}</small>
               )}
+              {previewMode ? <small className="field-note">{t("admin.previewModeNoSubmissions")}</small> : null}
 
               <label>
                 {t("common.uploadFile")}
                 <input
                   type="file"
-                  disabled={isAssignmentLocked || assignmentState.loading || assignmentState.uploading}
+                  disabled={previewMode || isAssignmentLocked || assignmentState.loading || assignmentState.uploading}
                   onChange={(event) =>
                     setAssignmentState((current) => ({
                       ...current,
@@ -1586,7 +1801,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                 <button
                   type="button"
                   className="primary-btn"
-                  disabled={isAssignmentLocked || assignmentState.uploading || assignmentState.loading}
+                  disabled={previewMode || isAssignmentLocked || assignmentState.uploading || assignmentState.loading}
                   onClick={() => void handleAssignmentSubmit()}
                 >
                   <Icon name="check" />

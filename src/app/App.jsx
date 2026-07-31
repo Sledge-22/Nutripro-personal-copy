@@ -10,8 +10,10 @@ import {
 import {
   ROUTES,
   getAdminCourseRouteState,
+  getAdminStudentPreviewCourseId,
   isAdminCourseRoute,
   isAdminRoute,
+  isAdminStudentPreviewRoute,
   isAuthUtilityRoute,
   isStudentRoute,
 } from "../routes/appRoutes.js";
@@ -401,6 +403,7 @@ export function App() {
   const [studentCertificates, setStudentCertificates] = useState([]);
   const [posts, setPosts] = useState(initialCommunityPosts);
   const [progressState, setProgressState] = useState(initialStudentProgress);
+  const [previewProgressState, setPreviewProgressState] = useState({});
 
   const activeStudentId = currentUser?.roleKey === "student" ? currentUser?.id ?? null : null;
 
@@ -409,6 +412,12 @@ export function App() {
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
   }, []);
+
+  useEffect(() => {
+    if (isAdminStudentPreviewRoute(pathname)) {
+      setPreviewProgressState({});
+    }
+  }, [pathname]);
 
   useEffect(() => {
     if (!productionAuthAvailable) {
@@ -1427,6 +1436,13 @@ export function App() {
     }
   }
 
+  function handleUpdatePreviewProgress(updates) {
+    setPreviewProgressState((current) => ({
+      ...current,
+      ...(updates ?? {}),
+    }));
+  }
+
   if (pathname === ROUTES.auth.setupPreview) {
     return <ForcedPasswordPage onSubmit={async () => ({ ok: true })} loading={false} />;
   }
@@ -1535,14 +1551,57 @@ export function App() {
     return <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} studentCourseDetailsWarning={studentCourseDetailsWarning} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />;
   }
 
+  if (role === "Admin" && isAdminStudentPreviewRoute(pathname)) {
+    const previewCourseId = getAdminStudentPreviewCourseId(pathname);
+    const previewCourse = courses.find((course) => String(course?.id) === String(previewCourseId)) ?? null;
+    const previewCourses = previewCourse ? [previewCourse] : [];
+
+    return (
+      <div className="app-shell">
+        <Sidebar role={role} navItems={activeNavItems} currentPath={ROUTES.admin.postCourses} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} />
+        <main className="workspace">
+          <Header role={role} title={t("admin.previewAsStudent")} detailTitle={previewCourse?.title ?? null} profile={currentUser} navItems={activeNavItems} currentPath={ROUTES.admin.postCourses} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} />
+          <div className="content">
+            <StudentWorkspacePage
+              pathname={pathname}
+              studentId={null}
+              studentProfile={{
+                id: "student-preview",
+                name: t("admin.genericPreviewStudent"),
+                role: "Student",
+                roleKey: "student",
+                status: "active",
+                statusKey: "active",
+              }}
+              courses={previewCourses}
+              certificates={[]}
+              posts={posts}
+              progressState={previewProgressState}
+              previewMode
+              previewReturnPath={previewCourse?.id ? ROUTES.admin.courseBuilder(previewCourse.id) : ROUTES.admin.postCourses}
+              onCreatePost={() => Promise.resolve(null)}
+              onCreateComment={() => Promise.resolve(null)}
+              onUpdatePost={() => Promise.resolve(null)}
+              onUpdateComment={() => Promise.resolve(null)}
+              onUpdateProfile={() => Promise.resolve({ ok: true })}
+              onUpdateProgress={handleUpdatePreviewProgress}
+            />
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   const currentPath = pathname.startsWith("/student/courses/")
     ? ROUTES.student.courses
-    : isAdminCourseRoute(pathname)
+    : isAdminCourseRoute(pathname) || isAdminStudentPreviewRoute(pathname)
       ? ROUTES.admin.postCourses
       : pathname;
   const headerTitle = pathname.startsWith("/student/courses/")
     ? t("common.courses")
-    : isAdminCourseRoute(pathname)
+    : isAdminStudentPreviewRoute(pathname)
+      ? t("admin.previewAsStudent")
+      : isAdminCourseRoute(pathname)
       ? t("common.postCourses")
       : title;
   const detailTitle = pathname.startsWith("/student/courses/")
