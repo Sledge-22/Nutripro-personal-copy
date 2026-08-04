@@ -87,6 +87,7 @@ function notificationIconFor(type) {
   if (type === "team_application_submitted" || type === "team_application_reviewed") return "users";
   if (type === "new_course_assigned" || type === "lesson_unlocked") return "courses";
   if (type === "certificate_generated") return "certificate";
+  if (type === "announcement") return "bell";
   return "community";
 }
 
@@ -103,6 +104,36 @@ function formatNotificationTime(value, language) {
   } catch {
     return "";
   }
+}
+
+export function AnnouncementAlertList({ notifications = [], onNavigate }) {
+  const { t, language } = useLanguage();
+  const announcementAlerts = notifications
+    .filter((notification) => notification.type === "announcement" && !notification.readAt && ["important", "urgent"].includes(notification.priority))
+    .slice(0, 3);
+
+  if (!announcementAlerts.length) return null;
+
+  return (
+    <div className="announcement-alert-list">
+      {announcementAlerts.map((notification) => (
+        <button
+          key={notification.id}
+          type="button"
+          className={`announcement-alert-card ${notification.priority}`}
+          onClick={() => notification.linkPath && onNavigate?.(notification.linkPath)}
+        >
+          <span className="announcement-alert-icon"><Icon name="bell" /></span>
+          <span>
+            <small>{notification.priority === "urgent" ? t("admin.priorityUrgent") : t("admin.priorityImportant")}</small>
+            <strong>{notification.title || t("notifications.types.announcement.title")}</strong>
+            <em>{notification.description || t("notifications.types.announcement.description")}</em>
+            <span>{formatNotificationTime(notification.createdAt, language)}</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function NotificationCenter({ profile, role, onNavigate }) {
@@ -162,7 +193,7 @@ function NotificationCenter({ profile, role, onNavigate }) {
   }, [open]);
 
   const handleOpenNotification = async (notification) => {
-    const nextNotifications = await markNotificationRead(profile, notification.id);
+    const nextNotifications = await markNotificationRead(profile, notification.id, notifications);
     setNotifications(nextNotifications);
     setOpen(false);
     if (notification.linkPath) onNavigate?.(notification.linkPath);
@@ -170,7 +201,7 @@ function NotificationCenter({ profile, role, onNavigate }) {
 
   const handleMarkOneRead = async (event, notification) => {
     event.stopPropagation();
-    const nextNotifications = await markNotificationRead(profile, notification.id);
+    const nextNotifications = await markNotificationRead(profile, notification.id, notifications);
     setNotifications(nextNotifications);
   };
 
@@ -269,13 +300,15 @@ export function Header({ role, title, detailTitle, profile, navItems = [], curre
   const [mobileClosedGroups, setMobileClosedGroups] = useState({});
   const mobileMenuRef = useRef(null);
   const activeMobileGroupId = navItems.find((item) => isNavGroup(item) && isNavItemActive(item, currentPath))?.id ?? "";
-  const profileName = profile?.name || (role === "Admin" ? t("header.AlexMorgan") : t("header.MayaLaurent"));
+  const profileName =
+    profile?.name ||
+    (role === "Admin" ? t("header.AlexMorgan") : role === "Instructor" ? "Instructor" : t("header.MayaLaurent"));
   const initials = (profileName || "")
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || "")
-    .join("") || (role === "Admin" ? "AM" : "ML");
+    .join("") || (role === "Admin" ? "AM" : role === "Instructor" ? "IN" : "ML");
 
   useEffect(() => {
     if (!mobileMenuOpen) return undefined;
@@ -328,7 +361,9 @@ export function Header({ role, title, detailTitle, profile, navItems = [], curre
             </>
           ) : (
             <>
-              <span className="eyebrow">{role === "Admin" ? t("common.adminArea") : t("common.studentArea")}</span>
+              <span className="eyebrow">
+                {role === "Admin" ? t("common.adminArea") : role === "Instructor" ? t("common.instructorArea") : t("common.studentArea")}
+              </span>
               <h1>{title}</h1>
             </>
           )}

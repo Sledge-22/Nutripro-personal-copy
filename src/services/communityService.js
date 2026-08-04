@@ -5,7 +5,7 @@ import { DEMO_STUDENT_EMAIL, DEMO_STUDENT_NAME } from "./userService.js";
 import { uploadCommunityPdf } from "./storageService.js";
 import { getStoragePublicUrl } from "./storageService.js";
 
-const MODERATOR_ROLES = new Set(["admin", "instructor", "support"]);
+const MODERATOR_ROLES = new Set(["admin", "support"]);
 
 function initialsFromName(name) {
   return (name || "")

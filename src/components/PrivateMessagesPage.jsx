@@ -49,6 +49,7 @@ function getMessagesCopy(language) {
       requestPending: "Esta solicitud de mensaje está pendiente.",
       continueIfAccepted: "Podrás continuar la conversación si la aceptan.",
       adminDirect: "Los mensajes de administradores llegan directamente a tu bandeja.",
+      instructorDirect: "Por ahora, los instructores solo pueden enviar mensajes a administradores.",
       report: "Reportar conversación",
       reported: "Conversación reportada.",
       loadFailed: "No se pudieron cargar los mensajes.",
@@ -102,6 +103,7 @@ function getMessagesCopy(language) {
     requestPending: "This message request is pending.",
     continueIfAccepted: "You can continue the conversation if they accept.",
     adminDirect: "Admin messages go directly to your inbox.",
+    instructorDirect: "For now, instructors can only message admins.",
     report: "Report conversation",
     reported: "Conversation reported.",
     loadFailed: "Messages could not be loaded.",
@@ -154,6 +156,10 @@ function isAdmin(user) {
   return `${user?.roleKey ?? user?.role ?? ""}`.toLowerCase() === "admin";
 }
 
+function isInstructor(user) {
+  return `${user?.roleKey ?? user?.role ?? ""}`.toLowerCase() === "instructor";
+}
+
 function isActive(user) {
   const status = `${user?.statusKey ?? user?.status ?? ""}`.toLowerCase();
   return !status || status === "active";
@@ -191,6 +197,7 @@ export function PrivateMessagesPage({ currentUser }) {
 
   const currentUserId = currentUser?.id ?? "";
   const currentUserIsAdmin = isAdmin(currentUser);
+  const currentUserIsInstructor = isInstructor(currentUser);
   const userCanSend = isActive(currentUser);
   const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId) ?? null;
   const selectedIsPendingRequest =
@@ -498,7 +505,7 @@ export function PrivateMessagesPage({ currentUser }) {
 
   const renderRecipientPicker = () => {
     const dropdownResults = currentUserIsAdmin ? recipientSearchResults : filteredStudentRecipients;
-    const showStudentGroups = !currentUserIsAdmin && !recipientSearchText.trim();
+    const showStudentGroups = !currentUserIsAdmin && !currentUserIsInstructor && !recipientSearchText.trim();
     const hasDropdown = recipientSearchOpen && !selectedRecipient;
 
     return (
@@ -575,7 +582,7 @@ export function PrivateMessagesPage({ currentUser }) {
           <div>
             <span className="eyebrow">{copy.messages}</span>
             <h2>{copy.messages}</h2>
-            <p>{isAdmin(currentUser) ? copy.adminDirect : copy.classmateRule}</p>
+            <p>{isAdmin(currentUser) ? copy.adminDirect : isInstructor(currentUser) ? copy.instructorDirect : copy.classmateRule}</p>
           </div>
           <button type="button" className="primary-btn" onClick={() => setComposeOpen((current) => !current)}>
             {copy.newMessage}

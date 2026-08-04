@@ -2609,6 +2609,119 @@ code {
   gap: 14px;
 }
 
+.announcements-admin-page,
+.announcement-form,
+.announcement-list {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.announcement-preview-card,
+.announcement-list-card,
+.announcement-alert-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, .035);
+  box-shadow: var(--shadow-sm);
+}
+
+.announcement-preview-card,
+.announcement-list-card {
+  display: grid;
+  gap: .85rem;
+  padding: 1rem;
+}
+
+.announcement-list-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.announcement-list-card h3,
+.announcement-preview-card h3 {
+  margin: .25rem 0;
+}
+
+.announcement-list-card p,
+.announcement-preview-card p {
+  color: var(--color-text-soft);
+}
+
+.announcement-priority-normal {
+  color: var(--color-primary);
+}
+
+.announcement-priority-important,
+.announcement-list-card.priority-important {
+  border-color: rgba(217, 183, 111, .35);
+}
+
+.announcement-priority-urgent,
+.announcement-list-card.priority-urgent {
+  border-color: rgba(240, 139, 127, .42);
+}
+
+.announcement-alert-list {
+  display: grid;
+  gap: .75rem;
+}
+
+.announcement-alert-card {
+  appearance: none;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: .85rem;
+  width: 100%;
+  padding: 1rem;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.announcement-alert-card.important {
+  border-color: rgba(217, 183, 111, .36);
+  background: rgba(217, 183, 111, .10);
+}
+
+.announcement-alert-card.urgent {
+  border-color: rgba(240, 139, 127, .44);
+  background: rgba(240, 139, 127, .10);
+}
+
+.announcement-alert-card:hover {
+  border-color: rgba(79, 202, 214, .42);
+  box-shadow: 0 0 0 3px rgba(79, 202, 214, .08);
+}
+
+.announcement-alert-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  color: var(--color-primary);
+  background: var(--color-brand-soft);
+}
+
+.announcement-alert-card span:last-child {
+  display: grid;
+  gap: .25rem;
+}
+
+.announcement-alert-card small {
+  color: var(--color-primary);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.announcement-alert-card em,
+.announcement-alert-card span span {
+  color: var(--color-text-soft);
+  font-style: normal;
+}
+
 .np-course-manager-page {
   width: 100%;
   max-width: 100%;
@@ -3968,6 +4081,14 @@ select:focus {
 }
 
 @media (max-width: 760px) {
+  .announcement-list-card {
+    grid-template-columns: 1fr;
+  }
+
+  .announcement-list-card .form-actions {
+    justify-content: flex-start;
+  }
+
   .visibility-checker-hero,
   .visibility-course-summary,
   .visibility-class-header {

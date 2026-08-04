@@ -15,6 +15,7 @@ import {
   isAdminRoute,
   isAdminStudentPreviewRoute,
   isAuthUtilityRoute,
+  isInstructorRoute,
   isStudentRoute,
 } from "../routes/appRoutes.js";
 import { LoginPage } from "../pages/LoginPage.jsx";
@@ -23,6 +24,7 @@ import { AccessNoticePage } from "../pages/AccessNoticePage.jsx";
 import { PrivacyPage } from "../pages/PrivacyPage.jsx";
 import { AdminWorkspacePage } from "../pages/AdminWorkspacePage.jsx";
 import { StudentWorkspacePage } from "../pages/StudentWorkspacePage.jsx";
+import { InstructorWorkspacePage } from "../pages/InstructorWorkspacePage.jsx";
 import {
   canUpdateUserStatus,
   createAdminUser,
@@ -112,6 +114,7 @@ function dashboardPathForRole(role) {
   const normalizedRole = `${role ?? ""}`.trim().toLowerCase();
   if (normalizedRole === "admin") return ROUTES.admin.dashboard;
   if (normalizedRole === "student") return ROUTES.student.dashboard;
+  if (normalizedRole === "instructor") return ROUTES.instructor.dashboard;
   return ROUTES.auth.access;
 }
 
@@ -331,11 +334,12 @@ function pathMatchesRole(pathname, role) {
   const normalizedRole = `${role ?? ""}`.trim().toLowerCase();
   if (normalizedRole === "admin") return isAdminRoute(pathname);
   if (normalizedRole === "student") return isStudentRoute(pathname);
+  if (normalizedRole === "instructor") return isInstructorRoute(pathname);
   return isAuthUtilityRoute(pathname);
 }
 
 function isProtectedWorkspaceRoute(pathname) {
-  return isAdminRoute(pathname) || isStudentRoute(pathname);
+  return isAdminRoute(pathname) || isStudentRoute(pathname) || isInstructorRoute(pathname);
 }
 
 function getAccessBlockReason(profile) {
@@ -486,11 +490,12 @@ export function App() {
 
       const roleKey = profile?.roleKey ?? `${profile?.role ?? ""}`.toLowerCase();
       const nextStudentId = roleKey === "student" ? profile?.id ?? null : null;
+      const shouldLoadAdminData = roleKey === "admin";
 
       const [nextUsersResult, nextCoursesResult, nextCertificatesResult, nextPostsResult] = await Promise.allSettled([
-        getUsers(),
-        getCourses(),
-        getCertificates(),
+        shouldLoadAdminData ? getUsers() : Promise.resolve([]),
+        shouldLoadAdminData ? getCourses() : Promise.resolve([]),
+        shouldLoadAdminData ? getCertificates() : Promise.resolve([]),
         getCommunityPosts(),
       ]);
 
@@ -585,7 +590,7 @@ export function App() {
       }
 
       const blockedReason = getAccessBlockReason(profile);
-      if (blockedReason || !["admin", "student"].includes(roleKey)) {
+      if (blockedReason || !["admin", "student", "instructor"].includes(roleKey)) {
         if (pathname !== ROUTES.auth.access) navigateTo(ROUTES.auth.access, true);
       } else if (profile?.mustChangePassword || profile?.must_change_password || needsPrivacyConsent(profile)) {
         if (pathname !== ROUTES.auth.changePassword) navigateTo(ROUTES.auth.changePassword, true);
@@ -704,6 +709,7 @@ export function App() {
         icon: "community",
         children: [
           { path: ROUTES.admin.messages, label: t("common.messages"), icon: "community" },
+          { path: ROUTES.admin.announcements, label: t("common.announcements"), icon: "community" },
           { path: ROUTES.admin.community, label: t("common.community"), icon: "community" },
         ],
       },
@@ -745,6 +751,37 @@ export function App() {
         ],
       },
     ],
+    instructor: [
+      { path: ROUTES.instructor.dashboard, label: t("common.dashboard"), icon: "dashboard" },
+      {
+        id: "teaching",
+        label: t("common.teaching"),
+        icon: "courses",
+        children: [
+          { path: ROUTES.instructor.courses, label: t("common.myCourses"), icon: "courses" },
+          { path: ROUTES.instructor.assignmentReviews, label: t("common.assignmentReviews"), icon: "certificate" },
+          { path: ROUTES.instructor.studentProgress, label: t("common.studentProgress"), icon: "dashboard" },
+        ],
+      },
+      {
+        id: "communication",
+        label: t("common.communication"),
+        icon: "community",
+        children: [
+          { path: ROUTES.instructor.messages, label: t("common.messages"), icon: "community" },
+          { path: ROUTES.instructor.community, label: t("common.community"), icon: "community" },
+        ],
+      },
+      {
+        id: "account",
+        label: t("common.account"),
+        icon: "users",
+        children: [
+          { path: ROUTES.instructor.profile, label: t("common.profile"), icon: "users" },
+          { path: ROUTES.instructor.settings, label: t("common.settings"), icon: "dashboard" },
+        ],
+      },
+    ],
   }), [t]);
 
   const activeNavRole = normalizeRoleKey(currentUser?.roleKey ?? currentUser?.role);
@@ -758,6 +795,7 @@ export function App() {
       [ROUTES.admin.courseVisibilityChecker]: t("common.courseVisibilityChecker"),
       [ROUTES.admin.community]: t("common.community"),
       [ROUTES.admin.messages]: t("common.messages"),
+      [ROUTES.admin.announcements]: t("common.announcements"),
       [ROUTES.admin.teamApplications]: t("common.teamApplications"),
       [ROUTES.admin.assignmentReviews]: t("common.assignmentReviews"),
       [ROUTES.admin.certificates]: t("common.certificatesGenerator"),
@@ -768,6 +806,14 @@ export function App() {
       [ROUTES.student.courses]: t("common.courses"),
       [ROUTES.student.community]: t("common.community"),
       [ROUTES.student.messages]: t("common.messages"),
+      [ROUTES.instructor.dashboard]: t("instructor.dashboardTitle"),
+      [ROUTES.instructor.courses]: t("common.myCourses"),
+      [ROUTES.instructor.assignmentReviews]: t("common.assignmentReviews"),
+      [ROUTES.instructor.studentProgress]: t("common.studentProgress"),
+      [ROUTES.instructor.messages]: t("common.messages"),
+      [ROUTES.instructor.community]: t("common.community"),
+      [ROUTES.instructor.profile]: t("common.profile"),
+      [ROUTES.instructor.settings]: t("common.settings"),
       [ROUTES.auth.changePassword]: t("auth.changePassword"),
       [ROUTES.auth.access]: t("auth.accessRestricted"),
     };
@@ -1495,7 +1541,7 @@ export function App() {
     );
   }
 
-  if (!["admin", "student"].includes(currentUser?.roleKey)) {
+  if (!["admin", "student", "instructor"].includes(currentUser?.roleKey)) {
     return (
       <AccessNoticePage
         title={t("auth.dashboardUnavailable")}
@@ -1612,5 +1658,21 @@ export function App() {
       ? title
       : null;
 
-    return <div className="app-shell"><Sidebar role={role} navItems={activeNavItems} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><main className="workspace"><Header role={role} title={headerTitle} detailTitle={detailTitle} profile={currentUser} navItems={activeNavItems} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} /><div className="content">{role === "Admin" ? <AdminWorkspacePage pathname={pathname} users={users} courses={courses} coursesError={coursesError} certificates={certificates} posts={posts} currentUser={currentUser} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} /> : <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} studentCourseDetailsWarning={studentCourseDetailsWarning} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />}</div></main></div>;
+    return (
+      <div className="app-shell">
+        <Sidebar role={role} navItems={activeNavItems} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} />
+        <main className="workspace">
+          <Header role={role} title={headerTitle} detailTitle={detailTitle} profile={currentUser} navItems={activeNavItems} currentPath={currentPath} onNavigate={(nextPath) => navigateTo(nextPath)} onLogout={() => void handleLogout()} />
+          <div className="content">
+            {role === "Admin" ? (
+              <AdminWorkspacePage pathname={pathname} users={users} courses={courses} coursesError={coursesError} certificates={certificates} posts={posts} currentUser={currentUser} showAuthTestTools={showAuthTestTools} onUpdateUserStatus={handleUpdateUserStatus} onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onResetUserPassword={handleResetUserPassword} onSendUserInvitation={handleSendUserInvitation} onDeleteUser={handleDeleteUser} onSetStudentCourseAssignments={handleSetStudentCourseAssignments} onSaveCourse={handleSaveCourse} onDeleteCourse={handleDeleteCourse} onGenerateCertificate={handleGenerateCertificate} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onDeletePost={handleDeleteCommunityPost} onUpdateComment={handleUpdateCommunityComment} />
+            ) : role === "Instructor" ? (
+              <InstructorWorkspacePage pathname={pathname} currentUser={currentUser} posts={posts} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} />
+            ) : (
+              <StudentWorkspacePage pathname={pathname} studentId={activeStudentId} studentProfile={studentProfile} courses={studentCourses} certificates={studentCertificates} posts={posts} progressState={progressState} studentCoursesError={studentCoursesError} studentCourseDetailsWarning={studentCourseDetailsWarning} onCreatePost={handleCreatePost} onCreateComment={handleCreateComment} onUpdatePost={handleUpdateCommunityPost} onUpdateComment={handleUpdateCommunityComment} onUpdateProfile={handleUpdateStudentProfile} onUpdateProgress={handleUpdateProgress} />
+            )}
+          </div>
+        </main>
+      </div>
+    );
 }

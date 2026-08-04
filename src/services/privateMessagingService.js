@@ -135,9 +135,29 @@ export async function getPrivateMessageRecipients(currentUser) {
   const role = `${currentUser?.roleKey ?? currentUser?.role ?? ""}`.toLowerCase();
 
   if (!isSupabaseConfigured || !supabase) {
+    if (role === "instructor") {
+      return [{ id: "admin-mock", name: "Alex Morgan", role: "admin", status: "active", group: "admins" }];
+    }
+
     return role === "admin"
       ? []
       : [{ id: "admin-mock", name: "Alex Morgan", role: "admin", status: "active", group: "admins" }];
+  }
+
+  if (role === "instructor") {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, name, username, email, role, status")
+      .eq("role", "admin")
+      .eq("status", "active")
+      .limit(25);
+
+    if (error) {
+      console.error("Loading instructor message recipients failed:", error);
+      throw error;
+    }
+
+    return (data ?? []).map((user) => normalizeRecipient({ ...user, group: "admins" }));
   }
 
   const { data, error } = await supabase.rpc("get_private_message_recipients");

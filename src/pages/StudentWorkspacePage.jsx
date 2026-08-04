@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { CertificateModal, Icon, Progress, Status, Welcome } from "../components/ui.jsx";
+import { AnnouncementAlertList, CertificateModal, Icon, Progress, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
 import { PrivateMessagesPage } from "../components/PrivateMessagesPage.jsx";
 import CountryFlag from "../components/CountryFlag.jsx";
@@ -9,6 +9,7 @@ import { getStudentSubmission, submitAssignment } from "../services/assignmentSe
 import { changePassword } from "../services/authService.js";
 import { getStudentCourseAccess } from "../services/courseService.js";
 import { getNotifications } from "../services/notificationService.js";
+import { getStudentLessonNote, saveStudentLessonNote } from "../services/studentLessonNoteService.js";
 import { uploadAssignmentFile, uploadProfilePicture } from "../services/storageService.js";
 import { normalizeCountrySelection } from "../data/countries.js";
 import { getProfileCountryOptions } from "../data/profileCountries.js";
@@ -203,6 +204,22 @@ function formatDisplayDate(value, language = "es") {
       year: "numeric",
       month: "short",
       day: "numeric",
+    });
+  } catch {
+    return value;
+  }
+}
+
+function formatSavedTime(value, language = "es") {
+  if (!value) return "";
+
+  try {
+    return new Date(value).toLocaleString(language === "es" ? "es-ES" : "en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   } catch {
     return value;
@@ -555,6 +572,7 @@ function StudentDashboardPage({ courses, certificates, progressFor, lessonSummar
   return (
     <>
       <Welcome title={t("dashboard.studentWelcomeTitle")} text={t("dashboard.studentWelcomeText")} />
+      <AnnouncementAlertList notifications={dashboardData.notifications} onNavigate={goTo} />
       {studentCoursesError ? <small className="field-note danger-text">{studentCoursesError}</small> : null}
       {!studentCoursesError && studentCourseDetailsWarning ? <small className="field-note">{studentCourseDetailsWarning}</small> : null}
       <section className="section-card dashboard-primary-action">
@@ -975,6 +993,15 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     submitError: "",
     uploading: false,
   });
+  const [noteState, setNoteState] = useState({
+    loading: false,
+    saving: false,
+    note: "",
+    savedNote: "",
+    lastSavedAt: "",
+    message: "",
+    error: "",
+  });
 
   console.log("selected course id on detail page:", course?.id);
 
@@ -1165,6 +1192,74 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     };
   }, [activeAssignment?.id, previewMode, studentId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadNote = async () => {
+      if (!activeModule?.id || !studentId || previewMode) {
+        if (!cancelled) {
+          setNoteState({
+            loading: false,
+            saving: false,
+            note: "",
+            savedNote: "",
+            lastSavedAt: "",
+            message: "",
+            error: "",
+          });
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setNoteState((current) => ({
+          ...current,
+          loading: true,
+          saving: false,
+          message: "",
+          error: "",
+        }));
+      }
+
+      try {
+        const savedNote = await getStudentLessonNote(studentId, activeModule.id);
+
+        if (!cancelled) {
+          setNoteState({
+            loading: false,
+            saving: false,
+            note: savedNote?.note ?? "",
+            savedNote: savedNote?.note ?? "",
+            lastSavedAt: savedNote?.updatedAt ?? savedNote?.updated_at ?? "",
+            message: "",
+            error: "",
+          });
+        }
+      } catch (error) {
+        console.error("Loading private lesson note failed:", error);
+
+        if (!cancelled) {
+          setNoteState((current) => ({
+            ...current,
+            loading: false,
+            saving: false,
+            message: "",
+            error: buildUserFacingError(error, t("notes.loadFailed"), {
+              setupMessage: t("notes.setupRequired"),
+              permissionMessage: t("notes.permissionDenied"),
+            }),
+          }));
+        }
+      }
+    };
+
+    void loadNote();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeModule?.id, previewMode, studentId, t]);
+
   if (!previewMode && course?.status && course.status !== "published") {
     return (
       <>
@@ -1238,6 +1333,50 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const toggleModule = () => {
     if (!activeModule || !activeLessonState?.isUnlocked || !canComplete || moduleDone) return;
     void onUpdateProgress({ [`module-${activeModule.id}`]: true });
+  };
+
+  const handleSaveNote = async () => {
+    if (previewMode) {
+      setNoteState((current) => ({
+        ...current,
+        message: "",
+        error: t("notes.previewDisabled"),
+      }));
+      return;
+    }
+
+    if (!activeModule?.id || !studentId) return;
+
+    setNoteState((current) => ({
+      ...current,
+      saving: true,
+      message: "",
+      error: "",
+    }));
+
+    try {
+      const savedNote = await saveStudentLessonNote(studentId, activeModule.id, noteState.note);
+      setNoteState({
+        loading: false,
+        saving: false,
+        note: savedNote?.note ?? "",
+        savedNote: savedNote?.note ?? "",
+        lastSavedAt: savedNote?.updatedAt ?? savedNote?.updated_at ?? new Date().toISOString(),
+        message: t("notes.saved"),
+        error: "",
+      });
+    } catch (error) {
+      console.error("Saving private lesson note failed:", error);
+      setNoteState((current) => ({
+        ...current,
+        saving: false,
+        message: "",
+        error: buildUserFacingError(error, t("notes.saveFailed"), {
+          setupMessage: t("notes.setupRequired"),
+          permissionMessage: t("notes.permissionDenied"),
+        }),
+      }));
+    }
   };
 
   const handleAssignmentSubmit = async () => {
@@ -1357,6 +1496,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   }
 
   const isAssignmentLocked = assignmentStatus === "approved";
+  const noteDirty = noteState.note !== noteState.savedNote;
   const assignmentButtonLabel = assignmentState.uploading
     ? t("common.submitting")
     : !hasSubmission
@@ -1503,6 +1643,59 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
           ) : null}
 
           {viewError && <small className="field-note danger-text">{viewError}</small>}
+
+          <section className="section-card lesson-notes-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">{t("notes.eyebrow")}</span>
+                <h2>{t("notes.title")}</h2>
+                <p>{t("notes.description")}</p>
+              </div>
+            </div>
+
+            {noteState.loading ? <small className="field-note">{t("notes.loading")}</small> : null}
+            {noteState.message ? <small className="field-note">{noteState.message}</small> : null}
+            {noteState.error ? <small className="field-note danger-text">{noteState.error}</small> : null}
+
+            <label>
+              {t("notes.label")}
+              <textarea
+                className="lesson-notes-textarea"
+                rows={7}
+                value={noteState.note}
+                disabled={previewMode || noteState.loading || noteState.saving || !activeModule?.id}
+                placeholder={t("notes.placeholder")}
+                onChange={(event) =>
+                  setNoteState((current) => ({
+                    ...current,
+                    note: event.target.value,
+                    message: "",
+                    error: "",
+                  }))
+                }
+              />
+            </label>
+
+            <div className="lesson-notes-footer">
+              <div>
+                {noteState.lastSavedAt ? (
+                  <small className="field-note">{t("notes.lastSaved", { time: formatSavedTime(noteState.lastSavedAt, language) })}</small>
+                ) : (
+                  <small className="field-note">{t("notes.notSavedYet")}</small>
+                )}
+                {noteDirty ? <small className="field-note">{t("notes.unsavedChanges")}</small> : null}
+                {previewMode ? <small className="field-note">{t("notes.previewDisabled")}</small> : null}
+              </div>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => void handleSaveNote()}
+                disabled={previewMode || noteState.loading || noteState.saving || !activeModule?.id || !noteDirty}
+              >
+                {noteState.saving ? t("notes.saving") : t("notes.save")}
+              </button>
+            </div>
+          </section>
 
           <div className="module-assets">
             <div className="lesson-meta">

@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useState } from "react";
 import CountryFlag from "../components/CountryFlag.jsx";
-import { Icon, Status, Welcome } from "../components/ui.jsx";
+import { AnnouncementAlertList, Icon, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
 import { PrivateMessagesPage } from "../components/PrivateMessagesPage.jsx";
 import { ToggleSwitch } from "../components/ToggleSwitch.jsx";
@@ -8,6 +8,12 @@ import { getStudentSubmission, getSubmissionsForAdmin, reviewSubmission } from "
 import { recordAdminAuditLog, getAdminAuditLogs } from "../services/auditLogService.js";
 import { deleteCourseDraft, getCourseDrafts, markCourseDraftPublished, saveCourseDraft } from "../services/courseDraftService.js";
 import { getTeamApplications, updateTeamApplication } from "../services/teamApplicationService.js";
+import {
+  archiveAnnouncement,
+  createAnnouncement,
+  getAnnouncements,
+  updateAnnouncement,
+} from "../services/announcementService.js";
 import { getNotifications } from "../services/notificationService.js";
 import { getClassesByCourse } from "../services/courseClassService.js";
 import { getCourseEnrollments } from "../services/enrollmentService.js";
@@ -1604,6 +1610,10 @@ export function AdminWorkspacePage({
     return <PrivateMessagesPage currentUser={currentUser} />;
   }
 
+  if (pathname === ROUTES.admin.announcements) {
+    return <AnnouncementsAdminPage courses={courses} currentUser={currentUser} />;
+  }
+
   if (pathname === "/admin/team-applications") {
     return <TeamApplicationsPage currentUser={currentUser} users={users} onCreateUser={onCreateUser} />;
   }
@@ -1709,6 +1719,7 @@ function AdminDashboardPage({ users, courses, certificates, currentUser }) {
   return (
     <>
       <Welcome title={t("dashboard.adminWelcomeTitle")} text={t("dashboard.adminWelcomeText")} />
+      <AnnouncementAlertList notifications={dashboardData.notifications} onNavigate={navigateTo} />
       {summaryCards.length ? (
         <div className="dashboard-overview-grid compact-dashboard-grid">
           {summaryCards.map((card) => (
@@ -1747,6 +1758,320 @@ function AdminDashboardPage({ users, courses, certificates, currentUser }) {
         </div>
       </section>
     </>
+  );
+}
+
+function createAnnouncementDraft() {
+  return {
+    id: "",
+    title: "",
+    body: "",
+    audienceType: "all_students",
+    courseId: "",
+    classId: "",
+    priority: "normal",
+    status: "published",
+    expiresAt: "",
+  };
+}
+
+function getAnnouncementAudienceLabel(announcement, courses, t) {
+  const audienceType = announcement.audienceType || announcement.audience_type;
+  if (audienceType === "all_users") return t("admin.announcementAudienceAllUsers");
+  if (audienceType === "all_students") return t("admin.announcementAudienceAllStudents");
+  if (audienceType === "admins") return t("admin.announcementAudienceAdmins");
+  if (audienceType === "course") {
+    const course = courses.find((entry) => String(entry.id) === String(announcement.courseId || announcement.course_id));
+    return course?.title || t("admin.announcementAudienceSpecificCourse");
+  }
+  if (audienceType === "class") {
+    const course = courses.find((entry) => String(entry.id) === String(announcement.courseId || announcement.course_id));
+    const courseClass = safeArray(course?.classes).find((entry) => String(entry.id) === String(announcement.classId || announcement.class_id));
+    return courseClass?.title || t("admin.announcementAudienceSpecificClass");
+  }
+  return t("admin.announcementAudienceAllStudents");
+}
+
+function AnnouncementsAdminPage({ courses = [], currentUser }) {
+  const { t, language } = useLanguage();
+  const [announcements, setAnnouncements] = useState([]);
+  const [draft, setDraft] = useState(createAnnouncementDraft);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const selectedCourse = safeArray(courses).find((course) => String(course.id) === String(draft.courseId)) ?? null;
+  const classOptions = safeArray(selectedCourse?.classes).filter((courseClass) => courseClass?.status !== "archived");
+  const editing = Boolean(draft.id);
+
+  const loadAnnouncements = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setAnnouncements(await getAnnouncements());
+    } catch (loadError) {
+      console.error("Loading announcements failed:", loadError);
+      setError(buildAdminErrorState(loadError, t("admin.announcementsLoadFailed")));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadAnnouncements();
+  }, []);
+
+  const updateDraft = (field, value) => {
+    setDraft((current) => {
+      const next = { ...current, [field]: value };
+      if (field === "audienceType" && value !== "course" && value !== "class") {
+        next.courseId = "";
+        next.classId = "";
+      }
+      if (field === "audienceType" && value !== "class") next.classId = "";
+      if (field === "courseId") next.classId = "";
+      return next;
+    });
+  };
+
+  const startEditingAnnouncement = (announcement) => {
+    setMessage("");
+    setError("");
+    setDraft({
+      id: announcement.id,
+      title: announcement.title || "",
+      body: announcement.body || "",
+      audienceType: announcement.audienceType || announcement.audience_type || "all_students",
+      courseId: announcement.courseId || announcement.course_id || "",
+      classId: announcement.classId || announcement.class_id || "",
+      priority: announcement.priority || "normal",
+      status: announcement.status || "published",
+      expiresAt: announcement.expiresAt || announcement.expires_at || "",
+    });
+  };
+
+  const resetDraft = () => {
+    setDraft(createAnnouncementDraft());
+    setMessage("");
+    setError("");
+  };
+
+  const saveAnnouncement = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const payload = {
+        ...draft,
+        courseId: draft.audienceType === "course" || draft.audienceType === "class" ? draft.courseId : "",
+        classId: draft.audienceType === "class" ? draft.classId : "",
+      };
+      const savedAnnouncement = editing
+        ? await updateAnnouncement(draft.id, payload, currentUser)
+        : await createAnnouncement(payload, currentUser);
+
+      await recordAdminAuditLog({
+        adminUser: currentUser,
+        action: editing ? "announcement_updated" : "announcement_published",
+        targetType: "announcement",
+        targetId: savedAnnouncement?.id ?? draft.id,
+        details: {
+          audience_type: payload.audienceType,
+          course_id: payload.courseId || null,
+          class_id: payload.classId || null,
+          priority: payload.priority,
+          status: payload.status,
+        },
+      });
+
+      setMessage(editing ? t("admin.announcementUpdated") : t("admin.announcementPublished"));
+      setDraft(createAnnouncementDraft());
+      await loadAnnouncements();
+    } catch (saveError) {
+      console.error("Saving announcement failed:", saveError);
+      setError(buildAdminErrorState(saveError, t("admin.announcementSaveFailed")));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const archiveSelectedAnnouncement = async (announcement) => {
+    const confirmed = window.confirm(t("admin.confirmArchiveAnnouncement"));
+    if (!confirmed) return;
+
+    setSaving(true);
+    setMessage("");
+    setError("");
+
+    try {
+      await archiveAnnouncement(announcement.id);
+      await recordAdminAuditLog({
+        adminUser: currentUser,
+        action: "announcement_archived",
+        targetType: "announcement",
+        targetId: announcement.id,
+        details: {
+          priority: announcement.priority,
+          audience_type: announcement.audienceType || announcement.audience_type,
+        },
+      });
+      setMessage(t("admin.announcementArchived"));
+      if (String(draft.id) === String(announcement.id)) setDraft(createAnnouncementDraft());
+      await loadAnnouncements();
+    } catch (archiveError) {
+      console.error("Archiving announcement failed:", archiveError);
+      setError(buildAdminErrorState(archiveError, t("admin.announcementArchiveFailed")));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="section-card announcements-admin-page">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">{t("common.announcements")}</span>
+          <h2>{t("common.announcements")}</h2>
+          <p>{t("admin.announcementsHelp")}</p>
+        </div>
+        <button type="button" className="secondary-btn" onClick={() => void loadAnnouncements()} disabled={loading}>
+          {t("common.refresh")}
+        </button>
+      </div>
+
+      {message ? <small className="field-note success-text">{message}</small> : null}
+      {error ? <AdminErrorMessage error={error} detailsLabel={t("common.details")} /> : null}
+
+      <form className="announcement-form" onSubmit={saveAnnouncement}>
+        <div className="community-form-grid">
+          <label>
+            {t("admin.announcementTitle")}
+            <input value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} required />
+          </label>
+          <label>
+            {t("admin.announcementAudience")}
+            <select value={draft.audienceType} onChange={(event) => updateDraft("audienceType", event.target.value)}>
+              <option value="all_students">{t("admin.announcementAudienceAllStudents")}</option>
+              <option value="course">{t("admin.announcementAudienceSpecificCourse")}</option>
+              <option value="class">{t("admin.announcementAudienceSpecificClass")}</option>
+              <option value="admins">{t("admin.announcementAudienceAdmins")}</option>
+              <option value="all_users">{t("admin.announcementAudienceAllUsers")}</option>
+            </select>
+          </label>
+          {draft.audienceType === "course" || draft.audienceType === "class" ? (
+            <label>
+              {t("common.course")}
+              <select value={draft.courseId} onChange={(event) => updateDraft("courseId", event.target.value)} required>
+                <option value="">{t("common.selectCourse")}</option>
+                {safeArray(courses).map((course) => (
+                  <option key={course.id} value={course.id}>{course.title}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {draft.audienceType === "class" ? (
+            <label>
+              {t("common.class")}
+              <select value={draft.classId} onChange={(event) => updateDraft("classId", event.target.value)} required>
+                <option value="">{t("admin.selectClass")}</option>
+                {classOptions.map((courseClass) => (
+                  <option key={courseClass.id} value={courseClass.id}>{courseClass.title}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label>
+            {t("admin.announcementPriority")}
+            <select value={draft.priority} onChange={(event) => updateDraft("priority", event.target.value)}>
+              <option value="normal">{t("admin.priorityNormal")}</option>
+              <option value="important">{t("admin.priorityImportant")}</option>
+              <option value="urgent">{t("admin.priorityUrgent")}</option>
+            </select>
+          </label>
+          <label>
+            {t("common.status")}
+            <select value={draft.status} onChange={(event) => updateDraft("status", event.target.value)}>
+              <option value="published">{t("status.published")}</option>
+              <option value="draft">{t("status.draft")}</option>
+              <option value="archived">{t("status.archived")}</option>
+            </select>
+          </label>
+          <label>
+            {t("admin.announcementExpiresAt")}
+            <input type="datetime-local" value={draft.expiresAt ? draft.expiresAt.slice(0, 16) : ""} onChange={(event) => updateDraft("expiresAt", event.target.value)} />
+          </label>
+          <label className="wide-field">
+            {t("admin.announcementBody")}
+            <textarea rows="5" value={draft.body} onChange={(event) => updateDraft("body", event.target.value)} required />
+          </label>
+        </div>
+
+        <div className="announcement-preview-card">
+          <span className="eyebrow">{t("admin.announcementPreview")}</span>
+          <h3>{draft.title || t("admin.announcementTitle")}</h3>
+          <p>{draft.body || t("admin.announcementBody")}</p>
+          <div className="row-actions wrap-actions">
+            <span className={`subtle-badge announcement-priority-${draft.priority}`}>{t(`admin.priority${draft.priority.charAt(0).toUpperCase()}${draft.priority.slice(1)}`)}</span>
+            <span className="subtle-badge">{getAnnouncementAudienceLabel(draft, courses, t)}</span>
+          </div>
+        </div>
+
+        <div className="form-actions">
+          <button type="submit" className="primary-btn" disabled={saving}>
+            {saving ? t("common.saving") : editing ? t("common.saveChanges") : t("admin.publishAnnouncement")}
+          </button>
+          {editing ? (
+            <button type="button" className="secondary-btn" onClick={resetDraft} disabled={saving}>
+              {t("common.cancel")}
+            </button>
+          ) : null}
+        </div>
+      </form>
+
+      <div className="announcement-list">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{t("admin.publishedAnnouncements")}</span>
+            <h3>{t("admin.publishedAnnouncements")}</h3>
+          </div>
+        </div>
+        {loading ? <small className="field-note">{t("common.loading")}</small> : null}
+        {!loading && !announcements.length ? <p className="empty-copy">{t("admin.noAnnouncementsYet")}</p> : null}
+        {announcements.map((announcement) => (
+          <article key={announcement.id} className={`announcement-list-card priority-${announcement.priority}`}>
+            <div>
+              <div className="row-actions wrap-actions">
+                <Status status={announcement.status || "published"} />
+                <span className={`subtle-badge announcement-priority-${announcement.priority}`}>
+                  {t(`admin.priority${announcement.priority.charAt(0).toUpperCase()}${announcement.priority.slice(1)}`)}
+                </span>
+                <span className="subtle-badge">{getAnnouncementAudienceLabel(announcement, courses, t)}</span>
+              </div>
+              <h3>{announcement.title}</h3>
+              <p>{announcement.body}</p>
+              <small className="field-note">
+                {announcement.publishedAt || announcement.published_at
+                  ? new Date(announcement.publishedAt || announcement.published_at).toLocaleString(language === "es" ? "es-ES" : "en-US")
+                  : ""}
+              </small>
+            </div>
+            <div className="form-actions compact">
+              <button type="button" className="secondary-btn" onClick={() => startEditingAnnouncement(announcement)}>
+                {t("common.edit")}
+              </button>
+              {announcement.status !== "archived" ? (
+                <button type="button" className="secondary-btn danger-text" onClick={() => void archiveSelectedAnnouncement(announcement)} disabled={saving}>
+                  {t("common.archive")}
+                </button>
+              ) : null}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

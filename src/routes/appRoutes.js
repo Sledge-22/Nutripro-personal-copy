@@ -19,6 +19,7 @@ export const ROUTES = {
     studentPreview: (courseId) => `/admin/student-preview/${courseId}`,
     community: "/admin/community",
     messages: "/admin/messages",
+    announcements: "/admin/announcements",
     teamApplications: "/admin/team-applications",
     assignmentReviews: "/admin/assignment-reviews",
     certificates: "/admin/certificates",
@@ -33,6 +34,16 @@ export const ROUTES = {
     community: "/student/community",
     messages: "/student/messages",
     courseDetail: (courseId) => `/student/courses/${courseId}`,
+  },
+  instructor: {
+    dashboard: "/instructor",
+    courses: "/instructor/courses",
+    assignmentReviews: "/instructor/assignment-reviews",
+    studentProgress: "/instructor/student-progress",
+    messages: "/instructor/messages",
+    community: "/instructor/community",
+    profile: "/instructor/profile",
+    settings: "/instructor/settings",
   },
 };
 
@@ -88,6 +99,10 @@ export function getAdminCourseRouteState(pathname) {
 
 export function isStudentRoute(pathname) {
   return pathname.startsWith("/student");
+}
+
+export function isInstructorRoute(pathname) {
+  return pathname.startsWith("/instructor");
 }
 
 export function isAuthUtilityRoute(pathname) {
