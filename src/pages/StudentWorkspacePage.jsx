@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { AnnouncementAlertList, CertificateModal, Icon, Progress, Status, Welcome } from "../components/ui.jsx";
 import { CommunityBoard } from "../components/CommunityBoard.jsx";
 import { PrivateMessagesPage } from "../components/PrivateMessagesPage.jsx";
@@ -216,6 +216,18 @@ function getCompletionBlockerMessage({ t, pdfRequired, videoRequired, assignment
   }
 
   return "";
+}
+
+function getNextModule(currentModuleId, orderedModules = []) {
+  const safeModules = Array.isArray(orderedModules) ? orderedModules : [];
+  const currentIndex = safeModules.findIndex((module) => String(module?.id) === String(currentModuleId));
+  if (currentIndex < 0) return { currentIndex, nextModule: null };
+
+  const nextModule = safeModules[currentIndex + 1] ?? null;
+  return {
+    currentIndex,
+    nextModule: nextModule && String(nextModule.id) !== String(currentModuleId) ? nextModule : null,
+  };
 }
 
 function StudentCourseState({ eyebrow, title, text }) {
@@ -1008,8 +1020,9 @@ function OwnedCoursesPage({ courses, progressFor, lessonSummaryFor, studentCours
 
 function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, progress, previewMode = false, previewReturnPath = ROUTES.student.courses }) {
   const { t, language, translateSubmissionType } = useLanguage();
-  const modules = getCourseModules(course);
-  const courseClasses = getCourseClasses(course);
+  const modules = useMemo(() => getCourseModules(course), [course]);
+  const courseClasses = useMemo(() => getCourseClasses(course), [course]);
+  const moduleIdsKey = useMemo(() => modules.map((module) => String(module.id)).join("|"), [modules]);
   const [activeModuleId, setActiveModuleId] = useState(modules[0]?.id || null);
   const [viewError, setViewError] = useState("");
   const [blockedLessonId, setBlockedLessonId] = useState("");
@@ -1038,12 +1051,14 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   console.log("selected course id on detail page:", course?.id);
 
   useEffect(() => {
-    setActiveModuleId(modules[0]?.id || null);
+    const requestedLessonId = new URLSearchParams(window.location.search).get("lesson");
+    const requestedModule = modules.find((module) => String(module.id) === String(requestedLessonId));
+    setActiveModuleId(requestedModule?.id ?? modules[0]?.id ?? null);
     setViewError("");
     setBlockedLessonId("");
-  }, [course?.id, modules]);
+  }, [course?.id, moduleIdsKey]);
 
-  const activeModule = modules.find((module) => module.id === activeModuleId) || modules[0] || null;
+  const activeModule = modules.find((module) => String(module.id) === String(activeModuleId)) || modules[0] || null;
   const lessonRequirements = getLessonRequirements(activeModule);
   const assignmentRequired = lessonRequirements.requiresAssignmentSubmission;
   const activeAssignment = assignmentRequired ? activeModule?.assignment ?? null : null;
@@ -1057,13 +1072,8 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const activeLessonState = activeModule
     ? sequentialState.lessonStates.get(String(activeModule.id))
     : null;
-  const activeLessonIndex = activeLessonState?.index ?? -1;
-  const nextLessonState =
-    activeLessonIndex >= 0
-      ? sequentialState.lessonStates.get(
-          String(sequentialState.orderedLessons[activeLessonIndex + 1]?.id ?? ""),
-        )
-      : null;
+  const { nextModule } = getNextModule(activeModule?.id, sequentialState.orderedLessons);
+  const nextLessonState = nextModule ? sequentialState.lessonStates.get(String(nextModule.id)) : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -1144,6 +1154,33 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
       "",
       `${previewMode ? ROUTES.admin.studentPreview(course.id) : ROUTES.student.courseDetail(course.id)}?lesson=${encodeURIComponent(module.id)}`,
     );
+  };
+
+  const handleNextLesson = () => {
+    const { currentIndex, nextModule: resolvedNextModule } = getNextModule(
+      activeModule?.id,
+      sequentialState.orderedLessons,
+    );
+    const resolvedNextState = resolvedNextModule
+      ? sequentialState.lessonStates.get(String(resolvedNextModule.id))
+      : null;
+
+    console.log("[NextLesson]", {
+      currentModuleId: activeModule?.id,
+      currentIndex,
+      nextModuleId: resolvedNextModule?.id,
+      nextModuleTitle: resolvedNextModule?.title,
+      orderedModuleIds: sequentialState.orderedLessons.map((module) => module.id),
+    });
+
+    if (!resolvedNextModule || String(resolvedNextModule.id) === String(activeModule?.id)) return;
+
+    if (!moduleDone || !resolvedNextState?.isUnlocked) {
+      setViewError(t("common.completeThisLessonToUnlockNext"));
+      return;
+    }
+
+    selectLesson(resolvedNextModule);
   };
 
   useEffect(() => {
@@ -2069,14 +2106,16 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
             <Icon name="check" />
             {moduleDone ? t("common.moduleMarkedComplete") : t("common.markModuleComplete")}
           </button>
-          {nextLessonState?.isUnlocked ? (
+          {nextModule && moduleDone && nextLessonState?.isUnlocked ? (
             <button
               type="button"
               className="secondary-btn next-lesson-button"
-              onClick={() => selectLesson(nextLessonState.lesson)}
+              onClick={handleNextLesson}
             >
               {t("common.nextLesson")} <Icon name="arrow" size={16} />
             </button>
+          ) : nextModule && !nextLessonState?.isUnlocked ? (
+            <small className="field-note">{t("common.completeThisLessonToUnlockNext")}</small>
           ) : sequentialState.courseComplete ? (
             <p className="course-complete-message">{t("common.courseComplete")}</p>
           ) : null}
