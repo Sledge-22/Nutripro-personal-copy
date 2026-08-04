@@ -24,6 +24,7 @@ function mapRowsToProgress(rows) {
 }
 
 const PROGRESS_VALUE_KEYS = [
+  "course_id",
   "pdf_completed",
   "video_viewed",
   "video_viewed_at",
@@ -34,7 +35,10 @@ const PROGRESS_VALUE_KEYS = [
   "progress_percent",
 ];
 
-function groupProgressUpdates(updates, { includeCompletionMetadata = true, includeViewMetadata = true } = {}) {
+function groupProgressUpdates(
+  updates,
+  { includeCompletionMetadata = true, includeViewMetadata = true, courseId = "", moduleCourseIds = {} } = {},
+) {
   const now = new Date().toISOString();
   return Object.entries(updates).reduce((rows, [key, value]) => {
     const separatorIndex = key.indexOf("-");
@@ -45,8 +49,10 @@ function groupProgressUpdates(updates, { includeCompletionMetadata = true, inclu
     if (!moduleIdValue || !["pdf", "video", "module"].includes(type)) return rows;
 
     if (!rows[moduleIdValue]) {
+      const rowCourseId = moduleCourseIds[String(moduleIdValue)] ?? moduleCourseIds[moduleIdValue] ?? courseId;
       rows[moduleIdValue] = {
         module_id: moduleId,
+        ...(rowCourseId ? { course_id: rowCourseId } : {}),
       };
     }
 
@@ -105,6 +111,7 @@ function getMissingProgressColumn(error) {
     "updated_at",
     "status",
     "completed",
+    "course_id",
     "video_viewed_at",
     "video_viewed",
   ];
@@ -160,7 +167,7 @@ export async function getStudentProgress(studentId = 1) {
   }
 }
 
-export async function updateStudentProgress(studentId = 1, updates = {}) {
+export async function updateStudentProgress(studentId = 1, updates = {}, options = {}) {
   if (!isSupabaseConfigured) {
     const nextProgress = { ...getMockProgress(), ...updates };
     setMockProgress(nextProgress);
@@ -170,7 +177,7 @@ export async function updateStudentProgress(studentId = 1, updates = {}) {
   try {
     const current = await getStudentProgress(studentId);
     const merged = { ...current, ...updates };
-    const grouped = Object.values(groupProgressUpdates(updates)).map((row) => ({
+    const grouped = Object.values(groupProgressUpdates(updates, options)).map((row) => ({
       student_id: studentId,
       ...row,
     }));

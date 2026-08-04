@@ -10,6 +10,9 @@ alter table public.student_progress
 add column if not exists updated_at timestamptz default now();
 
 alter table public.student_progress
+add column if not exists course_id uuid references public.courses(id) on delete cascade;
+
+alter table public.student_progress
 add column if not exists video_viewed boolean not null default false;
 
 alter table public.student_progress
@@ -31,6 +34,14 @@ add column if not exists progress_percent integer default 0;
 update public.student_progress
 set updated_at = now()
 where updated_at is null;
+
+-- Backfill course_id from modules when possible.
+update public.student_progress as progress
+set course_id = modules.course_id
+from public.modules as modules
+where progress.course_id is null
+  and progress.module_id = modules.id
+  and modules.course_id is not null;
 
 -- Backfill normalized completion metadata from legacy module_completed data only if that legacy column exists.
 do $$

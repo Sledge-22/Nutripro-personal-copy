@@ -1451,19 +1451,10 @@ export function App() {
       return { ok: false, error: buildUserFacingError(error, t("student.savingProfileFailed")) };
     }
   }
-  async function handleUpdateProgress(updates) {
+  async function handleUpdateProgress(updates, context = {}) {
     if (!activeStudentId) {
       console.error("Student progress update failed because the active student user is missing.");
       return { ok: false, error: new Error("Active student user is missing.") };
-    }
-
-    let nextProgress = null;
-    try {
-      nextProgress = await updateStudentProgress(activeStudentId, updates);
-      setProgressState(nextProgress);
-    } catch (error) {
-      console.error("Student progress update failed:", error);
-      return { ok: false, error };
     }
 
     const touchedModuleIds = Array.from(
@@ -1476,13 +1467,40 @@ export function App() {
           .filter(Boolean),
       ),
     );
+    const moduleCourseIds = [...courses, ...studentCourses].reduce((lookup, course) => {
+      const courseId = course?.id;
+      const modules = [
+        ...(Array.isArray(course?.modules) ? course.modules : []),
+        ...(Array.isArray(course?.classes)
+          ? course.classes.flatMap((courseClass) => (Array.isArray(courseClass?.modules) ? courseClass.modules : []))
+          : []),
+      ];
+
+      modules.forEach((module) => {
+        if (module?.id && courseId) lookup[String(module.id)] = courseId;
+      });
+
+      return lookup;
+    }, {});
+    let nextProgress = null;
+    try {
+      nextProgress = await updateStudentProgress(activeStudentId, updates, {
+        ...context,
+        moduleCourseIds: {
+          ...moduleCourseIds,
+          ...(context?.moduleCourseIds ?? {}),
+        },
+      });
+      setProgressState(nextProgress);
+    } catch (error) {
+      console.error("Student progress update failed:", error);
+      return { ok: false, error };
+    }
+
     const touchedCourseIds = Array.from(
       new Set(
-        courses
-          .filter((course) =>
-            (course.modules ?? []).some((module) => touchedModuleIds.includes(String(module.id))),
-          )
-          .map((course) => course.id)
+        touchedModuleIds
+          .map((moduleId) => moduleCourseIds[String(moduleId)] ?? context?.courseId)
           .filter(Boolean),
       ),
     );

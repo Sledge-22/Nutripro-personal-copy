@@ -1429,7 +1429,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
   const markSeen = async (key) => {
     setViewError("");
-    const result = await onUpdateProgress({ [key]: true });
+    const result = await onUpdateProgress({ [key]: true }, { courseId: course?.id });
 
     if (result?.ok === false) {
       console.error("[StudentProgress] Saving lesson resource progress failed:", result.error);
@@ -1448,7 +1448,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const toggleModule = async () => {
     if (!activeModule || !activeLessonState?.isUnlocked || !canComplete || moduleDone) return;
     setViewError("");
-    const result = await onUpdateProgress({ [`module-${activeModule.id}`]: true });
+    const result = await onUpdateProgress({ [`module-${activeModule.id}`]: true }, { courseId: course?.id });
 
     if (result?.ok === false) {
       console.error("[StudentProgress] Saving module completion failed:", result.error);
