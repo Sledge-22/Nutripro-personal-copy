@@ -5,10 +5,63 @@ import { cloneMockValue, createMockId, getMockCourses, setMockCourses } from "./
 import { getModulesByCourse, saveModulesForCourse } from "./moduleService.js";
 
 const OPTIONAL_COURSE_COLUMNS = ["image_url", "image_storage_path", "created_by", "instructor_id"];
+const INSTRUCTOR_COURSE_SELECT_COLUMNS = [
+  "id",
+  "title",
+  "description",
+  "status",
+  "image_url",
+  "created_by",
+  "instructor_id",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const COURSE_OWNERSHIP_SETUP_SQL = `alter table public.courses
+add column if not exists created_by uuid references public.users(id) on delete set null;
+
+alter table public.courses
+add column if not exists instructor_id uuid references public.users(id) on delete set null;`;
 
 function normalizeCourseStatus(status) {
   if (status === "draft" || status === "archived" || status === "published") return status;
   return "published";
+}
+
+function isMissingCourseOwnershipColumnError(error) {
+  const details = [
+    error?.message,
+    error?.details,
+    error?.hint,
+    error?.code,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    details.includes("42703") ||
+    details.includes("schema cache") ||
+    details.includes("created_by") ||
+    details.includes("instructor_id")
+  );
+}
+
+function createCourseOwnershipSetupError(error) {
+  const setupError = new Error(
+    "Course ownership setup is required. Run the SQL to add courses.created_by and courses.instructor_id.",
+  );
+  setupError.code = error?.code || "COURSE_OWNERSHIP_SETUP_REQUIRED";
+  setupError.details = [
+    error?.message,
+    error?.details,
+    error?.hint,
+    `SQL:\n${COURSE_OWNERSHIP_SETUP_SQL}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  setupError.hint = "Run supabase/sql/instructor_role.sql, or add the course ownership columns manually.";
+  return setupError;
 }
 
 function isStudentVisibleCourseStatus(status) {
@@ -451,21 +504,106 @@ function isOwnedByInstructor(course = {}, instructorProfileId = "") {
   );
 }
 
-export async function getInstructorCourses(instructorProfileId) {
-  if (!instructorProfileId) return [];
+async function resolveCurrentInstructorProfile(fallbackProfileId = "") {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) {
+    console.error("Loading auth user for instructor courses failed:", authError);
+    throw authError;
+  }
 
+  const authUser = authData?.user;
+  if (!authUser?.id) {
+    throw new Error("You must be logged in as an active instructor to load instructor courses.");
+  }
+
+  const profileColumns = "id, name, email, username, role, status, auth_user_id";
+  const fallbackProfileColumns = "id, name, email, username, role, status";
+  const { data: profileByAuthId, error: authProfileError } = await supabase
+    .from("users")
+    .select(profileColumns)
+    .eq("auth_user_id", authUser.id)
+    .maybeSingle();
+
+  if (authProfileError && authProfileError.code !== "42703") {
+    console.error("Loading instructor profile by auth_user_id failed:", authProfileError);
+    throw authProfileError;
+  }
+
+  let profile = profileByAuthId ?? null;
+  if (!profile && authUser.email) {
+    const { data: profileByEmail, error: emailProfileError } = await supabase
+      .from("users")
+      .select(authProfileError?.code === "42703" ? fallbackProfileColumns : profileColumns)
+      .eq("email", authUser.email.toLowerCase())
+      .maybeSingle();
+
+    if (emailProfileError) {
+      console.error("Loading instructor profile by email failed:", emailProfileError);
+      throw emailProfileError;
+    }
+
+    profile = profileByEmail ?? null;
+  }
+
+  if (!profile && fallbackProfileId) {
+    const { data: profileById, error: idProfileError } = await supabase
+      .from("users")
+      .select(authProfileError?.code === "42703" ? fallbackProfileColumns : profileColumns)
+      .eq("id", fallbackProfileId)
+      .maybeSingle();
+
+    if (idProfileError) {
+      console.error("Loading instructor profile by profile id failed:", idProfileError);
+      throw idProfileError;
+    }
+
+    profile = profileById ?? null;
+  }
+
+  const role = `${profile?.role ?? ""}`.trim().toLowerCase();
+  const status = `${profile?.status ?? ""}`.trim().toLowerCase();
+  if (!profile?.id || role !== "instructor" || status !== "active") {
+    throw new Error("You must be logged in as an active instructor to load instructor courses.");
+  }
+
+  return profile;
+}
+
+async function assertCourseOwnershipColumns() {
+  const { error } = await supabase
+    .from("courses")
+    .select("id, created_by, instructor_id")
+    .limit(1);
+
+  if (error) {
+    console.error("Checking course ownership columns failed:", error);
+    if (isMissingCourseOwnershipColumnError(error)) {
+      throw createCourseOwnershipSetupError(error);
+    }
+    throw error;
+  }
+}
+
+export async function getInstructorCourses(instructorProfileId) {
   if (!isSupabaseConfigured) {
+    if (!instructorProfileId) return [];
     return getMockCourses().filter((course) => isOwnedByInstructor(course, instructorProfileId));
   }
 
+  const instructorProfile = await resolveCurrentInstructorProfile(instructorProfileId);
+  const profileId = instructorProfile.id;
+
   const { data, error } = await supabase
     .from("courses")
-    .select("*")
-    .or(`created_by.eq.${instructorProfileId},instructor_id.eq.${instructorProfileId}`)
+    .select(INSTRUCTOR_COURSE_SELECT_COLUMNS)
+    .or(`created_by.eq.${profileId},instructor_id.eq.${profileId}`)
     .order("created_at", { ascending: false, nullsFirst: false });
 
   if (error) {
     console.error("Failed to load instructor courses from Supabase:", error);
+    if (isMissingCourseOwnershipColumnError(error)) {
+      throw createCourseOwnershipSetupError(error);
+    }
     throw error;
   }
 
@@ -474,6 +612,12 @@ export async function getInstructorCourses(instructorProfileId) {
 
 export async function createInstructorCourse(course, instructorProfileId, options = {}) {
   if (!instructorProfileId) throw new Error("Instructor profile id is required.");
+
+  if (isSupabaseConfigured) {
+    const instructorProfile = await resolveCurrentInstructorProfile(instructorProfileId);
+    await assertCourseOwnershipColumns();
+    instructorProfileId = instructorProfile.id;
+  }
 
   return createCourse(
     {

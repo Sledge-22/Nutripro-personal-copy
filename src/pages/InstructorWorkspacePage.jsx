@@ -284,7 +284,9 @@ function InstructorCourseForm({ currentUser, reloadCourses }) {
     } catch (caughtError) {
       console.error("Creating instructor course failed:", caughtError);
       setError({
-        message: buildUserFacingError(caughtError, t("instructor.courseCreateFailed")),
+        message: buildUserFacingError(caughtError, t("instructor.courseCreateFailed"), {
+          setupMessage: t("instructor.courseOwnershipSetupRequired"),
+        }),
         details: sanitizeErrorDetails(caughtError),
       });
     } finally {
@@ -642,7 +644,9 @@ export function InstructorWorkspacePage({
     } catch (caughtError) {
       console.error("Loading instructor courses failed:", caughtError);
       setCoursesError({
-        message: buildUserFacingError(caughtError, t("instructor.coursesLoadFailed")),
+        message: buildUserFacingError(caughtError, t("instructor.coursesLoadFailed"), {
+          setupMessage: t("instructor.courseOwnershipSetupRequired"),
+        }),
         details: sanitizeErrorDetails(caughtError),
       });
       return [];
