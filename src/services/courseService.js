@@ -29,21 +29,38 @@ function normalizeCourseStatus(status) {
 }
 
 function isMissingCourseOwnershipColumnError(error) {
+  const code = `${error?.code ?? ""}`.trim();
   const details = [
     error?.message,
     error?.details,
     error?.hint,
-    error?.code,
   ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
 
   return (
-    details.includes("42703") ||
-    details.includes("schema cache") ||
-    details.includes("created_by") ||
-    details.includes("instructor_id")
+    code === "42703" &&
+    (details.includes("created_by") || details.includes("instructor_id")) &&
+    (details.includes("column") || details.includes("does not exist"))
+  );
+}
+
+export function isCourseOwnershipSetupError(error) {
+  return error?.code === "COURSE_OWNERSHIP_SETUP_REQUIRED" || isMissingCourseOwnershipColumnError(error);
+}
+
+export function isCoursePermissionError(error) {
+  const details = [error?.message, error?.details, error?.hint, error?.code]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    details.includes("row-level security") ||
+    details.includes("violates row-level security") ||
+    details.includes("permission denied") ||
+    details.includes("42501")
   );
 }
 
@@ -51,7 +68,7 @@ function createCourseOwnershipSetupError(error) {
   const setupError = new Error(
     "Course ownership setup is required. Run the SQL to add courses.created_by and courses.instructor_id.",
   );
-  setupError.code = error?.code || "COURSE_OWNERSHIP_SETUP_REQUIRED";
+  setupError.code = "COURSE_OWNERSHIP_SETUP_REQUIRED";
   setupError.details = [
     error?.message,
     error?.details,
@@ -609,6 +626,10 @@ export async function getInstructorCourses(instructorProfileId) {
 
   const instructorProfile = await resolveCurrentInstructorProfile(instructorProfileId);
   const profileId = instructorProfile.id;
+  console.info("[InstructorCourses] current profile:", {
+    profileId,
+    role: instructorProfile.role,
+  });
 
   const { data, error } = await supabase
     .from("courses")
@@ -618,12 +639,14 @@ export async function getInstructorCourses(instructorProfileId) {
 
   if (error) {
     console.error("Failed to load instructor courses from Supabase:", error);
+    console.info("[InstructorCourses] course query error code:", error?.code ?? "");
     if (isMissingCourseOwnershipColumnError(error)) {
       throw createCourseOwnershipSetupError(error);
     }
     throw error;
   }
 
+  console.info("[InstructorCourses] course query result count:", Array.isArray(data) ? data.length : 0);
   return attachRelations(data ?? []);
 }
 

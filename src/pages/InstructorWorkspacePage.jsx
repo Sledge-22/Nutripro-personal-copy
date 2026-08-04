@@ -6,6 +6,8 @@ import { useLanguage } from "../i18n/LanguageContext.jsx";
 import {
   createInstructorCourse,
   getInstructorCourses,
+  isCourseOwnershipSetupError,
+  isCoursePermissionError,
   updateInstructorCourse,
 } from "../services/courseService.js";
 import { getNotifications } from "../services/notificationService.js";
@@ -24,6 +26,18 @@ function navigateTo(pathname) {
 
 function safeArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function buildInstructorCourseErrorMessage(error, fallbackMessage, t) {
+  if (isCourseOwnershipSetupError(error)) {
+    return t("instructor.courseOwnershipSetupRequired");
+  }
+
+  if (isCoursePermissionError(error)) {
+    return t("instructor.coursePermissionsNeedReview");
+  }
+
+  return buildUserFacingError(error, fallbackMessage);
 }
 
 function createCourseDraft(course = {}) {
@@ -284,9 +298,7 @@ function InstructorCourseForm({ currentUser, reloadCourses }) {
     } catch (caughtError) {
       console.error("Creating instructor course failed:", caughtError);
       setError({
-        message: buildUserFacingError(caughtError, t("instructor.courseCreateFailed"), {
-          setupMessage: t("instructor.courseOwnershipSetupRequired"),
-        }),
+        message: buildInstructorCourseErrorMessage(caughtError, t("instructor.courseCreateFailed"), t),
         details: sanitizeErrorDetails(caughtError),
       });
     } finally {
@@ -644,9 +656,7 @@ export function InstructorWorkspacePage({
     } catch (caughtError) {
       console.error("Loading instructor courses failed:", caughtError);
       setCoursesError({
-        message: buildUserFacingError(caughtError, t("instructor.coursesLoadFailed"), {
-          setupMessage: t("instructor.courseOwnershipSetupRequired"),
-        }),
+        message: buildInstructorCourseErrorMessage(caughtError, t("instructor.coursesLoadFailed"), t),
         details: sanitizeErrorDetails(caughtError),
       });
       return [];
