@@ -14,7 +14,7 @@ import { uploadAssignmentFile, uploadProfilePicture } from "../services/storageS
 import { normalizeCountrySelection } from "../data/countries.js";
 import { getProfileCountryOptions } from "../data/profileCountries.js";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
-import { buildUserFacingError } from "../utils/errorDisplay.js";
+import { buildUserFacingError, extractErrorDetails } from "../utils/errorDisplay.js";
 import {
   getEmbeddablePdfUrl,
   isDirectPdfUrl,
@@ -228,6 +228,11 @@ function getNextModule(currentModuleId, orderedModules = []) {
     currentIndex,
     nextModule: nextModule && String(nextModule.id) !== String(currentModuleId) ? nextModule : null,
   };
+}
+
+function buildProgressSaveErrorMessage(error, fallbackMessage) {
+  const details = extractErrorDetails(error);
+  return details ? `${fallbackMessage} ${details}` : fallbackMessage;
 }
 
 function StudentCourseState({ eyebrow, title, text }) {
@@ -1414,13 +1419,32 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     assignmentSubmitted: hasSubmission,
   });
 
-  const markSeen = (key) => {
-    void onUpdateProgress({ [key]: true });
+  const markSeen = async (key) => {
+    setViewError("");
+    const result = await onUpdateProgress({ [key]: true });
+
+    if (result?.ok === false) {
+      console.error("[StudentProgress] Saving lesson resource progress failed:", result.error);
+      setViewError(
+        buildProgressSaveErrorMessage(
+          result.error,
+          key.startsWith("video-")
+            ? t("errors.videoProgressSaveFailed")
+            : t("errors.progressSaveFailed"),
+        ),
+      );
+    }
   };
 
-  const toggleModule = () => {
+  const toggleModule = async () => {
     if (!activeModule || !activeLessonState?.isUnlocked || !canComplete || moduleDone) return;
-    void onUpdateProgress({ [`module-${activeModule.id}`]: true });
+    setViewError("");
+    const result = await onUpdateProgress({ [`module-${activeModule.id}`]: true });
+
+    if (result?.ok === false) {
+      console.error("[StudentProgress] Saving module completion failed:", result.error);
+      setViewError(buildProgressSaveErrorMessage(result.error, t("errors.progressSaveFailed")));
+    }
   };
 
   const handleSaveNote = async () => {

@@ -108,6 +108,8 @@
     errors: {
       submittingAssignmentFailed: "No se pudo enviar la tarea.",
       videoPlaybackFailed: "No se pudo reproducir el video subido.",
+      videoProgressSaveFailed: "No se pudo guardar el progreso del video.",
+      progressSaveFailed: "No se pudo guardar el progreso de la lección.",
     },
     roles: {
       Admin: "Administrador",
@@ -1393,6 +1395,8 @@ createdAt: "Creado",
     errors: {
       submittingAssignmentFailed: "Submitting the assignment failed.",
       videoPlaybackFailed: "The uploaded video could not be viewed.",
+      videoProgressSaveFailed: "Video progress could not be saved.",
+      progressSaveFailed: "Lesson progress could not be saved.",
     },
     roles: {
       Admin: "Admin",

@@ -1454,7 +1454,7 @@ export function App() {
   async function handleUpdateProgress(updates) {
     if (!activeStudentId) {
       console.error("Student progress update failed because the active student user is missing.");
-      return;
+      return { ok: false, error: new Error("Active student user is missing.") };
     }
 
     let nextProgress = null;
@@ -1463,7 +1463,7 @@ export function App() {
       setProgressState(nextProgress);
     } catch (error) {
       console.error("Student progress update failed:", error);
-      return;
+      return { ok: false, error };
     }
 
     const touchedModuleIds = Array.from(
@@ -1497,6 +1497,8 @@ export function App() {
       }
       await refreshCertificates(activeStudentId);
     }
+
+    return { ok: true, progress: nextProgress };
   }
 
   function handleUpdatePreviewProgress(updates) {
@@ -1504,6 +1506,7 @@ export function App() {
       ...current,
       ...(updates ?? {}),
     }));
+    return { ok: true };
   }
 
   if (pathname === ROUTES.auth.setupPreview) {

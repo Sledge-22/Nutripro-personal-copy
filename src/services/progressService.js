@@ -6,7 +6,14 @@ function mapRowsToProgress(rows) {
     const moduleId = row.module_id ?? row.moduleId;
     if (!moduleId) return progress;
     progress[`pdf-${moduleId}`] = Boolean(row.pdf_completed ?? row.pdf_viewed ?? row.pdfOpened ?? false);
-    progress[`video-${moduleId}`] = Boolean(row.video_completed ?? row.video_viewed ?? row.videoOpened ?? false);
+    progress[`video-${moduleId}`] = Boolean(
+      row.video_completed ??
+        row.video_viewed ??
+        row.video_viewed_at ??
+        row.videoViewedAt ??
+        row.videoOpened ??
+        false,
+    );
     progress[`module-${moduleId}`] = Boolean(row.module_completed) ||
       Boolean(row.completed) ||
       `${row.status ?? ""}`.trim().toLowerCase() === "completed" ||
@@ -16,7 +23,7 @@ function mapRowsToProgress(rows) {
   }, {});
 }
 
-function groupProgressUpdates(updates, { includeCompletionMetadata = true } = {}) {
+function groupProgressUpdates(updates, { includeCompletionMetadata = true, includeViewMetadata = true } = {}) {
   const now = new Date().toISOString();
   return Object.entries(updates).reduce((rows, [key, value]) => {
     const separatorIndex = key.indexOf("-");
@@ -33,7 +40,15 @@ function groupProgressUpdates(updates, { includeCompletionMetadata = true } = {}
     }
 
     if (type === "pdf") rows[moduleIdValue].pdf_completed = Boolean(value);
-    if (type === "video") rows[moduleIdValue].video_completed = Boolean(value);
+    if (type === "video") {
+      rows[moduleIdValue].video_completed = Boolean(value);
+
+      if (includeViewMetadata && value) {
+        rows[moduleIdValue].video_viewed = true;
+        rows[moduleIdValue].video_viewed_at = now;
+        rows[moduleIdValue].updated_at = now;
+      }
+    }
     if (type === "module") {
       rows[moduleIdValue].module_completed = Boolean(value);
 
@@ -61,7 +76,9 @@ function isMissingOptionalProgressColumn(error) {
       details.includes("progress_percent") ||
       details.includes("updated_at") ||
       details.includes("status") ||
-      details.includes("completed"))
+      details.includes("completed") ||
+      details.includes("video_viewed") ||
+      details.includes("video_viewed_at"))
   );
 }
 
@@ -100,7 +117,9 @@ export async function updateStudentProgress(studentId = 1, updates = {}) {
       if (!isMissingOptionalProgressColumn(error)) throw error;
 
       console.warn("[StudentProgress] Retrying progress update without optional completion metadata:", error);
-      const legacyGrouped = Object.values(groupProgressUpdates(merged, { includeCompletionMetadata: false })).map((row) => ({
+      const legacyGrouped = Object.values(
+        groupProgressUpdates(merged, { includeCompletionMetadata: false, includeViewMetadata: false }),
+      ).map((row) => ({
         student_id: studentId,
         ...row,
       }));

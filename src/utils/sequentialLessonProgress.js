@@ -79,16 +79,25 @@ function requirementProgressIsComplete(progress, moduleId, requirement) {
     }
 
     if (requirement === "video") {
-      return Boolean(row.video_completed ?? row.video_viewed ?? row.videoOpened ?? row.video_opened);
+      return Boolean(
+        row.video_completed ??
+          row.video_viewed ??
+          row.video_viewed_at ??
+          row.videoViewedAt ??
+          row.videoOpened ??
+          row.video_opened,
+      );
     }
 
     return false;
   }
 
   return Boolean(
-    progress?.[key] ??
+      progress?.[key] ??
       progress?.[normalizedId]?.[`${requirement}_completed`] ??
       progress?.[normalizedId]?.[`${requirement}_viewed`] ??
+      progress?.[normalizedId]?.[`${requirement}_viewed_at`] ??
+      progress?.[normalizedId]?.[`${requirement}ViewedAt`] ??
       progress?.[normalizedId]?.[`${requirement}Opened`],
   );
 }
