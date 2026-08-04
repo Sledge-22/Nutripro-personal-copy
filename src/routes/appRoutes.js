@@ -38,6 +38,8 @@ export const ROUTES = {
   instructor: {
     dashboard: "/instructor",
     courses: "/instructor/courses",
+    courseCreate: "/instructor/courses/new",
+    courseBuilder: (courseId) => `/instructor/courses/${courseId}/builder`,
     assignmentReviews: "/instructor/assignment-reviews",
     studentProgress: "/instructor/student-progress",
     messages: "/instructor/messages",
@@ -103,6 +105,30 @@ export function isStudentRoute(pathname) {
 
 export function isInstructorRoute(pathname) {
   return pathname.startsWith("/instructor");
+}
+
+export function getInstructorCourseRouteState(pathname) {
+  if (pathname === ROUTES.instructor.courses) {
+    return { view: "manager", courseId: "" };
+  }
+
+  if (pathname === ROUTES.instructor.courseCreate) {
+    return { view: "create", courseId: "" };
+  }
+
+  if (!pathname.startsWith(`${ROUTES.instructor.courses}/`)) {
+    return { view: "", courseId: "" };
+  }
+
+  const suffix = pathname.slice(`${ROUTES.instructor.courses}/`.length);
+  if (suffix.endsWith("/builder")) {
+    return {
+      view: "builder",
+      courseId: suffix.slice(0, -"/builder".length),
+    };
+  }
+
+  return { view: "", courseId: "" };
 }
 
 export function isAuthUtilityRoute(pathname) {

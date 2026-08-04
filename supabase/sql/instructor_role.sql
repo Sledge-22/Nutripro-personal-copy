@@ -25,6 +25,210 @@ $$;
 
 grant execute on function public.is_active_instructor() to authenticated;
 
+alter table public.courses
+add column if not exists created_by uuid references public.users(id) on delete set null;
+
+alter table public.courses
+add column if not exists instructor_id uuid references public.users(id) on delete set null;
+
+create or replace function public.can_manage_course(course_uuid uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select public.is_active_admin()
+    or exists (
+      select 1
+      from public.courses c
+      where c.id = course_uuid
+        and (
+          c.created_by = public.current_profile_id()
+          or c.instructor_id = public.current_profile_id()
+        )
+    );
+$$;
+
+grant execute on function public.can_manage_course(uuid) to authenticated;
+
+-- Instructor course ownership policies.
+-- These add instructor-owned course access without weakening student enrolled-course RLS.
+alter table public.courses enable row level security;
+alter table public.course_classes enable row level security;
+alter table public.modules enable row level security;
+alter table public.module_assignments enable row level security;
+alter table public.assignment_submissions enable row level security;
+
+drop policy if exists "Instructors can read own courses" on public.courses;
+drop policy if exists "Instructors can create own courses" on public.courses;
+drop policy if exists "Instructors can update own courses" on public.courses;
+drop policy if exists "Instructors can read own course classes" on public.course_classes;
+drop policy if exists "Instructors can create own course classes" on public.course_classes;
+drop policy if exists "Instructors can update own course classes" on public.course_classes;
+drop policy if exists "Instructors can read own course modules" on public.modules;
+drop policy if exists "Instructors can create own course modules" on public.modules;
+drop policy if exists "Instructors can update own course modules" on public.modules;
+drop policy if exists "Instructors can read own module assignments" on public.module_assignments;
+drop policy if exists "Instructors can create own module assignments" on public.module_assignments;
+drop policy if exists "Instructors can update own module assignments" on public.module_assignments;
+drop policy if exists "Instructors can manage own module assignments" on public.module_assignments;
+drop policy if exists "Instructors can read own course submissions" on public.assignment_submissions;
+drop policy if exists "Instructors can review own course submissions" on public.assignment_submissions;
+
+create policy "Instructors can read own courses"
+on public.courses
+for select
+to authenticated
+using (public.can_manage_course(id));
+
+create policy "Instructors can create own courses"
+on public.courses
+for insert
+to authenticated
+with check (
+  public.is_active_instructor()
+  and created_by = public.current_profile_id()
+  and instructor_id = public.current_profile_id()
+);
+
+create policy "Instructors can update own courses"
+on public.courses
+for update
+to authenticated
+using (public.can_manage_course(id))
+with check (
+  public.is_active_admin()
+  or (
+    public.is_active_instructor()
+    and (
+      created_by = public.current_profile_id()
+      or instructor_id = public.current_profile_id()
+    )
+  )
+);
+
+create policy "Instructors can read own course classes"
+on public.course_classes
+for select
+to authenticated
+using (public.can_manage_course(course_id));
+
+create policy "Instructors can create own course classes"
+on public.course_classes
+for insert
+to authenticated
+with check (public.can_manage_course(course_id));
+
+create policy "Instructors can update own course classes"
+on public.course_classes
+for update
+to authenticated
+using (public.can_manage_course(course_id))
+with check (public.can_manage_course(course_id));
+
+create policy "Instructors can read own course modules"
+on public.modules
+for select
+to authenticated
+using (public.can_manage_course(course_id));
+
+create policy "Instructors can create own course modules"
+on public.modules
+for insert
+to authenticated
+with check (public.can_manage_course(course_id));
+
+create policy "Instructors can update own course modules"
+on public.modules
+for update
+to authenticated
+using (public.can_manage_course(course_id))
+with check (public.can_manage_course(course_id));
+
+create policy "Instructors can read own module assignments"
+on public.module_assignments
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.modules m
+    where m.id = module_assignments.module_id
+      and public.can_manage_course(m.course_id)
+  )
+);
+
+create policy "Instructors can create own module assignments"
+on public.module_assignments
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.modules m
+    where m.id = module_assignments.module_id
+      and public.can_manage_course(m.course_id)
+  )
+);
+
+create policy "Instructors can update own module assignments"
+on public.module_assignments
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.modules m
+    where m.id = module_assignments.module_id
+      and public.can_manage_course(m.course_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.modules m
+    where m.id = module_assignments.module_id
+      and public.can_manage_course(m.course_id)
+  )
+);
+
+create policy "Instructors can read own course submissions"
+on public.assignment_submissions
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.module_assignments ma
+    join public.modules m on m.id = ma.module_id
+    where ma.id = assignment_submissions.assignment_id
+      and public.can_manage_course(m.course_id)
+  )
+);
+
+create policy "Instructors can review own course submissions"
+on public.assignment_submissions
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.module_assignments ma
+    join public.modules m on m.id = ma.module_id
+    where ma.id = assignment_submissions.assignment_id
+      and public.can_manage_course(m.course_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.module_assignments ma
+    join public.modules m on m.id = ma.module_id
+    where ma.id = assignment_submissions.assignment_id
+      and public.can_manage_course(m.course_id)
+  )
+);
+
 -- Keep instructor messaging limited until instructor-course assignments exist.
 -- Instructors can see active admins as recipients. Students still use the
 -- existing admin/classmate recipient rules.

@@ -11,6 +11,7 @@ import {
   ROUTES,
   getAdminCourseRouteState,
   getAdminStudentPreviewCourseId,
+  getInstructorCourseRouteState,
   isAdminCourseRoute,
   isAdminRoute,
   isAdminStudentPreviewRoute,
@@ -759,6 +760,7 @@ export function App() {
         icon: "courses",
         children: [
           { path: ROUTES.instructor.courses, label: t("common.myCourses"), icon: "courses" },
+          { path: ROUTES.instructor.courseCreate, label: t("instructor.createCourse"), icon: "plus" },
           { path: ROUTES.instructor.assignmentReviews, label: t("common.assignmentReviews"), icon: "certificate" },
           { path: ROUTES.instructor.studentProgress, label: t("common.studentProgress"), icon: "dashboard" },
         ],
@@ -808,6 +810,7 @@ export function App() {
       [ROUTES.student.messages]: t("common.messages"),
       [ROUTES.instructor.dashboard]: t("instructor.dashboardTitle"),
       [ROUTES.instructor.courses]: t("common.myCourses"),
+      [ROUTES.instructor.courseCreate]: t("instructor.createCourse"),
       [ROUTES.instructor.assignmentReviews]: t("common.assignmentReviews"),
       [ROUTES.instructor.studentProgress]: t("common.studentProgress"),
       [ROUTES.instructor.messages]: t("common.messages"),
@@ -824,6 +827,12 @@ export function App() {
       if (routeState.view === "edit") return t("admin.editCourse");
       if (routeState.view === "builder") return t("admin.courseBuilder");
       return t("admin.courseManager");
+    }
+
+    if (pathname.startsWith(`${ROUTES.instructor.courses}/`)) {
+      const routeState = getInstructorCourseRouteState(pathname);
+      if (routeState.view === "create") return t("instructor.createCourse");
+      if (routeState.view === "builder") return t("instructor.courseBuilder");
     }
 
     if (pathname.startsWith("/student/courses/")) {
@@ -1642,11 +1651,15 @@ export function App() {
 
   const currentPath = pathname.startsWith("/student/courses/")
     ? ROUTES.student.courses
+    : pathname.startsWith(`${ROUTES.instructor.courses}/`)
+      ? ROUTES.instructor.courses
     : isAdminCourseRoute(pathname) || isAdminStudentPreviewRoute(pathname)
       ? ROUTES.admin.postCourses
       : pathname;
   const headerTitle = pathname.startsWith("/student/courses/")
     ? t("common.courses")
+    : pathname.startsWith(`${ROUTES.instructor.courses}/`)
+      ? t("common.myCourses")
     : isAdminStudentPreviewRoute(pathname)
       ? t("admin.previewAsStudent")
       : isAdminCourseRoute(pathname)

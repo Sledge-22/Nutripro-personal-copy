@@ -4,7 +4,7 @@ import { setCourseStudentAssignments } from "./enrollmentService.js";
 import { cloneMockValue, createMockId, getMockCourses, setMockCourses } from "./mockStore.js";
 import { getModulesByCourse, saveModulesForCourse } from "./moduleService.js";
 
-const OPTIONAL_COURSE_COLUMNS = ["image_url", "image_storage_path"];
+const OPTIONAL_COURSE_COLUMNS = ["image_url", "image_storage_path", "created_by", "instructor_id"];
 
 function normalizeCourseStatus(status) {
   if (status === "draft" || status === "archived" || status === "published") return status;
@@ -304,6 +304,10 @@ function normalizeCourse(row, owners = [], modules = [], classes = []) {
     image_url: row.image_url ?? row.imageUrl ?? "",
     imageStoragePath: row.image_storage_path ?? row.imageStoragePath ?? "",
     image_storage_path: row.image_storage_path ?? row.imageStoragePath ?? "",
+    createdBy: row.created_by ?? row.createdBy ?? "",
+    created_by: row.created_by ?? row.createdBy ?? "",
+    instructorId: row.instructor_id ?? row.instructorId ?? "",
+    instructor_id: row.instructor_id ?? row.instructorId ?? "",
     owners,
     classes: normalizedClasses,
     modules: normalizedModules,
@@ -371,6 +375,8 @@ function buildCourseRow(course) {
     status: normalizeCourseStatus(course.status),
     image_url: course.image_url ?? course.imageUrl ?? null,
     image_storage_path: course.image_storage_path ?? course.imageStoragePath ?? null,
+    created_by: course.created_by ?? course.createdBy ?? null,
+    instructor_id: course.instructor_id ?? course.instructorId ?? null,
   };
 }
 
@@ -434,6 +440,73 @@ export async function getCourses() {
     throw error;
   }
   return attachRelations(data ?? []);
+}
+
+function isOwnedByInstructor(course = {}, instructorProfileId = "") {
+  const profileId = String(instructorProfileId ?? "");
+  if (!profileId) return false;
+  return (
+    String(course.created_by ?? course.createdBy ?? "") === profileId ||
+    String(course.instructor_id ?? course.instructorId ?? "") === profileId
+  );
+}
+
+export async function getInstructorCourses(instructorProfileId) {
+  if (!instructorProfileId) return [];
+
+  if (!isSupabaseConfigured) {
+    return getMockCourses().filter((course) => isOwnedByInstructor(course, instructorProfileId));
+  }
+
+  const { data, error } = await supabase
+    .from("courses")
+    .select("*")
+    .or(`created_by.eq.${instructorProfileId},instructor_id.eq.${instructorProfileId}`)
+    .order("created_at", { ascending: false, nullsFirst: false });
+
+  if (error) {
+    console.error("Failed to load instructor courses from Supabase:", error);
+    throw error;
+  }
+
+  return attachRelations(data ?? []);
+}
+
+export async function createInstructorCourse(course, instructorProfileId, options = {}) {
+  if (!instructorProfileId) throw new Error("Instructor profile id is required.");
+
+  return createCourse(
+    {
+      ...course,
+      status: normalizeCourseStatus(course.status || "draft"),
+      created_by: instructorProfileId,
+      instructor_id: instructorProfileId,
+      owners: [],
+    },
+    options,
+  );
+}
+
+export async function updateInstructorCourse(courseId, updates, instructorProfileId, options = {}) {
+  if (!courseId) throw new Error("Course id is required.");
+  if (!instructorProfileId) throw new Error("Instructor profile id is required.");
+
+  const instructorCourses = await getInstructorCourses(instructorProfileId);
+  const existingCourse = instructorCourses.find((course) => String(course.id) === String(courseId));
+  if (!existingCourse) {
+    throw new Error("You can only manage courses you created or were assigned to.");
+  }
+
+  return updateCourse(
+    courseId,
+    {
+      ...updates,
+      created_by: existingCourse.created_by || existingCourse.createdBy || instructorProfileId,
+      instructor_id: existingCourse.instructor_id || existingCourse.instructorId || instructorProfileId,
+      owners: existingCourse.owners ?? [],
+    },
+    options,
+  );
 }
 
 export async function createCourse(course, options = {}) {
