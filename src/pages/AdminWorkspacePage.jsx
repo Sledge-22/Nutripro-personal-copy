@@ -137,6 +137,207 @@ function compareLessonOrder(left, right) {
   return String(left?.id ?? "").localeCompare(String(right?.id ?? ""), undefined, { numeric: true });
 }
 
+function getBuilderAssistantStatusLabel(status, t) {
+  const statusLabels = {
+    passed: t("admin.assistantPassed"),
+    warning: t("admin.assistantWarning"),
+    attention: t("admin.assistantNeedsAttention"),
+    hidden: t("admin.assistantHiddenFromStudents"),
+    ready: t("admin.assistantReadyToPublish"),
+  };
+  return statusLabels[status] || statusLabels.warning;
+}
+
+function createBuilderAssistantCheck(status, title, detail, required = true) {
+  return {
+    id: `${status}-${title}-${detail}`.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    status,
+    title,
+    detail,
+    required,
+    passed: status === "passed" || status === "ready",
+  };
+}
+
+function getModuleContentSummary(module) {
+  return firstFilledValue(
+    module?.lesson_content,
+    module?.lessonContent,
+    module?.description,
+    module?.pdf_url,
+    module?.pdfUrl,
+    module?.video_url,
+    module?.videoUrl,
+    module?.embed_url,
+    module?.embedUrl,
+    module?.image_url,
+    module?.imageUrl,
+    module?.assignment_instructions,
+    module?.assignmentInstructions,
+    module?.assignment?.instructions,
+    module?.assignment?.instructions_en,
+    module?.assignment?.instructions_es,
+  );
+}
+
+function buildCourseBuilderAssistantReport({ course, form, studentOptions, t }) {
+  const checks = [];
+  const classes = safeArray(form?.classes).filter(Boolean);
+  const modules = safeArray(form?.modules).filter(Boolean);
+  const selectedStudentIds = safeArray(form?.selectedStudentIds).filter(Boolean);
+  const activeClasses = classes.filter((courseClass) => courseClass?.status !== "archived");
+  const activeModules = modules.filter((module) => module?.status !== "archived");
+  const courseStatus = form?.status || course?.status || "draft";
+  const courseId = course?.id || form?.id || "";
+  const courseImage = firstFilledValue(form?.imageUrl, form?.image_url, course?.imageUrl, course?.image_url);
+
+  checks.push(
+    firstFilledValue(form?.title, course?.title)
+      ? createBuilderAssistantCheck("passed", t("admin.assistantCourseTitle"), t("admin.assistantCourseTitlePassed"))
+      : createBuilderAssistantCheck("attention", t("admin.assistantCourseTitle"), t("admin.assistantCourseTitleMissing")),
+  );
+  checks.push(
+    firstFilledValue(form?.description, course?.description)
+      ? createBuilderAssistantCheck("passed", t("admin.assistantCourseDescription"), t("admin.assistantCourseDescriptionPassed"))
+      : createBuilderAssistantCheck("attention", t("admin.assistantCourseDescription"), t("admin.assistantCourseDescriptionMissing")),
+  );
+  checks.push(
+    courseImage
+      ? createBuilderAssistantCheck("passed", t("admin.assistantCourseImage"), t("admin.assistantCourseImagePassed"), false)
+      : createBuilderAssistantCheck("warning", t("admin.assistantCourseImage"), t("admin.assistantCourseImageMissing"), false),
+  );
+  checks.push(
+    courseStatus === "published"
+      ? createBuilderAssistantCheck("ready", t("admin.assistantCourseStatus"), t("admin.assistantCoursePublished"))
+      : courseStatus === "archived"
+        ? createBuilderAssistantCheck("hidden", t("admin.assistantCourseStatus"), t("admin.assistantCourseArchived"))
+        : createBuilderAssistantCheck("warning", t("admin.assistantCourseStatus"), t("admin.assistantCourseDraft")),
+  );
+  checks.push(
+    activeClasses.length > 0
+      ? createBuilderAssistantCheck("passed", t("admin.assistantClassSetup"), t("admin.assistantClassSetupPassed"))
+      : createBuilderAssistantCheck("attention", t("admin.assistantClassSetup"), t("admin.assistantClassSetupMissing")),
+  );
+  checks.push(
+    selectedStudentIds.length > 0
+      ? createBuilderAssistantCheck(
+          "passed",
+          t("admin.assistantStudentVisibility"),
+          t("admin.assistantStudentsAssigned", { count: selectedStudentIds.length }),
+        )
+      : createBuilderAssistantCheck("warning", t("admin.assistantStudentVisibility"), t("admin.assistantNoStudentsAssigned"), false),
+  );
+
+  classes.forEach((courseClass, classIndex) => {
+    const classTitle = courseClass?.title || t("admin.assistantUnnamedClass", { number: classIndex + 1 });
+    const classModules = modules
+      .filter((module) => String(module?.class_id || module?.classId || "") === String(courseClass?.id))
+      .sort(compareLessonOrder);
+    const visibleClassModules = classModules.filter((module) => module?.status !== "archived");
+
+    checks.push(
+      firstFilledValue(courseClass?.title)
+        ? createBuilderAssistantCheck("passed", classTitle, t("admin.assistantClassTitlePassed"))
+        : createBuilderAssistantCheck("attention", classTitle, t("admin.assistantClassTitleMissing")),
+    );
+    checks.push(
+      courseClass?.status === "archived"
+        ? createBuilderAssistantCheck("hidden", classTitle, t("admin.assistantClassArchived"), false)
+        : createBuilderAssistantCheck("passed", classTitle, t("admin.assistantClassVisible")),
+    );
+    checks.push(
+      visibleClassModules.length > 0
+        ? createBuilderAssistantCheck("passed", classTitle, t("admin.assistantClassHasModules", { count: visibleClassModules.length }))
+        : createBuilderAssistantCheck("attention", classTitle, t("admin.assistantClassHasNoModules")),
+    );
+  });
+
+  const duplicateTracker = new Map();
+  modules.forEach((module, moduleIndex) => {
+    const moduleTitle = module?.title || t("admin.assistantUnnamedLesson", { number: moduleIndex + 1 });
+    const moduleClassId = module?.class_id || module?.classId || "";
+    const moduleCourseId = module?.course_id || module?.courseId || "";
+    const duplicateKey = [String(moduleCourseId || courseId), String(moduleClassId), `${module?.title ?? ""}`.trim().toLowerCase()].join("::");
+
+    if (`${module?.title ?? ""}`.trim()) {
+      duplicateTracker.set(duplicateKey, [...(duplicateTracker.get(duplicateKey) || []), module]);
+    }
+
+    checks.push(
+      firstFilledValue(module?.title)
+        ? createBuilderAssistantCheck("passed", moduleTitle, t("admin.assistantLessonTitlePassed"))
+        : createBuilderAssistantCheck("attention", moduleTitle, t("admin.assistantLessonTitleMissing")),
+    );
+    checks.push(
+      getModuleContentSummary(module)
+        ? createBuilderAssistantCheck("passed", moduleTitle, t("admin.assistantLessonContentPassed"))
+        : createBuilderAssistantCheck("warning", moduleTitle, t("admin.assistantLessonContentMissing"), false),
+    );
+    checks.push(
+      moduleCourseId
+        ? createBuilderAssistantCheck("passed", moduleTitle, t("admin.assistantModuleCourseIdPassed"))
+        : createBuilderAssistantCheck("attention", moduleTitle, t("admin.assistantModuleCourseIdMissing")),
+    );
+    checks.push(
+      moduleClassId
+        ? createBuilderAssistantCheck("passed", moduleTitle, t("admin.assistantModuleClassIdPassed"))
+        : createBuilderAssistantCheck("attention", moduleTitle, t("admin.assistantModuleClassIdMissing")),
+    );
+    checks.push(
+      module?.status === "archived"
+        ? createBuilderAssistantCheck("hidden", moduleTitle, t("admin.assistantLessonArchived"), false)
+        : module?.status === "draft"
+          ? createBuilderAssistantCheck("warning", moduleTitle, t("admin.assistantLessonDraft"), false)
+          : createBuilderAssistantCheck("passed", moduleTitle, t("admin.assistantLessonVisible")),
+    );
+    checks.push(
+      Number.isFinite(Number(module?.sort_order ?? module?.sortOrder))
+        ? createBuilderAssistantCheck("passed", moduleTitle, t("admin.assistantSortOrderPassed"))
+        : createBuilderAssistantCheck("warning", moduleTitle, t("admin.assistantSortOrderMissing"), false),
+    );
+
+    if (module?.requires_assignment || module?.requiresAssignment) {
+      checks.push(
+        firstFilledValue(
+          module?.assignment_instructions,
+          module?.assignmentInstructions,
+          module?.assignment?.instructions,
+          module?.assignment?.instructions_en,
+          module?.assignment?.instructions_es,
+        )
+          ? createBuilderAssistantCheck("passed", moduleTitle, t("admin.assistantAssignmentPassed"))
+          : createBuilderAssistantCheck("attention", moduleTitle, t("admin.assistantAssignmentMissing")),
+      );
+    }
+  });
+
+  duplicateTracker.forEach((matches) => {
+    if (matches.length <= 1) return;
+    checks.push(
+      createBuilderAssistantCheck(
+        "warning",
+        matches[0]?.title || t("admin.assistantDuplicateLesson"),
+        t("admin.assistantDuplicateLesson"),
+        false,
+      ),
+    );
+  });
+
+  const requiredChecks = checks.filter((check) => check.required);
+  const passedRequiredChecks = requiredChecks.filter((check) => check.passed);
+  const score = requiredChecks.length ? Math.round((passedRequiredChecks.length / requiredChecks.length) * 100) : 0;
+  const hasBlockingIssues = checks.some((check) => check.required && check.status === "attention");
+  const hasWarnings = checks.some((check) => check.status === "warning" || check.status === "hidden");
+
+  return {
+    score,
+    checks,
+    summaryStatus: !hasBlockingIssues && !hasWarnings ? "ready" : hasBlockingIssues ? "attention" : "warning",
+    modulesWithoutClassId: activeModules.filter((module) => !firstFilledValue(module?.class_id, module?.classId)).length,
+    modulesWithoutCourseId: activeModules.filter((module) => !firstFilledValue(module?.course_id, module?.courseId)).length,
+  };
+}
+
 function getModulePdfViewerSource(module) {
   const uploadedPdfSource =
     module?.pdf_storage_path || module?.pdfStoragePath
@@ -4767,6 +4968,77 @@ class CourseBuilderErrorBoundary extends React.Component {
   }
 }
 
+function CourseBuilderAssistant({ course, form, studentOptions, t }) {
+  const [isOpen, setIsOpen] = useState(true);
+  const report = buildCourseBuilderAssistantReport({ course, form, studentOptions, t });
+  const summaryLabel = getBuilderAssistantStatusLabel(report.summaryStatus, t);
+
+  return (
+    <section className="section-card course-builder-assistant-card">
+      <div className="section-heading course-builder-assistant-heading">
+        <div>
+          <span className="eyebrow">{t("admin.courseBuilderAssistant")}</span>
+          <h3>{t("admin.courseBuilderAssistant")}</h3>
+          <p>{t("admin.courseBuilderAssistantSubtitle")}</p>
+        </div>
+        <div className="course-builder-assistant-score">
+          <span>{t("admin.courseSetupScore")}</span>
+          <strong>{report.score}%</strong>
+          <small className={`assistant-status-pill ${report.summaryStatus}`}>
+            {summaryLabel}
+          </small>
+        </div>
+        <button
+          type="button"
+          className="secondary-btn"
+          onClick={() => setIsOpen((current) => !current)}
+          aria-expanded={isOpen}
+        >
+          {isOpen ? t("common.minimize") : t("common.expand")}
+        </button>
+      </div>
+
+      <div className="course-builder-assistant-progress" aria-hidden="true">
+        <span style={{ width: `${report.score}%` }} />
+      </div>
+
+      {isOpen ? (
+        <>
+          <div className="course-builder-assistant-summary">
+            <span className="subtle-badge">{t("admin.modulesWithoutClassId", { count: report.modulesWithoutClassId })}</span>
+            <span className="subtle-badge">{t("admin.modulesWithoutCourseId", { count: report.modulesWithoutCourseId })}</span>
+          </div>
+
+          <div className="course-builder-assistant-list">
+            {report.checks.map((check, index) => (
+              <article key={`${check.id}-${index}`} className={`assistant-check-row ${check.status}`}>
+                <span className="assistant-check-icon" aria-hidden="true">
+                  {check.status === "passed" || check.status === "ready"
+                    ? "✓"
+                    : check.status === "attention"
+                      ? "!"
+                      : check.status === "hidden"
+                        ? "–"
+                        : "⚠"}
+                </span>
+                <div>
+                  <div className="assistant-check-title-row">
+                    <strong>{check.title}</strong>
+                    <small className={`assistant-status-pill ${check.status}`}>
+                      {getBuilderAssistantStatusLabel(check.status, t)}
+                    </small>
+                  </div>
+                  <p>{check.detail}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
 function CourseManagerPage({
   pathname,
   users = [],
@@ -5936,6 +6208,13 @@ function CourseBuilderPage({
           </div>
         </div>
       </section>
+
+      <CourseBuilderAssistant
+        course={course}
+        form={form}
+        studentOptions={studentOptions}
+        t={t}
+      />
 
       <section className="section-card">
         <div className="section-heading">
