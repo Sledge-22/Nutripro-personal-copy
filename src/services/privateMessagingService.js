@@ -136,28 +136,21 @@ export async function getPrivateMessageRecipients(currentUser) {
 
   if (!isSupabaseConfigured || !supabase) {
     if (role === "instructor") {
-      return [{ id: "admin-mock", name: "Alex Morgan", role: "admin", status: "active", group: "admins" }];
+      return [
+        { id: "admin-mock", name: "Alex Morgan", role: "admin", status: "active", group: "admins" },
+        { id: "student-mock", name: "Maya Laurent", role: "student", status: "active", group: "students", sharedCourseTitle: "Demo course" },
+      ];
     }
 
-    return role === "admin"
-      ? []
-      : [{ id: "admin-mock", name: "Alex Morgan", role: "admin", status: "active", group: "admins" }];
-  }
-
-  if (role === "instructor") {
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, name, username, email, role, status")
-      .eq("role", "admin")
-      .eq("status", "active")
-      .limit(25);
-
-    if (error) {
-      console.error("Loading instructor message recipients failed:", error);
-      throw error;
+    if (role === "student") {
+      return [
+        { id: "admin-mock", name: "Alex Morgan", role: "admin", status: "active", group: "admins" },
+        { id: "student-classmate-mock", name: "Demo Classmate", role: "student", status: "active", group: "classmates", sharedCourseTitle: "Demo course" },
+        { id: "instructor-mock", name: "Instructor Test", role: "instructor", status: "active", group: "instructors", sharedCourseTitle: "Demo course" },
+      ];
     }
 
-    return (data ?? []).map((user) => normalizeRecipient({ ...user, group: "admins" }));
+    return [];
   }
 
   const { data, error } = await supabase.rpc("get_private_message_recipients");
@@ -317,14 +310,24 @@ export async function respondToMessageRequest(conversationId, action) {
     return { conversationId, requestStatus: action === "accept" ? "accepted" : "declined" };
   }
 
-  const { data, error } = await supabase.rpc("respond_private_message_request", {
-    target_conversation_id: conversationId,
-    response_action: action,
+  const rpcName = action === "accept" ? "accept_message_request" : "decline_message_request";
+  const { data, error } = await supabase.rpc(rpcName, {
+    conversation_uuid: conversationId,
   });
 
   if (error) {
-    console.error("Responding to private message request failed:", error);
-    throw error;
+    console.error(`Calling ${rpcName} failed; trying compatibility RPC:`, error);
+    const { data: fallbackData, error: fallbackError } = await supabase.rpc("respond_private_message_request", {
+      target_conversation_id: conversationId,
+      response_action: action,
+    });
+
+    if (fallbackError) {
+      console.error("Responding to private message request failed:", fallbackError);
+      throw fallbackError;
+    }
+
+    return Array.isArray(fallbackData) ? fallbackData[0] : fallbackData;
   }
 
   return Array.isArray(data) ? data[0] : data;

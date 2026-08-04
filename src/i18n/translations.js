@@ -25,6 +25,40 @@
           title: "Nueva solicitud de mensaje",
           description: "Hay una solicitud de conversación esperando revisión.",
         },
+        "messages.new_message": {
+          title: "Nuevo mensaje",
+          description: "Tenés un mensaje privado nuevo.",
+        },
+        "messages.message_request": {
+          title: "Nueva solicitud de mensaje",
+          description: "Hay una solicitud de conversación esperando revisión.",
+        },
+        "messages.request_accepted": {
+          title: "Solicitud aceptada",
+          description: "Tu solicitud de mensaje fue aceptada.",
+        },
+        "messages.request_declined": {
+          title: "Solicitud rechazada",
+          description: "Tu solicitud de mensaje fue rechazada.",
+        },
+        messages: {
+          new_message: {
+            title: "Nuevo mensaje",
+            description: "Tenés un mensaje privado nuevo.",
+          },
+          message_request: {
+            title: "Nueva solicitud de mensaje",
+            description: "Hay una solicitud de conversación esperando revisión.",
+          },
+          request_accepted: {
+            title: "Solicitud aceptada",
+            description: "Tu solicitud de mensaje fue aceptada.",
+          },
+          request_declined: {
+            title: "Solicitud rechazada",
+            description: "Tu solicitud de mensaje fue rechazada.",
+          },
+        },
         assignment_submitted: {
           title: "Tarea enviada",
           description: "Un estudiante envió una tarea para revisar.",
@@ -1257,6 +1291,40 @@ createdAt: "Creado",
         new_message_request: {
           title: "New message request",
           description: "A conversation request is waiting for review.",
+        },
+        "messages.new_message": {
+          title: "New message",
+          description: "You have a new private message.",
+        },
+        "messages.message_request": {
+          title: "New message request",
+          description: "A conversation request is waiting for review.",
+        },
+        "messages.request_accepted": {
+          title: "Request accepted",
+          description: "Your message request was accepted.",
+        },
+        "messages.request_declined": {
+          title: "Request declined",
+          description: "Your message request was declined.",
+        },
+        messages: {
+          new_message: {
+            title: "New message",
+            description: "You have a new private message.",
+          },
+          message_request: {
+            title: "New message request",
+            description: "A conversation request is waiting for review.",
+          },
+          request_accepted: {
+            title: "Request accepted",
+            description: "Your message request was accepted.",
+          },
+          request_declined: {
+            title: "Request declined",
+            description: "Your message request was declined.",
+          },
         },
         assignment_submitted: {
           title: "Assignment submitted",

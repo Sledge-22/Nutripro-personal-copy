@@ -26,7 +26,11 @@ function notificationRouteFor(type, roleKey) {
   const dashboardRoute =
     role === "admin" ? ROUTES.admin.dashboard : role === "instructor" ? ROUTES.instructor.dashboard : ROUTES.student.dashboard;
 
-  if (type === "new_private_message" || type === "new_message_request") {
+  if (
+    type === "new_private_message" ||
+    type === "new_message_request" ||
+    String(type).startsWith("messages.")
+  ) {
     return messageRoute;
   }
 
@@ -140,7 +144,7 @@ function createSeedNotifications(profile = {}) {
     return [
       {
         id: "seed-instructor-message",
-        type: "new_private_message",
+        type: "messages.message_request",
         createdAt: new Date(now - 1000 * 60 * 25).toISOString(),
       },
     ].map((notification) => normalizeNotification({ ...notification, source: "local" }, role));

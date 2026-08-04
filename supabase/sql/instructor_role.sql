@@ -229,9 +229,33 @@ with check (
   )
 );
 
--- Keep instructor messaging limited until instructor-course assignments exist.
--- Instructors can see active admins as recipients. Students still use the
--- existing admin/classmate recipient rules.
+-- Instructor/student private messaging.
+-- Admins can message anyone. Students and instructors can only see each other
+-- when connected through an active enrollment in an instructor-owned/assigned course.
+create or replace function public.instructor_student_course_connection(
+  instructor_uuid uuid,
+  student_uuid uuid
+)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.courses c
+    join public.enrollments e on e.course_id = c.id
+    where e.student_id = student_uuid
+      and coalesce(e.status, 'active') = 'active'
+      and (
+        c.created_by = instructor_uuid
+        or c.instructor_id = instructor_uuid
+      )
+  );
+$$;
+
+grant execute on function public.instructor_student_course_connection(uuid, uuid) to authenticated;
+
 create or replace function public.get_private_message_recipients()
 returns table (
   id uuid,
@@ -284,20 +308,75 @@ as $$
     left join public.courses c on c.id = my_enrollment.course_id
     where me.role = 'student'
       and me.status = 'active'
+  ),
+  eligible_instructors_for_student as (
+    select distinct instructor_user.id,
+      instructor_user.name,
+      instructor_user.username,
+      null::text as email,
+      instructor_user.role,
+      instructor_user.status,
+      'instructors'::text as recipient_group,
+      c.title as shared_course_title
+    from me
+    join public.enrollments my_enrollment
+      on my_enrollment.student_id = me.id
+      and coalesce(my_enrollment.status, 'active') = 'active'
+    join public.courses c
+      on c.id = my_enrollment.course_id
+    join public.users instructor_user
+      on instructor_user.id in (c.created_by, c.instructor_id)
+      and instructor_user.role = 'instructor'
+      and instructor_user.status = 'active'
+      and instructor_user.id <> me.id
+    where me.role = 'student'
+      and me.status = 'active'
+  ),
+  eligible_students_for_instructor as (
+    select distinct student_user.id,
+      student_user.name,
+      student_user.username,
+      null::text as email,
+      student_user.role,
+      student_user.status,
+      'students'::text as recipient_group,
+      c.title as shared_course_title
+    from me
+    join public.courses c
+      on c.created_by = me.id
+      or c.instructor_id = me.id
+    join public.enrollments e
+      on e.course_id = c.id
+      and coalesce(e.status, 'active') = 'active'
+    join public.users student_user
+      on student_user.id = e.student_id
+      and student_user.role = 'student'
+      and student_user.status = 'active'
+      and student_user.id <> me.id
+    where me.role = 'instructor'
+      and me.status = 'active'
   )
   select * from active_admins
   where (select role from me) in ('student', 'instructor')
   union all
   select * from eligible_classmates
-  where (select role from me) = 'student';
+  where (select role from me) = 'student'
+  union all
+  select * from eligible_instructors_for_student
+  where (select role from me) = 'student'
+  union all
+  select * from eligible_students_for_instructor
+  where (select role from me) = 'instructor';
 $$;
 
 grant execute on function public.get_private_message_recipients() to authenticated;
 
 -- Conversation creation guard:
--- - active admins can message active users
--- - students can message admins and shared-course classmates
--- - instructors can message active admins only until instructor-course assignment exists
+-- - active admins can message active users directly
+-- - anyone can message admins directly
+-- - instructors can message connected students directly
+-- - students can message connected instructors through a pending request
+-- - students can message shared-course classmates through a pending request
 create or replace function public.create_private_conversation(
   recipient_user_id uuid,
   conversation_subject text,
@@ -341,6 +420,12 @@ begin
     allowed := true;
   elsif recipient_profile.role = 'admin' then
     allowed := true;
+  elsif sender_profile.role = 'instructor' and recipient_profile.role = 'student' then
+    allowed := public.instructor_student_course_connection(sender_profile.id, recipient_profile.id);
+    next_request_status := 'none';
+  elsif sender_profile.role = 'student' and recipient_profile.role = 'instructor' then
+    allowed := public.instructor_student_course_connection(recipient_profile.id, sender_profile.id);
+    next_request_status := 'pending';
   elsif sender_profile.role = 'student' and recipient_profile.role = 'student' then
     allowed := exists (
       select 1
@@ -358,6 +443,22 @@ begin
 
   if not allowed then
     raise exception 'You are not allowed to message this recipient.';
+  end if;
+
+  if next_request_status = 'pending' and exists (
+    select 1
+    from public.private_conversations existing_conversation
+    join public.private_conversation_participants sender_participant
+      on sender_participant.conversation_id = existing_conversation.id
+      and sender_participant.user_id = sender_profile.id
+    join public.private_conversation_participants recipient_participant
+      on recipient_participant.conversation_id = existing_conversation.id
+      and recipient_participant.user_id = recipient_profile.id
+    where existing_conversation.request_status = 'pending'
+      and existing_conversation.requested_by = sender_profile.id
+      and existing_conversation.requested_to = recipient_profile.id
+  ) then
+    raise exception 'A message request is already pending for this recipient.';
   end if;
 
   insert into public.private_conversations (
@@ -395,6 +496,86 @@ end;
 $$;
 
 grant execute on function public.create_private_conversation(uuid, text, text) to authenticated;
+
+create or replace function public.can_send_private_message(conversation_uuid uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.private_conversations c
+    join public.private_conversation_participants p
+      on p.conversation_id = c.id
+      and p.user_id = public.current_profile_id()
+    join public.users u
+      on u.id = p.user_id
+      and u.status = 'active'
+    where c.id = conversation_uuid
+      and c.status = 'open'
+      and (
+        public.is_active_admin()
+        or coalesce(c.request_status, 'none') in ('none', 'accepted')
+      )
+  );
+$$;
+
+grant execute on function public.can_send_private_message(uuid) to authenticated;
+
+drop policy if exists "Participants can send private messages" on public.private_messages;
+
+create policy "Participants can send private messages"
+on public.private_messages
+for insert
+to authenticated
+with check (
+  sender_id = public.current_profile_id()
+  and public.can_send_private_message(conversation_id)
+);
+
+create or replace function public.respond_private_message_request(
+  target_conversation_id uuid,
+  response_action text
+)
+returns table (conversation_id uuid, request_status text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  next_status text;
+begin
+  if response_action = 'accept' then
+    next_status := 'accepted';
+  elsif response_action = 'decline' then
+    next_status := 'declined';
+  else
+    raise exception 'Invalid response action.';
+  end if;
+
+  update public.private_conversations c
+  set request_status = next_status,
+      accepted_at = case when next_status = 'accepted' then now() else c.accepted_at end,
+      declined_at = case when next_status = 'declined' then now() else c.declined_at end,
+      updated_at = now()
+  where c.id = target_conversation_id
+    and c.request_status = 'pending'
+    and (
+      c.requested_to = public.current_profile_id()
+      or public.is_active_admin()
+    );
+
+  if not found then
+    raise exception 'Message request could not be updated.';
+  end if;
+
+  return query
+  select target_conversation_id, next_status;
+end;
+$$;
+
+grant execute on function public.respond_private_message_request(uuid, text) to authenticated;
 
 -- Temporary development/testing account profile.
 -- First create the Supabase Auth user manually:

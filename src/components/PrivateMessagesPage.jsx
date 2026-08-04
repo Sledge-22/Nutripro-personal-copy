@@ -32,15 +32,17 @@ function getMessagesCopy(language) {
       noMatchingUsers: "No se encontraron usuarios.",
       searching: "Buscando...",
       admins: "Administradores",
+      instructors: "Instructores",
+      students: "Estudiantes",
       classmates: "Compañeros",
       users: "Usuarios",
       noMessages: "Todavía no hay mensajes.",
       startConversation: "Iniciar conversación.",
       messageSent: "Mensaje enviado.",
-      messageRequestSent: "Solicitud de mensaje enviada. Podrás continuar la conversación si la aceptan.",
+      messageRequestSent: "Solicitud de mensaje enviada. Podrás continuar la conversación si el instructor la acepta.",
       messageFailed: "No se pudo enviar el mensaje.",
       noAccess: "No tenés acceso a esta conversación.",
-      classmateRule: "Solo podés enviar mensajes a compañeros de tus cursos inscritos.",
+      classmateRule: "Solo podés enviar mensajes a administradores, instructores de tus cursos y compañeros de tus cursos inscritos.",
       noClassmates: "Todavía no hay compañeros disponibles.",
       accept: "Aceptar",
       decline: "Rechazar",
@@ -49,7 +51,7 @@ function getMessagesCopy(language) {
       requestPending: "Esta solicitud de mensaje está pendiente.",
       continueIfAccepted: "Podrás continuar la conversación si la aceptan.",
       adminDirect: "Los mensajes de administradores llegan directamente a tu bandeja.",
-      instructorDirect: "Por ahora, los instructores solo pueden enviar mensajes a administradores.",
+      instructorDirect: "Podés enviar mensajes a administradores y estudiantes de tus cursos.",
       report: "Reportar conversación",
       reported: "Conversación reportada.",
       loadFailed: "No se pudieron cargar los mensajes.",
@@ -58,6 +60,8 @@ function getMessagesCopy(language) {
       reportFailed: "No se pudo reportar la conversación.",
       activeOnly: "Tu cuenta debe estar activa para enviar mensajes.",
       messageClassmate: "Enviar mensaje a un compañero",
+      messageInstructor: "Enviar mensaje al instructor",
+      messageStudent: "Enviar mensaje al estudiante",
       noConversationSelected: "Seleccioná una conversación.",
       body: "Mensaje",
       firstMessage: "Primer mensaje",
@@ -86,15 +90,17 @@ function getMessagesCopy(language) {
     noMatchingUsers: "No matching users found.",
     searching: "Searching...",
     admins: "Admins",
+    instructors: "Instructors",
+    students: "Students",
     classmates: "Classmates",
     users: "Users",
     noMessages: "No messages yet.",
     startConversation: "Start a conversation.",
     messageSent: "Message sent.",
-    messageRequestSent: "Message request sent. You can continue the conversation if they accept.",
+    messageRequestSent: "Message request sent. You can continue the conversation if the instructor accepts.",
     messageFailed: "Message could not be sent.",
     noAccess: "You do not have access to this conversation.",
-    classmateRule: "You can only message classmates from your enrolled courses.",
+    classmateRule: "You can only message admins, instructors from your courses, and classmates from your enrolled courses.",
     noClassmates: "No classmates available yet.",
     accept: "Accept",
     decline: "Decline",
@@ -103,7 +109,7 @@ function getMessagesCopy(language) {
     requestPending: "This message request is pending.",
     continueIfAccepted: "You can continue the conversation if they accept.",
     adminDirect: "Admin messages go directly to your inbox.",
-    instructorDirect: "For now, instructors can only message admins.",
+    instructorDirect: "You can message admins and students from your courses.",
     report: "Report conversation",
     reported: "Conversation reported.",
     loadFailed: "Messages could not be loaded.",
@@ -112,6 +118,8 @@ function getMessagesCopy(language) {
     reportFailed: "Conversation could not be reported.",
     activeOnly: "Your account must be active to send messages.",
     messageClassmate: "Message classmate",
+    messageInstructor: "Message instructor",
+    messageStudent: "Message student",
     noConversationSelected: "Select a conversation.",
     body: "Message",
     firstMessage: "First message",
@@ -145,6 +153,7 @@ function displayRoleForUser(user = {}, language = "es") {
   const role = `${user.roleKey ?? user.role ?? ""}`.toLowerCase();
   if (role === "admin") return language === "es" ? "Administrador" : "Admin";
   if (role === "student") return language === "es" ? "Estudiante" : "Student";
+  if (role === "instructor") return language === "es" ? "Instructor" : "Instructor";
   return role ? role.charAt(0).toUpperCase() + role.slice(1) : "";
 }
 
@@ -216,18 +225,31 @@ export function PrivateMessagesPage({ currentUser }) {
   const groupedRecipients = useMemo(() => {
     const groups = {
       admins: [],
+      instructors: [],
       classmates: [],
+      students: [],
       users: [],
     };
 
     recipients.forEach((recipient) => {
-      const group = recipient.group || (recipient.role === "admin" ? "admins" : currentUserIsAdmin ? "users" : "classmates");
+      const role = `${recipient.role ?? recipient.roleKey ?? ""}`.toLowerCase();
+      const group =
+        recipient.group ||
+        (role === "admin"
+          ? "admins"
+          : role === "instructor"
+            ? "instructors"
+            : currentUserIsInstructor
+              ? "students"
+              : currentUserIsAdmin
+                ? "users"
+                : "classmates");
       if (!groups[group]) groups[group] = [];
       groups[group].push(recipient);
     });
 
     return groups;
-  }, [currentUserIsAdmin, recipients]);
+  }, [currentUserIsAdmin, currentUserIsInstructor, recipients]);
 
   const filteredStudentRecipients = useMemo(() => {
     if (currentUserIsAdmin) return [];
@@ -495,8 +517,8 @@ export function PrivateMessagesPage({ currentUser }) {
       <strong>{displayNameForUser(recipient)}</strong>
       <span>
         {recipient.username ? `@${recipient.username} · ` : ""}
-        {recipient.email}
-        {recipient.email ? " · " : ""}
+        {(currentUserIsAdmin || `${recipient.role ?? ""}`.toLowerCase() === "admin") && recipient.email ? recipient.email : ""}
+        {(currentUserIsAdmin || `${recipient.role ?? ""}`.toLowerCase() === "admin") && recipient.email ? " · " : ""}
         {displayRoleForUser(recipient, language)}
       </span>
       {recipient.sharedCourseTitle ? <small>{recipient.sharedCourseTitle}</small> : null}
@@ -505,7 +527,7 @@ export function PrivateMessagesPage({ currentUser }) {
 
   const renderRecipientPicker = () => {
     const dropdownResults = currentUserIsAdmin ? recipientSearchResults : filteredStudentRecipients;
-    const showStudentGroups = !currentUserIsAdmin && !currentUserIsInstructor && !recipientSearchText.trim();
+    const showAllowedGroups = !currentUserIsAdmin && !recipientSearchText.trim();
     const hasDropdown = recipientSearchOpen && !selectedRecipient;
 
     return (
@@ -526,7 +548,7 @@ export function PrivateMessagesPage({ currentUser }) {
           {hasDropdown ? (
             <div className="recipient-search-menu">
               {recipientSearchLoading ? <small className="field-note">{copy.searching}</small> : null}
-              {showStudentGroups ? (
+              {showAllowedGroups ? (
                 <>
                   {groupedRecipients.admins?.length ? (
                     <div className="recipient-search-group">
@@ -534,17 +556,29 @@ export function PrivateMessagesPage({ currentUser }) {
                       {groupedRecipients.admins.map(renderRecipientRow)}
                     </div>
                   ) : null}
-                  {groupedRecipients.classmates?.length ? (
+                  {!currentUserIsInstructor && groupedRecipients.instructors?.length ? (
+                    <div className="recipient-search-group">
+                      <span>{copy.instructors}</span>
+                      {groupedRecipients.instructors.map(renderRecipientRow)}
+                    </div>
+                  ) : null}
+                  {currentUserIsInstructor && groupedRecipients.students?.length ? (
+                    <div className="recipient-search-group">
+                      <span>{copy.students}</span>
+                      {groupedRecipients.students.map(renderRecipientRow)}
+                    </div>
+                  ) : null}
+                  {!currentUserIsInstructor && groupedRecipients.classmates?.length ? (
                     <div className="recipient-search-group">
                       <span>{copy.classmates}</span>
                       {groupedRecipients.classmates.map(renderRecipientRow)}
                     </div>
-                  ) : (
+                  ) : !currentUserIsInstructor ? (
                     <small className="field-note">{copy.noClassmates}</small>
-                  )}
+                  ) : null}
                 </>
               ) : null}
-              {!showStudentGroups && !recipientSearchLoading ? (
+              {!showAllowedGroups && !recipientSearchLoading ? (
                 dropdownResults.length ? (
                   dropdownResults.map(renderRecipientRow)
                 ) : (
@@ -561,8 +595,8 @@ export function PrivateMessagesPage({ currentUser }) {
               <strong>{displayNameForUser(selectedRecipient)}</strong>
               <span>
                 {selectedRecipient.username ? `@${selectedRecipient.username} · ` : ""}
-                {selectedRecipient.email}
-                {selectedRecipient.email ? " · " : ""}
+                {(currentUserIsAdmin || `${selectedRecipient.role ?? ""}`.toLowerCase() === "admin") && selectedRecipient.email ? selectedRecipient.email : ""}
+                {(currentUserIsAdmin || `${selectedRecipient.role ?? ""}`.toLowerCase() === "admin") && selectedRecipient.email ? " · " : ""}
                 {displayRoleForUser(selectedRecipient, language)}
               </span>
             </div>
