@@ -495,8 +495,12 @@ export async function getCourses() {
   return attachRelations(data ?? []);
 }
 
+function getProfileId(profileOrId) {
+  return typeof profileOrId === "object" && profileOrId !== null ? profileOrId.id : profileOrId;
+}
+
 function isOwnedByInstructor(course = {}, instructorProfileId = "") {
-  const profileId = String(instructorProfileId ?? "");
+  const profileId = String(getProfileId(instructorProfileId) ?? "");
   if (!profileId) return false;
   return (
     String(course.created_by ?? course.createdBy ?? "") === profileId ||
@@ -504,7 +508,9 @@ function isOwnedByInstructor(course = {}, instructorProfileId = "") {
   );
 }
 
-async function resolveCurrentInstructorProfile(fallbackProfileId = "") {
+async function resolveCurrentInstructorProfile(fallbackProfileOrId = "") {
+  const fallbackProfile = typeof fallbackProfileOrId === "object" && fallbackProfileOrId !== null ? fallbackProfileOrId : null;
+  const fallbackProfileId = getProfileId(fallbackProfileOrId) ?? "";
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError) {
     console.error("Loading auth user for instructor courses failed:", authError);
@@ -526,7 +532,9 @@ async function resolveCurrentInstructorProfile(fallbackProfileId = "") {
 
   if (authProfileError && authProfileError.code !== "42703") {
     console.error("Loading instructor profile by auth_user_id failed:", authProfileError);
-    throw authProfileError;
+    if (!fallbackProfile) {
+      throw authProfileError;
+    }
   }
 
   let profile = profileByAuthId ?? null;
@@ -534,12 +542,14 @@ async function resolveCurrentInstructorProfile(fallbackProfileId = "") {
     const { data: profileByEmail, error: emailProfileError } = await supabase
       .from("users")
       .select(authProfileError?.code === "42703" ? fallbackProfileColumns : profileColumns)
-      .eq("email", authUser.email.toLowerCase())
+      .ilike("email", authUser.email.trim())
       .maybeSingle();
 
     if (emailProfileError) {
       console.error("Loading instructor profile by email failed:", emailProfileError);
-      throw emailProfileError;
+      if (!fallbackProfile) {
+        throw emailProfileError;
+      }
     }
 
     profile = profileByEmail ?? null;
@@ -554,10 +564,16 @@ async function resolveCurrentInstructorProfile(fallbackProfileId = "") {
 
     if (idProfileError) {
       console.error("Loading instructor profile by profile id failed:", idProfileError);
-      throw idProfileError;
+      if (!fallbackProfile) {
+        throw idProfileError;
+      }
     }
 
     profile = profileById ?? null;
+  }
+
+  if (!profile && fallbackProfile) {
+    profile = fallbackProfile;
   }
 
   const role = `${profile?.role ?? ""}`.trim().toLowerCase();
@@ -586,8 +602,9 @@ async function assertCourseOwnershipColumns() {
 
 export async function getInstructorCourses(instructorProfileId) {
   if (!isSupabaseConfigured) {
-    if (!instructorProfileId) return [];
-    return getMockCourses().filter((course) => isOwnedByInstructor(course, instructorProfileId));
+    const profileId = getProfileId(instructorProfileId);
+    if (!profileId) return [];
+    return getMockCourses().filter((course) => isOwnedByInstructor(course, profileId));
   }
 
   const instructorProfile = await resolveCurrentInstructorProfile(instructorProfileId);
@@ -611,7 +628,7 @@ export async function getInstructorCourses(instructorProfileId) {
 }
 
 export async function createInstructorCourse(course, instructorProfileId, options = {}) {
-  if (!instructorProfileId) throw new Error("Instructor profile id is required.");
+  if (!getProfileId(instructorProfileId)) throw new Error("Instructor profile id is required.");
 
   if (isSupabaseConfigured) {
     const instructorProfile = await resolveCurrentInstructorProfile(instructorProfileId);
@@ -633,7 +650,8 @@ export async function createInstructorCourse(course, instructorProfileId, option
 
 export async function updateInstructorCourse(courseId, updates, instructorProfileId, options = {}) {
   if (!courseId) throw new Error("Course id is required.");
-  if (!instructorProfileId) throw new Error("Instructor profile id is required.");
+  const profileId = getProfileId(instructorProfileId);
+  if (!profileId) throw new Error("Instructor profile id is required.");
 
   const instructorCourses = await getInstructorCourses(instructorProfileId);
   const existingCourse = instructorCourses.find((course) => String(course.id) === String(courseId));
@@ -645,8 +663,8 @@ export async function updateInstructorCourse(courseId, updates, instructorProfil
     courseId,
     {
       ...updates,
-      created_by: existingCourse.created_by || existingCourse.createdBy || instructorProfileId,
-      instructor_id: existingCourse.instructor_id || existingCourse.instructorId || instructorProfileId,
+      created_by: existingCourse.created_by || existingCourse.createdBy || profileId,
+      instructor_id: existingCourse.instructor_id || existingCourse.instructorId || profileId,
       owners: existingCourse.owners ?? [],
     },
     options,

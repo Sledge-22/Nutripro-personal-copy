@@ -277,7 +277,7 @@ function InstructorCourseForm({ currentUser, reloadCourses }) {
     setError(null);
 
     try {
-      const savedCourse = await createInstructorCourse(draft, currentUser?.id, { syncContent: false });
+      const savedCourse = await createInstructorCourse(draft, currentUser, { syncContent: false });
       setMessage(t("instructor.courseCreated"));
       await reloadCourses();
       navigateTo(ROUTES.instructor.courseBuilder(savedCourse.id));
@@ -445,7 +445,7 @@ function InstructorCourseBuilder({ course, currentUser, reloadCourses }) {
     const payload = { ...draft, ...override };
 
     try {
-      await updateInstructorCourse(course.id, payload, currentUser?.id, { syncContent: true });
+      await updateInstructorCourse(course.id, payload, currentUser, { syncContent: true });
       setMessage(t("instructor.courseSaved"));
       await reloadCourses();
     } catch (caughtError) {
@@ -638,7 +638,7 @@ export function InstructorWorkspacePage({
     setLoadingCourses(true);
     setCoursesError(null);
     try {
-      const nextCourses = await getInstructorCourses(currentUser.id);
+      const nextCourses = await getInstructorCourses(currentUser);
       setCourses(nextCourses);
       return nextCourses;
     } catch (caughtError) {
