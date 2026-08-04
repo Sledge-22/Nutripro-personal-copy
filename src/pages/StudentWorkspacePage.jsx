@@ -23,7 +23,7 @@ import {
   isGoogleDriveUrl,
   isVimeoUrl,
 } from "../utils/mediaLinks.js";
-import { getSequentialLessonStates } from "../utils/sequentialLessonProgress.js";
+import { getLessonCompletionState, getLessonRequirements, getSequentialLessonStates } from "../utils/sequentialLessonProgress.js";
 
 function goTo(pathname) {
   window.history.pushState({}, "", pathname);
@@ -125,8 +125,7 @@ function getLocalizedAssignmentCopy(assignment, language = "es") {
 }
 
 function getUploadedPdfSource(module) {
-  const storagePath = module?.pdf_storage_path || module?.pdfStoragePath || "";
-  if (!storagePath) return "";
+  if (module?.pdf_source === "external" || module?.pdfSource === "external") return "";
 
   return firstFilledValue(
     module?.pdf_url,
@@ -153,8 +152,7 @@ function getExternalPdfSource(module) {
 }
 
 function getUploadedVideoSource(module) {
-  const storagePath = module?.video_storage_path || module?.videoStoragePath || "";
-  if (!storagePath) return "";
+  if (module?.video_source === "external" || module?.videoSource === "external") return "";
 
   return firstFilledValue(
     module?.video_url,
@@ -184,6 +182,42 @@ function getExternalVideoSource(module) {
       ? firstFilledValue(module?.video_url, module?.videoUrl, module?.video?.link)
       : "",
   );
+}
+
+function getCompletionBlockerMessage({ t, pdfRequired, videoRequired, assignmentRequired, assignmentSubmitted }) {
+  if (assignmentRequired && assignmentSubmitted) {
+    return t("common.assignmentApprovalRequiredBeforeComplete");
+  }
+
+  if (pdfRequired && videoRequired && assignmentRequired) {
+    return t("common.completeExistingRequirementsBeforeComplete");
+  }
+
+  if (pdfRequired && videoRequired) {
+    return t("common.completePdfVideoBeforeComplete");
+  }
+
+  if (pdfRequired && assignmentRequired) {
+    return t("common.completePdfAssignmentBeforeComplete");
+  }
+
+  if (videoRequired && assignmentRequired) {
+    return t("common.completeVideoAssignmentBeforeComplete");
+  }
+
+  if (pdfRequired) {
+    return t("common.openPdfBeforeComplete");
+  }
+
+  if (videoRequired) {
+    return t("common.watchVideoBeforeComplete");
+  }
+
+  if (assignmentRequired) {
+    return t("common.submitAssignmentBeforeComplete");
+  }
+
+  return "";
 }
 
 function StudentCourseState({ eyebrow, title, text }) {
@@ -1012,8 +1046,8 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   }, [course?.id, modules]);
 
   const activeModule = modules.find((module) => module.id === activeModuleId) || modules[0] || null;
-  const assignmentRequired =
-    activeModule?.requiresAssignment ?? activeModule?.requires_assignment ?? Boolean(activeModule?.assignment?.id);
+  const lessonRequirements = getLessonRequirements(activeModule);
+  const assignmentRequired = lessonRequirements.requiresAssignmentSubmission;
   const activeAssignment = assignmentRequired ? activeModule?.assignment ?? null : null;
   const localizedAssignment = getLocalizedAssignmentCopy(activeAssignment, language);
   const sequentialState = getSequentialLessonStates({
@@ -1305,26 +1339,42 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const assignmentHasGrade =
     assignmentState.submission?.grade !== null && assignmentState.submission?.grade !== undefined;
   const assignmentApprovedForCompletion = assignmentStatus === "approved" || assignmentHasGrade;
-  const hasPdfRequirement = Boolean(
-    pdfSource ||
+  const hasPdfRequirement = lessonRequirements.requiresPdfView;
+  const hasVideoRequirement = lessonRequirements.requiresVideoView;
+  const hasAssignmentRequirement = lessonRequirements.requiresAssignmentSubmission;
+  const activeSubmissionMap = new Map(courseSubmissions);
+  if (activeAssignment?.id) {
+    activeSubmissionMap.set(String(activeAssignment.id), assignmentState.submission);
+  }
+  const activeCompletionState = getLessonCompletionState({
+    lesson: activeModule,
+    progress: completed,
+    submissions: courseSubmissionsLoaded ? activeSubmissionMap : null,
+  });
+  const moduleDone = activeCompletionState.moduleComplete;
+  const pdfAvailable = Boolean(pdfSource);
+  const videoAvailable = Boolean(videoSource);
+  const pdfRequirementMet = activeCompletionState.pdfComplete;
+  const videoRequirementMet = activeCompletionState.videoComplete;
+  const assignmentRequirementMet = activeCompletionState.assignmentComplete;
+  const canComplete = pdfRequirementMet && videoRequirementMet && assignmentRequirementMet;
+  const showPdfSection = Boolean(
+    hasPdfRequirement ||
       (activeModule?.pdfLabel && activeModule.pdfLabel !== t("common.noPdfSelected")) ||
       activeModule?.pdfName,
   );
-  const hasVideoRequirement = Boolean(
-    videoSource ||
+  const showVideoSection = Boolean(
+    hasVideoRequirement ||
       (activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== t("common.noVideoSelected")) ||
       activeModule?.videoName,
   );
-  const hasAssignmentRequirement = Boolean(assignmentRequired && activeAssignment?.id);
-  const pdfSeen = activeModule ? completed[`pdf-${activeModule.id}`] : false;
-  const videoSeen = activeModule ? completed[`video-${activeModule.id}`] : false;
-  const moduleDone = activeModule ? completed[`module-${activeModule.id}`] : false;
-  const pdfAvailable = Boolean(pdfSource);
-  const videoAvailable = Boolean(videoSource);
-  const pdfRequirementMet = !hasPdfRequirement || (pdfAvailable && pdfSeen);
-  const videoRequirementMet = !hasVideoRequirement || (videoAvailable && videoSeen);
-  const assignmentRequirementMet = !hasAssignmentRequirement || assignmentApprovedForCompletion;
-  const canComplete = pdfRequirementMet && videoRequirementMet && assignmentRequirementMet;
+  const completionBlockerMessage = getCompletionBlockerMessage({
+    t,
+    pdfRequired: hasPdfRequirement && !pdfRequirementMet,
+    videoRequired: hasVideoRequirement && !videoRequirementMet,
+    assignmentRequired: hasAssignmentRequirement && !assignmentRequirementMet,
+    assignmentSubmitted: hasSubmission,
+  });
 
   const markSeen = (key) => {
     void onUpdateProgress({ [key]: true });
@@ -1724,148 +1774,152 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
               <small className="field-note">{t("common.noImageUploadedYet")}</small>
             )}
 
-            <div className="lesson-meta">
-              <span className="subtle-badge">PDF</span>
-              <span>{pdfLabel}</span>
-            </div>
-
-            {uploadedPdfSource ? (
-              <div className="resource-viewer-stack">
-                <div className="row-actions resource-viewer-actions">
-                  <a href={uploadedPdfSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`pdf-${activeModule.id}`)}>
-                    {t("common.openPdf")}
-                  </a>
-                </div>
-              </div>
-            ) : embeddedPdfSource ? (
-              <div className="resource-viewer-stack">
+            {showPdfSection ? (
+              <>
                 <div className="lesson-meta">
-                  <span className="subtle-badge">{t("common.viewPdfOnPage")}</span>
-                  <span>{isGoogleDrivePdf ? "Google Drive" : "PDF"}</span>
+                  <span className="subtle-badge">PDF</span>
+                  <span>{pdfLabel}</span>
                 </div>
-                <div className="resource-viewer-shell">
-                  <iframe
-                    className="resource-viewer-frame pdf-viewer-frame"
-                    title={t("common.pdfPreviewTitle")}
-                    src={embeddedPdfSource}
-                    width="100%"
-                    height="650"
-                    loading="lazy"
-                    allow="autoplay"
-                    onLoad={() => markSeen(`pdf-${activeModule.id}`)}
-                  />
-                </div>
-                <small className="field-note">{t("common.previewFallbackOpensNewTab")}</small>
-                <div className="row-actions resource-viewer-actions">
-                  <a href={externalPdfSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`pdf-${activeModule.id}`)}>
-                    {t("common.openPdfInNewTab")}
-                  </a>
-                </div>
-              </div>
-            ) : externalPdfSource ? (
-              <div className="resource-viewer-stack">
-                {hasDirectExternalPdf ? (
-                  <small className="field-note">{t("common.previewAvailable")}</small>
+
+                {uploadedPdfSource ? (
+                  <div className="resource-viewer-stack">
+                    <div className="row-actions resource-viewer-actions">
+                      <a href={uploadedPdfSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`pdf-${activeModule.id}`)}>
+                        {t("common.openPdf")}
+                      </a>
+                    </div>
+                  </div>
+                ) : embeddedPdfSource ? (
+                  <div className="resource-viewer-stack">
+                    <div className="lesson-meta">
+                      <span className="subtle-badge">{t("common.viewPdfOnPage")}</span>
+                      <span>{isGoogleDrivePdf ? "Google Drive" : "PDF"}</span>
+                    </div>
+                    <div className="resource-viewer-shell">
+                      <iframe
+                        className="resource-viewer-frame pdf-viewer-frame"
+                        title={t("common.pdfPreviewTitle")}
+                        src={embeddedPdfSource}
+                        width="100%"
+                        height="650"
+                        loading="lazy"
+                        allow="autoplay"
+                        onLoad={() => markSeen(`pdf-${activeModule.id}`)}
+                      />
+                    </div>
+                    <small className="field-note">{t("common.previewFallbackOpensNewTab")}</small>
+                    <div className="row-actions resource-viewer-actions">
+                      <a href={externalPdfSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`pdf-${activeModule.id}`)}>
+                        {t("common.openPdfInNewTab")}
+                      </a>
+                    </div>
+                  </div>
+                ) : externalPdfSource ? (
+                  <div className="resource-viewer-stack">
+                    {hasDirectExternalPdf ? (
+                      <small className="field-note">{t("common.previewAvailable")}</small>
+                    ) : null}
+                    <div className="row-actions resource-viewer-actions">
+                      <a href={externalPdfSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`pdf-${activeModule.id}`)}>
+                        {t("common.openPdfInNewTab")}
+                      </a>
+                    </div>
+                  </div>
+                ) : activeModule?.pdfLabel && activeModule.pdfLabel !== t("common.noPdfSelected") ? (
+                  <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
+                ) : activeModule?.pdfName ? (
+                  <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
                 ) : null}
-                <div className="row-actions resource-viewer-actions">
-                  <a href={externalPdfSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`pdf-${activeModule.id}`)}>
-                    {t("common.openPdfInNewTab")}
-                  </a>
-                </div>
-              </div>
-            ) : activeModule?.pdfLabel && activeModule.pdfLabel !== t("common.noPdfSelected") ? (
-              <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
-            ) : activeModule?.pdfName ? (
-              <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
-            ) : (
-              <small className="field-note">{t("common.noPdfUploadedYet")}</small>
-            )}
+              </>
+            ) : null}
 
-            <div className="lesson-meta">
-              <span className="subtle-badge">Video</span>
-              <span>{videoLabel}</span>
-            </div>
+            {showVideoSection ? (
+              <>
+                <div className="lesson-meta">
+                  <span className="subtle-badge">Video</span>
+                  <span>{videoLabel}</span>
+                </div>
 
-            {uploadedVideoSource && hasDirectUploadedVideo ? (
-              <div className="resource-viewer-stack">
-                <div className="video-player-shell">
-                  <video
-                    controls
-                    width="100%"
-                    src={uploadedVideoSource}
-                    onPlay={() => markSeen(`video-${activeModule.id}`)}
-                    onError={() => {
-                      console.error("Video playback failed for module:", activeModule?.id, uploadedVideoSource);
-                      setViewError(t("errors.videoPlaybackFailed"));
-                    }}
-                  />
-                </div>
-              </div>
-            ) : embeddedVideoSource ? (
-              <div className="resource-viewer-stack">
-                <div className="lesson-meta">
-                  <span className="subtle-badge">{t("common.viewVideoOnPage")}</span>
-                  <span>{isGoogleDriveVideo ? "Google Drive" : "Embed"}</span>
-                </div>
-                <div className="resource-viewer-shell">
-                  <iframe
-                    className="resource-viewer-frame video-viewer-frame"
-                    title={isVimeoUrl(externalVideoSource) ? t("common.vimeoVideoPlayerTitle") : t("common.videoPreviewTitle")}
-                    src={embeddedVideoSource}
-                    width="100%"
-                    height="480"
-                    loading="lazy"
-                    allow="autoplay; fullscreen; picture-in-picture"
-                    allowFullScreen
-                    onLoad={() => markSeen(`video-${activeModule.id}`)}
-                  />
-                </div>
-                <small className="field-note">{t("common.previewFallbackOpensNewTab")}</small>
-                <div className="row-actions resource-viewer-actions">
-                  <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
-                    {t("common.openVideoInNewTab")}
-                  </a>
-                </div>
-              </div>
-            ) : externalVideoSource && hasDirectExternalVideo ? (
-              <div className="resource-viewer-stack">
-                <div className="lesson-meta">
-                  <span className="subtle-badge">{t("common.viewVideoOnPage")}</span>
-                  <span>{t("common.openVideo")}</span>
-                </div>
-                <div className="video-player-shell">
-                  <video
-                    controls
-                    width="100%"
-                    src={externalVideoSource}
-                    onPlay={() => markSeen(`video-${activeModule.id}`)}
-                    onError={() => {
-                      console.error("External direct video playback failed for module:", activeModule?.id, externalVideoSource);
-                      setViewError(t("errors.videoPlaybackFailed"));
-                    }}
-                  />
-                </div>
-                <div className="row-actions resource-viewer-actions">
-                  <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
-                    {t("common.openVideoInNewTab")}
-                  </a>
-                </div>
-              </div>
-            ) : externalVideoSource ? (
-              <div className="resource-viewer-stack">
-                <div className="row-actions resource-viewer-actions">
-                  <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
-                    {t("common.openVideoInNewTab")}
-                  </a>
-                </div>
-              </div>
-            ) : activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== t("common.noVideoSelected") ? (
-              <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
-            ) : activeModule?.videoName ? (
-              <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
-            ) : (
-              <small className="field-note">{t("common.noVideoUploadedYet")}</small>
-            )}
+                {uploadedVideoSource && hasDirectUploadedVideo ? (
+                  <div className="resource-viewer-stack">
+                    <div className="video-player-shell">
+                      <video
+                        controls
+                        width="100%"
+                        src={uploadedVideoSource}
+                        onPlay={() => markSeen(`video-${activeModule.id}`)}
+                        onError={() => {
+                          console.error("Video playback failed for module:", activeModule?.id, uploadedVideoSource);
+                          setViewError(t("errors.videoPlaybackFailed"));
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : embeddedVideoSource ? (
+                  <div className="resource-viewer-stack">
+                    <div className="lesson-meta">
+                      <span className="subtle-badge">{t("common.viewVideoOnPage")}</span>
+                      <span>{isGoogleDriveVideo ? "Google Drive" : "Embed"}</span>
+                    </div>
+                    <div className="resource-viewer-shell">
+                      <iframe
+                        className="resource-viewer-frame video-viewer-frame"
+                        title={isVimeoUrl(externalVideoSource) ? t("common.vimeoVideoPlayerTitle") : t("common.videoPreviewTitle")}
+                        src={embeddedVideoSource}
+                        width="100%"
+                        height="480"
+                        loading="lazy"
+                        allow="autoplay; fullscreen; picture-in-picture"
+                        allowFullScreen
+                        onLoad={() => markSeen(`video-${activeModule.id}`)}
+                      />
+                    </div>
+                    <small className="field-note">{t("common.previewFallbackOpensNewTab")}</small>
+                    <div className="row-actions resource-viewer-actions">
+                      <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                        {t("common.openVideoInNewTab")}
+                      </a>
+                    </div>
+                  </div>
+                ) : externalVideoSource && hasDirectExternalVideo ? (
+                  <div className="resource-viewer-stack">
+                    <div className="lesson-meta">
+                      <span className="subtle-badge">{t("common.viewVideoOnPage")}</span>
+                      <span>{t("common.openVideo")}</span>
+                    </div>
+                    <div className="video-player-shell">
+                      <video
+                        controls
+                        width="100%"
+                        src={externalVideoSource}
+                        onPlay={() => markSeen(`video-${activeModule.id}`)}
+                        onError={() => {
+                          console.error("External direct video playback failed for module:", activeModule?.id, externalVideoSource);
+                          setViewError(t("errors.videoPlaybackFailed"));
+                        }}
+                      />
+                    </div>
+                    <div className="row-actions resource-viewer-actions">
+                      <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                        {t("common.openVideoInNewTab")}
+                      </a>
+                    </div>
+                  </div>
+                ) : externalVideoSource ? (
+                  <div className="resource-viewer-stack">
+                    <div className="row-actions resource-viewer-actions">
+                      <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                        {t("common.openVideoInNewTab")}
+                      </a>
+                    </div>
+                  </div>
+                ) : activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== t("common.noVideoSelected") ? (
+                  <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
+                ) : activeModule?.videoName ? (
+                  <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
+                ) : null}
+              </>
+            ) : null}
           </div>
 
           {activeAssignment ? (
@@ -1964,12 +2018,16 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
           ) : null}
 
           <div className="progress-steps">
-            <span className={pdfRequirementMet ? "subtle-badge" : "count-badge"}>
-              {!hasPdfRequirement ? t("common.noPdfRequired") : pdfRequirementMet ? t("common.pdfViewed") : t("common.pdfPending")}
-            </span>
-            <span className={videoRequirementMet ? "subtle-badge" : "count-badge"}>
-              {!hasVideoRequirement ? t("common.noVideoRequired") : videoRequirementMet ? t("common.videoViewed") : t("common.videoPending")}
-            </span>
+            {hasPdfRequirement ? (
+              <span className={pdfRequirementMet ? "subtle-badge" : "count-badge"}>
+                {pdfRequirementMet ? t("common.pdfViewed") : t("common.pdfPending")}
+              </span>
+            ) : null}
+            {hasVideoRequirement ? (
+              <span className={videoRequirementMet ? "subtle-badge" : "count-badge"}>
+                {videoRequirementMet ? t("common.videoViewed") : t("common.videoPending")}
+              </span>
+            ) : null}
             {hasAssignmentRequirement ? (
               <span className={assignmentRequirementMet ? "subtle-badge" : "count-badge"}>
                 {assignmentStatus === "approved"
@@ -1984,14 +2042,15 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                           ? t("common.assignmentPendingReview")
                           : t("common.assignmentPending")}
               </span>
-            ) : (
-              <span className="subtle-badge">{t("common.noAssignmentRequired")}</span>
-            )}
+            ) : null}
+            {!hasPdfRequirement && !hasVideoRequirement && !hasAssignmentRequirement ? (
+              <span className="subtle-badge">{t("common.noCompletionRequirements")}</span>
+            ) : null}
           </div>
 
-          {!canComplete ? (
+          {!canComplete && completionBlockerMessage ? (
             <small className="field-note danger-text">
-              {t("common.completeRequirements")}
+              {completionBlockerMessage}
             </small>
           ) : null}
 

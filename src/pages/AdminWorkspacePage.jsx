@@ -43,7 +43,7 @@ import {
   isVimeoUrl,
 } from "../utils/mediaLinks.js";
 import { buildAdminErrorState, buildUserFacingError } from "../utils/errorDisplay.js";
-import { getSequentialLessonStates } from "../utils/sequentialLessonProgress.js";
+import { getSequentialLessonStates, lessonHasAnyContent } from "../utils/sequentialLessonProgress.js";
 
 function createId() {
   return Date.now() + Math.floor(Math.random() * 100000);
@@ -4410,6 +4410,10 @@ function ModuleEditor({
           )}
         </div>
       </div>
+
+      {!lessonHasAnyContent(module) ? (
+        <small className="field-note warning-text">{t("common.emptyLessonContentWarning")}</small>
+      ) : null}
 
       {collapsed ? (
         <div className="module-editor-summary">

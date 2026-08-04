@@ -2,6 +2,16 @@ function normalizeId(value) {
   return `${value ?? ""}`.trim();
 }
 
+function firstFilledValue(...values) {
+  return values.find((value) => `${value ?? ""}`.trim()) || "";
+}
+
+function truthyFlag(value) {
+  if (typeof value === "boolean") return value;
+  const normalized = `${value ?? ""}`.trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes";
+}
+
 function sortValue(entry, fallback) {
   const value = Number(entry?.sort_order ?? entry?.sortOrder);
   return Number.isFinite(value) ? value : fallback;
@@ -49,6 +59,35 @@ function progressIsComplete(progress, moduleId) {
   );
 }
 
+function requirementProgressIsComplete(progress, moduleId, requirement) {
+  const normalizedId = normalizeId(moduleId);
+  const key = `${requirement}-${normalizedId}`;
+
+  if (Array.isArray(progress)) {
+    const row = progress.find(
+      (entry) => normalizeId(entry?.module_id ?? entry?.moduleId) === normalizedId,
+    );
+    if (!row) return false;
+
+    if (requirement === "pdf") {
+      return Boolean(row.pdf_completed ?? row.pdf_viewed ?? row.pdfOpened ?? row.pdf_opened);
+    }
+
+    if (requirement === "video") {
+      return Boolean(row.video_completed ?? row.video_viewed ?? row.videoOpened ?? row.video_opened);
+    }
+
+    return false;
+  }
+
+  return Boolean(
+    progress?.[key] ??
+      progress?.[normalizedId]?.[`${requirement}_completed`] ??
+      progress?.[normalizedId]?.[`${requirement}_viewed`] ??
+      progress?.[normalizedId]?.[`${requirement}Opened`],
+  );
+}
+
 function submissionForAssignment(submissions, assignmentId) {
   const normalizedId = normalizeId(assignmentId);
   if (!normalizedId) return null;
@@ -66,6 +105,125 @@ function submissionForAssignment(submissions, assignmentId) {
   }
 
   return submissions?.[normalizedId] ?? null;
+}
+
+export function getLessonRequirements(lesson = {}) {
+  const assignment = lesson?.assignment ?? null;
+  const assignmentRecordExists = Boolean(
+    assignment?.id ||
+      firstFilledValue(
+        assignment?.title,
+        assignment?.title_en,
+        assignment?.titleEn,
+        assignment?.title_es,
+        assignment?.titleEs,
+        assignment?.instructions,
+        assignment?.instructions_en,
+        assignment?.instructionsEn,
+        assignment?.instructions_es,
+        assignment?.instructionsEs,
+      ),
+  );
+  const requiresAssignment = truthyFlag(lesson?.requires_assignment ?? lesson?.requiresAssignment);
+
+  const hasPdf = Boolean(
+    firstFilledValue(
+      lesson?.pdf_url,
+      lesson?.pdfUrl,
+      lesson?.pdf_file_url,
+      lesson?.pdfFileUrl,
+      lesson?.pdf_public_url,
+      lesson?.pdfPublicUrl,
+      lesson?.pdf_path,
+      lesson?.pdfPath,
+      lesson?.pdf_storage_path,
+      lesson?.pdfStoragePath,
+      lesson?.pdf_external_url,
+      lesson?.pdfExternalUrl,
+      lesson?.external_pdf_url,
+      lesson?.externalPdfUrl,
+      lesson?.pdf_link,
+      lesson?.pdfLink,
+    ),
+  );
+  const hasVideo = Boolean(
+    firstFilledValue(
+      lesson?.video_url,
+      lesson?.videoUrl,
+      lesson?.video_file_url,
+      lesson?.videoFileUrl,
+      lesson?.video_public_url,
+      lesson?.videoPublicUrl,
+      lesson?.video_path,
+      lesson?.videoPath,
+      lesson?.video_storage_path,
+      lesson?.videoStoragePath,
+      lesson?.embed_url,
+      lesson?.embedUrl,
+      lesson?.video_embed_url,
+      lesson?.videoEmbedUrl,
+      lesson?.video_external_url,
+      lesson?.videoExternalUrl,
+      lesson?.external_video_url,
+      lesson?.externalVideoUrl,
+      lesson?.video_link,
+      lesson?.videoLink,
+      lesson?.video?.url,
+      lesson?.video?.link,
+    ),
+  );
+  const hasAssignment = Boolean(requiresAssignment && assignmentRecordExists);
+
+  return {
+    hasPdf,
+    hasVideo,
+    hasAssignment,
+    requiresPdfView: hasPdf,
+    requiresVideoView: hasVideo,
+    requiresAssignmentSubmission: hasAssignment,
+  };
+}
+
+export function lessonHasAnyContent(lesson = {}) {
+  const requirements = getLessonRequirements(lesson);
+  return Boolean(
+    requirements.hasPdf ||
+      requirements.hasVideo ||
+      requirements.hasAssignment ||
+      firstFilledValue(
+        lesson?.lesson_content,
+        lesson?.lessonContent,
+        lesson?.image_url,
+        lesson?.imageUrl,
+        lesson?.image_file_name,
+        lesson?.imageName,
+      ),
+  );
+}
+
+export function getLessonCompletionState({ lesson, progress = {}, submissions = null } = {}) {
+  const requirements = getLessonRequirements(lesson);
+  const assignment = lesson?.assignment ?? null;
+  const submission = submissionForAssignment(submissions, assignment?.id);
+  const moduleComplete = progressIsComplete(progress, lesson?.id);
+  const pdfComplete = !requirements.requiresPdfView || requirementProgressIsComplete(progress, lesson?.id, "pdf");
+  const videoComplete =
+    !requirements.requiresVideoView || requirementProgressIsComplete(progress, lesson?.id, "video");
+  const assignmentComplete =
+    !requirements.requiresAssignmentSubmission ||
+    submissionIsApproved(submission) ||
+    (submissions === null && moduleComplete);
+
+  return {
+    ...requirements,
+    moduleComplete,
+    pdfComplete,
+    videoComplete,
+    assignmentComplete,
+    requirementsComplete: pdfComplete && videoComplete && assignmentComplete,
+    isComplete: moduleComplete && pdfComplete && videoComplete && assignmentComplete,
+    submission,
+  };
 }
 
 function orderedCourseLessons(classes = [], modules = []) {
@@ -141,17 +299,8 @@ export function getSequentialLessonStates({
   let completedCount = 0;
 
   orderedLessons.forEach((lesson, index) => {
-    const assignment = lesson?.assignment ?? null;
-    const requiresAssignment = Boolean(
-      lesson?.requires_assignment ?? lesson?.requiresAssignment ?? assignment?.id,
-    );
-    const submission = submissionForAssignment(submissions, assignment?.id);
-    const progressComplete = progressIsComplete(progress, lesson.id);
-    const assignmentComplete =
-      !requiresAssignment ||
-      submissionIsApproved(submission) ||
-      (submissions === null && progressComplete);
-    const isComplete = progressComplete && assignmentComplete;
+    const completionState = getLessonCompletionState({ lesson, progress, submissions });
+    const isComplete = completionState.isComplete;
     const isUnlocked = index === 0 || previousLessonsComplete;
 
     if (isComplete) completedCount += 1;
@@ -162,8 +311,9 @@ export function getSequentialLessonStates({
       isComplete,
       isUnlocked,
       isLocked: !isUnlocked,
-      assignmentComplete,
-      requiresAssignment,
+      assignmentComplete: completionState.assignmentComplete,
+      requiresAssignment: completionState.requiresAssignmentSubmission,
+      requirements: completionState,
       blockingLesson: isUnlocked ? null : blockingLesson,
       lockReason:
         !isUnlocked && blockingLesson?.classId !== lesson.classId

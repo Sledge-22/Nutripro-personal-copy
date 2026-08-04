@@ -14,6 +14,7 @@ import { getNotifications } from "../services/notificationService.js";
 import { uploadModuleImage, uploadModulePdf, uploadModuleVideo } from "../services/storageService.js";
 import { ROUTES, getInstructorCourseRouteState } from "../routes/appRoutes.js";
 import { buildUserFacingError, sanitizeErrorDetails } from "../utils/errorDisplay.js";
+import { lessonHasAnyContent } from "../utils/sequentialLessonProgress.js";
 
 const PDF_ACCEPT = "application/pdf,.pdf";
 const VIDEO_ACCEPT = "video/*";
@@ -555,6 +556,9 @@ function InstructorCourseBuilder({ course, currentUser, reloadCourses }) {
                 {!classModules.length ? <small className="field-note">{t("instructor.noLessonsYet")}</small> : null}
                 {classModules.map((module) => (
                   <article key={module.id} className="module-card">
+                    {!lessonHasAnyContent(module) ? (
+                      <small className="field-note warning-text">{t("common.emptyLessonContentWarning")}</small>
+                    ) : null}
                     <div className="community-form-grid">
                       <label>
                         {t("common.lessonTitle")}
