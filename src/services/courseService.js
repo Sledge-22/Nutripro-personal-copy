@@ -14,7 +14,6 @@ const INSTRUCTOR_COURSE_SELECT_COLUMNS = [
   "created_by",
   "instructor_id",
   "created_at",
-  "updated_at",
 ].join(",");
 
 const COURSE_OWNERSHIP_SETUP_SQL = `alter table public.courses
