@@ -17,11 +17,9 @@ import { useLanguage } from "../i18n/LanguageContext.jsx";
 import { buildUserFacingError } from "../utils/errorDisplay.js";
 import {
   getEmbeddablePdfUrl,
-  getEmbeddableVideoUrl,
   isDirectPdfUrl,
-  isDirectVideoUrl,
   isGoogleDriveUrl,
-  isVimeoUrl,
+  normalizeVideoSource,
 } from "../utils/mediaLinks.js";
 import { getLessonCompletionState, getLessonRequirements, getSequentialLessonStates } from "../utils/sequentialLessonProgress.js";
 
@@ -1313,25 +1311,28 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const uploadedPdfSource = getUploadedPdfSource(activeModule);
   const externalPdfSource = getExternalPdfSource(activeModule);
   const pdfSource = uploadedPdfSource || externalPdfSource || "";
-  const uploadedVideoSource = getUploadedVideoSource(activeModule);
-  const externalVideoSource = getExternalVideoSource(activeModule);
-  const videoSource = uploadedVideoSource || externalVideoSource || "";
+  const normalizedVideoSource = normalizeVideoSource(activeModule);
+  const videoSource = normalizedVideoSource.src || "";
   const embeddedPdfSource = !uploadedPdfSource ? getEmbeddablePdfUrl(externalPdfSource) : "";
   const hasDirectExternalPdf = !uploadedPdfSource && isDirectPdfUrl(externalPdfSource);
-  const hasDirectUploadedVideo = Boolean(uploadedVideoSource && isDirectVideoUrl(uploadedVideoSource));
-  const hasDirectExternalVideo = !uploadedVideoSource && isDirectVideoUrl(externalVideoSource);
-  const embeddedVideoSource = !uploadedVideoSource ? getEmbeddableVideoUrl(externalVideoSource) : "";
   const isGoogleDrivePdf = isGoogleDriveUrl(externalPdfSource);
-  const isGoogleDriveVideo = isGoogleDriveUrl(externalVideoSource);
   const pdfLabel =
     activeModule?.pdfLabel ||
     activeModule?.pdfName ||
     externalPdfSource ||
     t("common.noPdfSelected");
+  const videoProviderLabel =
+    normalizedVideoSource.provider === "vimeo"
+      ? t("common.vimeoVideo")
+      : normalizedVideoSource.provider === "youtube"
+        ? t("common.youtubeVideo")
+        : normalizedVideoSource.provider === "file"
+          ? t("common.uploadedVideo")
+          : t("common.videoLesson");
   const videoLabel =
+    videoProviderLabel ||
     activeModule?.videoName ||
     activeModule?.video?.uploadLabel ||
-    externalVideoSource ||
     t("common.noVideoSelected");
   const assignmentType = "file";
   const assignmentStatus = assignmentState.submission?.status || "";
@@ -1353,7 +1354,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   });
   const moduleDone = activeCompletionState.moduleComplete;
   const pdfAvailable = Boolean(pdfSource);
-  const videoAvailable = Boolean(videoSource);
+  const videoAvailable = Boolean(normalizedVideoSource.hasVideo);
   const pdfRequirementMet = activeCompletionState.pdfComplete;
   const videoRequirementMet = activeCompletionState.videoComplete;
   const assignmentRequirementMet = activeCompletionState.assignmentComplete;
@@ -1840,32 +1841,33 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                   <span>{videoLabel}</span>
                 </div>
 
-                {uploadedVideoSource && hasDirectUploadedVideo ? (
+                {normalizedVideoSource.type === "video" ? (
                   <div className="resource-viewer-stack">
                     <div className="video-player-shell">
                       <video
                         controls
                         width="100%"
-                        src={uploadedVideoSource}
+                        src={normalizedVideoSource.src}
                         onPlay={() => markSeen(`video-${activeModule.id}`)}
+                        onEnded={() => markSeen(`video-${activeModule.id}`)}
                         onError={() => {
-                          console.error("Video playback failed for module:", activeModule?.id, uploadedVideoSource);
+                          console.error("Video playback failed for module:", activeModule?.id, normalizedVideoSource.src);
                           setViewError(t("errors.videoPlaybackFailed"));
                         }}
                       />
                     </div>
                   </div>
-                ) : embeddedVideoSource ? (
+                ) : normalizedVideoSource.type === "iframe" ? (
                   <div className="resource-viewer-stack">
                     <div className="lesson-meta">
                       <span className="subtle-badge">{t("common.viewVideoOnPage")}</span>
-                      <span>{isGoogleDriveVideo ? "Google Drive" : "Embed"}</span>
+                      <span>{videoProviderLabel}</span>
                     </div>
                     <div className="resource-viewer-shell">
                       <iframe
                         className="resource-viewer-frame video-viewer-frame"
-                        title={isVimeoUrl(externalVideoSource) ? t("common.vimeoVideoPlayerTitle") : t("common.videoPreviewTitle")}
-                        src={embeddedVideoSource}
+                        title={activeModule?.title || t("common.videoPreviewTitle")}
+                        src={normalizedVideoSource.src}
                         width="100%"
                         height="480"
                         loading="lazy"
@@ -1876,42 +1878,47 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                     </div>
                     <small className="field-note">{t("common.previewFallbackOpensNewTab")}</small>
                     <div className="row-actions resource-viewer-actions">
-                      <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                      <a
+                        href={
+                          /^https?:\/\//i.test(normalizedVideoSource.original || "")
+                            ? normalizedVideoSource.original
+                            : normalizedVideoSource.src
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => markSeen(`video-${activeModule.id}`)}
+                      >
                         {t("common.openVideoInNewTab")}
                       </a>
+                      {!videoRequirementMet ? (
+                        <button type="button" className="secondary-btn" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                          {t("common.markVideoViewed")}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
-                ) : externalVideoSource && hasDirectExternalVideo ? (
+                ) : normalizedVideoSource.type === "external" ? (
                   <div className="resource-viewer-stack">
-                    <div className="lesson-meta">
-                      <span className="subtle-badge">{t("common.viewVideoOnPage")}</span>
-                      <span>{t("common.openVideo")}</span>
-                    </div>
-                    <div className="video-player-shell">
-                      <video
-                        controls
-                        width="100%"
-                        src={externalVideoSource}
-                        onPlay={() => markSeen(`video-${activeModule.id}`)}
-                        onError={() => {
-                          console.error("External direct video playback failed for module:", activeModule?.id, externalVideoSource);
-                          setViewError(t("errors.videoPlaybackFailed"));
-                        }}
-                      />
-                    </div>
+                    <small className="field-note">{t("common.videoPreviewCouldNotBeLoaded")}</small>
                     <div className="row-actions resource-viewer-actions">
-                      <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                      <a href={normalizedVideoSource.src} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
                         {t("common.openVideoInNewTab")}
                       </a>
+                      {!videoRequirementMet ? (
+                        <button type="button" className="secondary-btn" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                          {t("common.markVideoViewed")}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
-                ) : externalVideoSource ? (
+                ) : normalizedVideoSource.type === "unknown" && normalizedVideoSource.hasVideo ? (
                   <div className="resource-viewer-stack">
-                    <div className="row-actions resource-viewer-actions">
-                      <a href={externalVideoSource} target="_blank" rel="noreferrer" onClick={() => markSeen(`video-${activeModule.id}`)}>
-                        {t("common.openVideoInNewTab")}
-                      </a>
-                    </div>
+                    <small className="field-note">{t("common.videoPreviewCouldNotBeLoaded")}</small>
+                    {!videoRequirementMet ? (
+                      <button type="button" className="secondary-btn" onClick={() => markSeen(`video-${activeModule.id}`)}>
+                        {t("common.markVideoViewed")}
+                      </button>
+                    ) : null}
                   </div>
                 ) : activeModule?.video?.uploadLabel && activeModule.video.uploadLabel !== t("common.noVideoSelected") ? (
                   <small className="field-note danger-text">{t("common.fileNameExistsButUrlMissing")}</small>
