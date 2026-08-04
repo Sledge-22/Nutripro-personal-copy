@@ -3194,6 +3194,9 @@ select:focus {
 .video-player-shell video,
 .module-assets video {
   width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: min(70vh, 560px);
+  object-fit: contain;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: #000;
@@ -3237,7 +3240,9 @@ select:focus {
 }
 
 .video-viewer-frame {
-  min-height: 480px;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  min-height: 0;
 }
 
 .resource-viewer-actions {

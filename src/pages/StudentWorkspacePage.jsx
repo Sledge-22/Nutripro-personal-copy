@@ -230,9 +230,17 @@ function getNextModule(currentModuleId, orderedModules = []) {
   };
 }
 
-function buildProgressSaveErrorMessage(error, fallbackMessage) {
+function buildProgressSaveErrorMessage(error, fallbackMessage, setupMessage = "") {
   const details = extractErrorDetails(error);
-  return details ? `${fallbackMessage} ${details}` : fallbackMessage;
+  const normalizedDetails = details.toLowerCase();
+  const setupRequired =
+    normalizedDetails.includes("pgrst204") ||
+    normalizedDetails.includes("schema cache") ||
+    normalizedDetails.includes("could not find") ||
+    normalizedDetails.includes("does not exist");
+
+  const message = setupRequired && setupMessage ? `${fallbackMessage} ${setupMessage}` : fallbackMessage;
+  return details ? `${message} ${details}` : message;
 }
 
 function StudentCourseState({ eyebrow, title, text }) {
@@ -1431,6 +1439,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
           key.startsWith("video-")
             ? t("errors.videoProgressSaveFailed")
             : t("errors.progressSaveFailed"),
+          t("errors.studentProgressSetupRequired"),
         ),
       );
     }
@@ -1443,7 +1452,13 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
     if (result?.ok === false) {
       console.error("[StudentProgress] Saving module completion failed:", result.error);
-      setViewError(buildProgressSaveErrorMessage(result.error, t("errors.progressSaveFailed")));
+      setViewError(
+        buildProgressSaveErrorMessage(
+          result.error,
+          t("errors.progressSaveFailed"),
+          t("errors.studentProgressSetupRequired"),
+        ),
+      );
     }
   };
 

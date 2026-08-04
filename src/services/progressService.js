@@ -176,7 +176,7 @@ export async function updateStudentProgress(studentId = 1, updates = {}) {
     }));
 
     await upsertProgressRows(grouped);
-    return merged;
+    return await getStudentProgress(studentId);
   } catch (error) {
     console.error("[StudentProgress] Failed to save progress to public.student_progress:", error);
     throw error;

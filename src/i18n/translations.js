@@ -110,6 +110,7 @@
       videoPlaybackFailed: "No se pudo reproducir el video subido.",
       videoProgressSaveFailed: "No se pudo guardar el progreso del video.",
       progressSaveFailed: "No se pudo guardar el progreso de la lección.",
+      studentProgressSetupRequired: "Configuración requerida: ejecutá el SQL de progreso de estudiantes.",
     },
     roles: {
       Admin: "Administrador",
@@ -1397,6 +1398,7 @@ createdAt: "Creado",
       videoPlaybackFailed: "The uploaded video could not be viewed.",
       videoProgressSaveFailed: "Video progress could not be saved.",
       progressSaveFailed: "Lesson progress could not be saved.",
+      studentProgressSetupRequired: "Setup required: run the student progress SQL file.",
     },
     roles: {
       Admin: "Admin",
