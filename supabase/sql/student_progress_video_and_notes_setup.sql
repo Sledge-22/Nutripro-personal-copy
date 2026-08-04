@@ -13,6 +13,9 @@ alter table public.student_progress
 add column if not exists course_id uuid references public.courses(id) on delete cascade;
 
 alter table public.student_progress
+add column if not exists pdf_completed boolean not null default false;
+
+alter table public.student_progress
 add column if not exists video_viewed boolean not null default false;
 
 alter table public.student_progress
@@ -20,6 +23,9 @@ add column if not exists video_viewed_at timestamptz;
 
 alter table public.student_progress
 add column if not exists completed_at timestamptz;
+
+alter table public.student_progress
+add column if not exists module_completed boolean not null default false;
 
 alter table public.student_progress
 add column if not exists completed boolean default false;
@@ -52,15 +58,17 @@ begin
     where table_schema = 'public'
       and table_name = 'student_progress'
       and column_name = 'module_completed'
-  ) then
-    update public.student_progress
-    set
-      completed = true,
-      status = coalesce(status, 'completed'),
-      completed_at = coalesce(completed_at, updated_at, now()),
-      progress_percent = greatest(coalesce(progress_percent, 0), 100),
-      updated_at = coalesce(updated_at, now())
-    where coalesce(module_completed, false) = true;
+    ) then
+    execute $backfill$
+      update public.student_progress
+      set
+        completed = true,
+        status = coalesce(status, 'completed'),
+        completed_at = coalesce(completed_at, updated_at, now()),
+        progress_percent = greatest(coalesce(progress_percent, 0), 100),
+        updated_at = coalesce(updated_at, now())
+      where coalesce(module_completed, false) = true
+    $backfill$;
   end if;
 end $$;
 
@@ -73,13 +81,15 @@ begin
     where table_schema = 'public'
       and table_name = 'student_progress'
       and column_name = 'video_completed'
-  ) then
-    update public.student_progress
-    set
-      video_viewed = true,
-      video_viewed_at = coalesce(video_viewed_at, updated_at, now()),
-      updated_at = coalesce(updated_at, now())
-    where coalesce(video_completed, false) = true;
+    ) then
+    execute $backfill$
+      update public.student_progress
+      set
+        video_viewed = true,
+        video_viewed_at = coalesce(video_viewed_at, updated_at, now()),
+        updated_at = coalesce(updated_at, now())
+      where coalesce(video_completed, false) = true
+    $backfill$;
   end if;
 end $$;
 

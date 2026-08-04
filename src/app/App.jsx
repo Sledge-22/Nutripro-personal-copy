@@ -1500,7 +1500,13 @@ export function App() {
     const touchedCourseIds = Array.from(
       new Set(
         touchedModuleIds
-          .map((moduleId) => moduleCourseIds[String(moduleId)] ?? context?.courseId)
+          .map(
+            (moduleId) =>
+              context?.moduleCourseIds?.[String(moduleId)] ??
+              context?.moduleCourseIds?.[moduleId] ??
+              moduleCourseIds[String(moduleId)] ??
+              context?.courseId,
+          )
           .filter(Boolean),
       ),
     );

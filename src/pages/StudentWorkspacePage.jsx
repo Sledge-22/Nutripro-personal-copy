@@ -1060,6 +1060,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     message: "",
     error: "",
   });
+  const [localProgressOverrides, setLocalProgressOverrides] = useState({});
 
   console.log("selected course id on detail page:", course?.id);
 
@@ -1069,9 +1070,23 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     setActiveModuleId(requestedModule?.id ?? modules[0]?.id ?? null);
     setViewError("");
     setBlockedLessonId("");
+    setLocalProgressOverrides({});
   }, [course?.id, moduleIdsKey]);
 
   const activeModule = modules.find((module) => String(module.id) === String(activeModuleId)) || modules[0] || null;
+  const activeModuleCourseId =
+    activeModule?.course_id ||
+    activeModule?.courseId ||
+    activeModule?.course?.id ||
+    course?.id ||
+    "";
+  const effectiveCompleted = useMemo(
+    () => ({
+      ...(completed ?? {}),
+      ...localProgressOverrides,
+    }),
+    [completed, localProgressOverrides],
+  );
   const lessonRequirements = getLessonRequirements(activeModule);
   const assignmentRequired = lessonRequirements.requiresAssignmentSubmission;
   const activeAssignment = assignmentRequired ? activeModule?.assignment ?? null : null;
@@ -1079,7 +1094,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   const sequentialState = getSequentialLessonStates({
     classes: courseClasses,
     modules,
-    progress: completed,
+    progress: effectiveCompleted,
     submissions: courseSubmissionsLoaded ? courseSubmissions : null,
   });
   const activeLessonState = activeModule
@@ -1399,7 +1414,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
   }
   const activeCompletionState = getLessonCompletionState({
     lesson: activeModule,
-    progress: completed,
+    progress: effectiveCompleted,
     submissions: courseSubmissionsLoaded ? activeSubmissionMap : null,
   });
   const moduleDone = activeCompletionState.moduleComplete;
@@ -1429,10 +1444,24 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
 
   const markSeen = async (key) => {
     setViewError("");
-    const result = await onUpdateProgress({ [key]: true }, { courseId: course?.id });
+    setLocalProgressOverrides((current) => ({ ...current, [key]: true }));
+    const result = await onUpdateProgress(
+      { [key]: true },
+      {
+        courseId: activeModuleCourseId,
+        moduleCourseIds: activeModule?.id && activeModuleCourseId
+          ? { [String(activeModule.id)]: activeModuleCourseId }
+          : {},
+      },
+    );
 
     if (result?.ok === false) {
       console.error("[StudentProgress] Saving lesson resource progress failed:", result.error);
+      setLocalProgressOverrides((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
       setViewError(
         buildProgressSaveErrorMessage(
           result.error,
@@ -1442,16 +1471,32 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
           t("errors.studentProgressSetupRequired"),
         ),
       );
+      return false;
     }
+
+    return true;
   };
 
   const toggleModule = async () => {
     if (!activeModule || !activeLessonState?.isUnlocked || !canComplete || moduleDone) return;
     setViewError("");
-    const result = await onUpdateProgress({ [`module-${activeModule.id}`]: true }, { courseId: course?.id });
+    const progressKey = `module-${activeModule.id}`;
+    setLocalProgressOverrides((current) => ({ ...current, [progressKey]: true }));
+    const result = await onUpdateProgress(
+      { [progressKey]: true },
+      {
+        courseId: activeModuleCourseId,
+        moduleCourseIds: activeModuleCourseId ? { [String(activeModule.id)]: activeModuleCourseId } : {},
+      },
+    );
 
     if (result?.ok === false) {
       console.error("[StudentProgress] Saving module completion failed:", result.error);
+      setLocalProgressOverrides((current) => {
+        const next = { ...current };
+        delete next[progressKey];
+        return next;
+      });
       setViewError(
         buildProgressSaveErrorMessage(
           result.error,
