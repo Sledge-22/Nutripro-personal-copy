@@ -49,14 +49,19 @@ function progressIsComplete(progress, moduleId) {
     const row = progress.find(
       (entry) => normalizeId(entry?.module_id ?? entry?.moduleId) === normalizedId,
     );
-    return Boolean(row?.module_completed ?? row?.completed);
+    return Boolean(row?.module_completed) ||
+      Boolean(row?.completed) ||
+      `${row?.status ?? ""}`.trim().toLowerCase() === "completed" ||
+      Boolean(row?.completed_at ?? row?.completedAt) ||
+      Number(row?.progress_percent ?? row?.progressPercent ?? 0) >= 100;
   }
 
-  return Boolean(
-    progress?.[`module-${normalizedId}`] ??
-      progress?.[normalizedId]?.module_completed ??
-      progress?.[normalizedId]?.completed,
-  );
+  return Boolean(progress?.[`module-${normalizedId}`]) ||
+    Boolean(progress?.[normalizedId]?.module_completed) ||
+    Boolean(progress?.[normalizedId]?.completed) ||
+    `${progress?.[normalizedId]?.status ?? ""}`.trim().toLowerCase() === "completed" ||
+    Boolean(progress?.[normalizedId]?.completed_at ?? progress?.[normalizedId]?.completedAt) ||
+    Number(progress?.[normalizedId]?.progress_percent ?? progress?.[normalizedId]?.progressPercent ?? 0) >= 100;
 }
 
 function requirementProgressIsComplete(progress, moduleId, requirement) {
@@ -221,7 +226,7 @@ export function getLessonCompletionState({ lesson, progress = {}, submissions = 
     videoComplete,
     assignmentComplete,
     requirementsComplete: pdfComplete && videoComplete && assignmentComplete,
-    isComplete: moduleComplete && pdfComplete && videoComplete && assignmentComplete,
+    isComplete: moduleComplete,
     submission,
   };
 }
@@ -302,6 +307,26 @@ export function getSequentialLessonStates({
     const completionState = getLessonCompletionState({ lesson, progress, submissions });
     const isComplete = completionState.isComplete;
     const isUnlocked = index === 0 || previousLessonsComplete;
+    const previousLesson = orderedLessons[index - 1] ?? null;
+
+    console.log("[LessonUnlock]", {
+      currentModuleId: normalizeId(lesson?.id),
+      previousModuleId: normalizeId(previousLesson?.id),
+      previousProgress: previousLesson ? progressIsComplete(progress, previousLesson.id) : null,
+      previousIsComplete: previousLesson
+        ? getLessonCompletionState({ lesson: previousLesson, progress, submissions }).isComplete
+        : null,
+      isUnlocked,
+      requirements: {
+        hasPdf: completionState.hasPdf,
+        hasVideo: completionState.hasVideo,
+        hasAssignment: completionState.hasAssignment,
+        pdfComplete: completionState.pdfComplete,
+        videoComplete: completionState.videoComplete,
+        assignmentComplete: completionState.assignmentComplete,
+        moduleComplete: completionState.moduleComplete,
+      },
+    });
 
     if (isComplete) completedCount += 1;
 

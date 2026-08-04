@@ -1457,8 +1457,14 @@ export function App() {
       return;
     }
 
-    const nextProgress = await updateStudentProgress(activeStudentId, updates);
-    setProgressState(nextProgress);
+    let nextProgress = null;
+    try {
+      nextProgress = await updateStudentProgress(activeStudentId, updates);
+      setProgressState(nextProgress);
+    } catch (error) {
+      console.error("Student progress update failed:", error);
+      return;
+    }
 
     const touchedModuleIds = Array.from(
       new Set(
