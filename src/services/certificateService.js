@@ -77,7 +77,7 @@ export async function getCertificates() {
   try {
     const { data, error } = await supabase
       .from("certificates")
-      .select("id,student_id,student_name,course_id,course_title,certificate_number,issue_date,issued_at,status")
+      .select("*")
       .order("id", { ascending: false });
     if (error) throw error;
     return (data ?? []).map(normalizeCertificate);
@@ -119,7 +119,7 @@ async function findExistingIssuedCertificate(studentId, courseId) {
 
   const { data, error } = await supabase
     .from("certificates")
-    .select("id,student_id,student_name,course_id,course_title,certificate_number,issue_date,issued_at,status")
+    .select("*")
     .eq("student_id", normalizedStudentId)
     .eq("course_id", normalizedCourseId)
     .eq("status", "issued")

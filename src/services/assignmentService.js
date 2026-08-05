@@ -169,6 +169,22 @@ async function updateSubmissionReview(submissionId, payload) {
   return data;
 }
 
+async function maybeGenerateCertificateAfterApprovedReview(hydratedSubmission, nextStatus) {
+  if (nextStatus !== "approved" || !hydratedSubmission?.studentId || !hydratedSubmission?.courseId) {
+    return null;
+  }
+
+  try {
+    return await maybeGenerateCertificate(hydratedSubmission.studentId, hydratedSubmission.courseId);
+  } catch (certificateError) {
+    console.error("Certificate update after assignment review failed:", certificateError);
+    return {
+      generated: false,
+      error: certificateError,
+    };
+  }
+}
+
 function sanitizeAssignmentData(assignmentData = {}) {
   const titleEn = `${assignmentData.titleEn ?? assignmentData.title_en ?? ""}`.trim();
   const titleEs = `${assignmentData.titleEs ?? assignmentData.title_es ?? ""}`.trim();
@@ -826,9 +842,7 @@ export async function reviewSubmission(submissionId, status, adminFeedback, grad
       submissions.map((submission) => (submission.id === existingSubmission.id ? nextSubmission : submission)),
     );
     const hydratedSubmission = hydrateMockSubmission(nextSubmission);
-    const certificateOutcome = hydratedSubmission?.studentId && hydratedSubmission?.courseId
-      ? await maybeGenerateCertificate(hydratedSubmission.studentId, hydratedSubmission.courseId)
-      : null;
+    const certificateOutcome = await maybeGenerateCertificateAfterApprovedReview(hydratedSubmission, nextStatus);
 
     return hydratedSubmission
       ? {
@@ -846,9 +860,7 @@ export async function reviewSubmission(submissionId, status, adminFeedback, grad
   };
 
   const hydratedSubmission = (await hydrateSubmissions([data]))[0] ?? null;
-  const certificateOutcome = hydratedSubmission?.studentId && hydratedSubmission?.courseId
-    ? await maybeGenerateCertificate(hydratedSubmission.studentId, hydratedSubmission.courseId)
-    : null;
+  const certificateOutcome = await maybeGenerateCertificateAfterApprovedReview(hydratedSubmission, nextStatus);
 
   return hydratedSubmission
     ? {

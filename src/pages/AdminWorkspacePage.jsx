@@ -8204,6 +8204,7 @@ function AssignmentReviewsPage({ currentUser }) {
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [reviewSavingId, setReviewSavingId] = useState(null);
   const [reviewMessage, setReviewMessage] = useState("");
+  const [reviewWarning, setReviewWarning] = useState("");
   const [reviewError, setReviewError] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -8268,6 +8269,7 @@ function AssignmentReviewsPage({ currentUser }) {
   const selectSubmission = (submission) => {
     setSelectedSubmissionId(submission.id);
     setReviewMessage("");
+    setReviewWarning("");
     setReviewError("");
     setInstructionsExpanded(false);
     setReviewPanelOpen(true);
@@ -8279,6 +8281,7 @@ function AssignmentReviewsPage({ currentUser }) {
       [selectedSubmission.id]: createReviewDraft(selectedSubmission),
     }));
     setReviewMessage("");
+    setReviewWarning("");
     setReviewError("");
   };
 
@@ -8298,6 +8301,7 @@ function AssignmentReviewsPage({ currentUser }) {
     if (!selectedSubmission) return;
 
     setReviewMessage("");
+    setReviewWarning("");
     setReviewError("");
     setReviewSavingId(selectedSubmission.id);
 
@@ -8376,6 +8380,9 @@ function AssignmentReviewsPage({ currentUser }) {
           ? `${t("admin.reviewSaved")} ${t("admin.assignmentGradedCertificateGenerated")}`
           : t("admin.reviewSaved"),
       );
+      if (certificateOutcome?.error) {
+        setReviewWarning(t("admin.reviewSavedCertificateNeedsAttention"));
+      }
       await loadSubmissions(selectedSubmission.id);
     } catch (error) {
       console.error("Saving assignment review failed:", error);
@@ -8417,6 +8424,7 @@ function AssignmentReviewsPage({ currentUser }) {
         {submissionsLoading && <small className="field-note">{t("common.loadingSubmissions")}</small>}
         {submissionsError && <AdminErrorMessage error={submissionsError} detailsLabel={t("common.details")} />}
         {reviewMessage && <small className="field-note">{reviewMessage}</small>}
+        {reviewWarning && <small className="field-note warning-text">{reviewWarning}</small>}
         {reviewError && <AdminErrorMessage error={reviewError} detailsLabel={t("common.details")} />}
 
         <div className="assignment-review-table-wrap">
