@@ -935,6 +935,22 @@ function formatDisplayDate(value, language = "es") {
   }
 }
 
+function formatDisplayDateTime(value, language = "es") {
+  if (!value) return "â€”";
+
+  try {
+    return new Date(value).toLocaleString(language === "es" ? "es-ES" : "en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return value;
+  }
+}
+
 function createTeamApplicationCopy(language) {
   if (language === "es") {
     return {
@@ -1021,6 +1037,12 @@ function createReviewDraft(submission = null) {
     grade: submission?.grade ?? "",
     adminFeedback: submission?.adminFeedback || submission?.admin_feedback || "",
   };
+}
+
+function getInitialsFromText(value = "") {
+  const words = `${value}`.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "N";
+  return words.slice(0, 2).map((word) => word[0]?.toUpperCase()).join("");
 }
 
 function normalizeRoleKey(value) {
@@ -8183,6 +8205,10 @@ function AssignmentReviewsPage({ currentUser }) {
   const [reviewSavingId, setReviewSavingId] = useState(null);
   const [reviewMessage, setReviewMessage] = useState("");
   const [reviewError, setReviewError] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [instructionsExpanded, setInstructionsExpanded] = useState(false);
+  const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
 
   const loadSubmissions = async (keepSelectedId = selectedSubmissionId) => {
     setSubmissionsLoading(true);
@@ -8209,6 +8235,52 @@ function AssignmentReviewsPage({ currentUser }) {
 
   const selectedSubmission = submissions.find((submission) => submission.id === selectedSubmissionId) ?? null;
   const reviewForm = selectedSubmission ? reviewForms[selectedSubmission.id] ?? createReviewDraft(selectedSubmission) : createReviewDraft();
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const filteredSubmissions = submissions.filter((submission) => {
+    const submissionStatus = `${submission.status || "submitted"}`.toLowerCase();
+    const matchesStatus = statusFilter === "all" || submissionStatus === statusFilter;
+    const searchableText = [
+      submission.studentName,
+      submission.studentEmail,
+      submission.assignmentTitle,
+      submission.courseTitle,
+      submission.classTitle,
+      submission.moduleTitle,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return matchesStatus && (!normalizedSearchTerm || searchableText.includes(normalizedSearchTerm));
+  });
+  const selectedFileUrl = selectedSubmission?.filePublicUrl || selectedSubmission?.fileUrl || "";
+  const selectedFileName = selectedSubmission?.fileName || selectedSubmission?.file_name || t("common.openAttachment");
+  const selectedFileMeta = [
+    selectedSubmission?.fileType || selectedSubmission?.file_type || "",
+    formatFileSize(selectedSubmission?.fileSize ?? selectedSubmission?.file_size),
+  ].filter(Boolean).join(" • ");
+  const selectedInstructions = selectedSubmission?.assignmentInstructions || "";
+  const instructionsAreLong = selectedInstructions.length > 360;
+  const visibleInstructions =
+    instructionsAreLong && !instructionsExpanded
+      ? `${selectedInstructions.slice(0, 360).trim()}...`
+      : selectedInstructions;
+  const feedbackLength = `${reviewForm.adminFeedback ?? ""}`.length;
+  const selectSubmission = (submission) => {
+    setSelectedSubmissionId(submission.id);
+    setReviewMessage("");
+    setReviewError("");
+    setInstructionsExpanded(false);
+    setReviewPanelOpen(true);
+  };
+  const resetReviewDraft = () => {
+    if (!selectedSubmission) return;
+    setReviewForms((current) => ({
+      ...current,
+      [selectedSubmission.id]: createReviewDraft(selectedSubmission),
+    }));
+    setReviewMessage("");
+    setReviewError("");
+  };
 
   const updateReviewForm = (field, value) => {
     if (!selectedSubmission) return;
@@ -8314,15 +8386,32 @@ function AssignmentReviewsPage({ currentUser }) {
   };
 
   return (
-    <div className="split-layout review-center-layout">
-      <section className="section-card">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">{t("common.assignmentReviews")}</span>
-            <h2>{t("admin.allStudentSubmissions")}</h2>
-            <p>{t("admin.reviewHomeworkOpenFiles")}</p>
+    <div className={`assignment-review-workspace ${reviewPanelOpen ? "review-panel-open" : ""}`}>
+      <section className="assignment-review-list-card section-card">
+        <div className="assignment-review-page-heading">
+          <span className="eyebrow">{t("common.assignmentReviews")}</span>
+          <h2>{t("admin.allStudentSubmissions")}</h2>
+          <p>{t("admin.reviewHomeworkOpenFiles")}</p>
+        </div>
+
+        <div className="assignment-review-toolbar">
+          <span className="count-badge">{t("admin.submissionCount", { count: filteredSubmissions.length })}</span>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label={t("common.allStatuses")}>
+            <option value="all">{t("common.allStatuses")}</option>
+            <option value="submitted">{t("status.submitted")}</option>
+            <option value="approved">{t("status.approved")}</option>
+            <option value="changes_requested">{t("status.changes_requested")}</option>
+            <option value="rejected">{t("status.rejected")}</option>
+            <option value="resubmitted">{t("status.resubmitted")}</option>
+          </select>
+          <div className="assignment-review-search">
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder={t("admin.searchStudentsAssignments")}
+            />
+            <Icon name="search" size={17} />
           </div>
-          <span className="count-badge">{submissions.length} submissions</span>
         </div>
 
         {submissionsLoading && <small className="field-note">{t("common.loadingSubmissions")}</small>}
@@ -8330,14 +8419,13 @@ function AssignmentReviewsPage({ currentUser }) {
         {reviewMessage && <small className="field-note">{reviewMessage}</small>}
         {reviewError && <AdminErrorMessage error={reviewError} detailsLabel={t("common.details")} />}
 
-        <div className="table-wrap">
-          <table className="mobile-card-table">
+        <div className="assignment-review-table-wrap">
+          <table className="assignment-review-table">
             <thead>
               <tr>
                 <th>{t("common.student")}</th>
                 <th>{t("common.course")}</th>
                 <th>{t("common.class")}</th>
-                <th>{t("common.module")}</th>
                 <th>{t("common.assignment")}</th>
                 <th>{t("common.status")}</th>
                 <th>{t("common.grade")}</th>
@@ -8346,79 +8434,119 @@ function AssignmentReviewsPage({ currentUser }) {
               </tr>
             </thead>
             <tbody>
-              {!submissionsLoading && !submissions.length ? (
+              {!submissionsLoading && !filteredSubmissions.length ? (
                 <tr>
-                  <td colSpan="9">{t("common.noAssignmentSubmissionsYet")}</td>
+                  <td colSpan="8">{t("common.noAssignmentSubmissionsYet")}</td>
                 </tr>
               ) : (
-                submissions.map((submission) => (
-                  <tr key={submission.id}>
-                    <td data-label={t("common.student")}>
-                      <strong>{submission.studentName || t("common.student")}</strong>
-                      <div>{submission.studentEmail || "â€”"}</div>
-                    </td>
-                    <td data-label={t("common.course")}>{submission.courseTitle || "â€”"}</td>
-                    <td data-label={t("common.class")}>{submission.classTitle || "â€”"}</td>
-                    <td data-label={t("common.module")}>{submission.moduleTitle || "â€”"}</td>
-                    <td data-label={t("common.assignment")}>{submission.assignmentTitle || "â€”"}</td>
-                    <td data-label={t("common.status")}><Status status={submission.status || "submitted"} /></td>
-                    <td data-label={t("common.grade")}>{submission.grade === null || submission.grade === undefined ? t("common.notGradedYet") : `${submission.grade}/100`}</td>
-                    <td data-label={t("common.submittedDate")}>{formatDisplayDate(submission.submittedAt || submission.submitted_at, language)}</td>
-                    <td data-label={t("common.review")}>
-                      <button onClick={() => { setSelectedSubmissionId(submission.id); setReviewMessage(""); setReviewError(""); }}>
-                        {t("admin.reviewButton")}
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                filteredSubmissions.map((submission) => {
+                  const isSelected = String(submission.id) === String(selectedSubmissionId);
+                  return (
+                    <tr
+                      key={submission.id}
+                      className={isSelected ? "selected" : ""}
+                      onClick={() => selectSubmission(submission)}
+                    >
+                      <td data-label={t("common.student")}>
+                        <div className="review-student-cell">
+                          <span className="review-avatar">{getInitialsFromText(submission.studentName || submission.studentEmail)}</span>
+                          <span>
+                            <strong>{submission.studentName || t("common.student")}</strong>
+                            <small>{submission.studentEmail || "—"}</small>
+                          </span>
+                        </div>
+                      </td>
+                      <td data-label={t("common.course")}>{submission.courseTitle || "—"}</td>
+                      <td data-label={t("common.class")}>{submission.classTitle || "—"}</td>
+                      <td data-label={t("common.assignment")}>
+                        <strong>{submission.assignmentTitle || "—"}</strong>
+                        <small>{submission.moduleTitle || "—"}</small>
+                      </td>
+                      <td data-label={t("common.status")}><Status status={submission.status || "submitted"} /></td>
+                      <td data-label={t("common.grade")}>
+                        {submission.grade === null || submission.grade === undefined ? "—" : `${submission.grade}/100`}
+                      </td>
+                      <td data-label={t("common.submittedDate")}>
+                        {formatDisplayDateTime(submission.submittedAt || submission.submitted_at, language)}
+                      </td>
+                      <td data-label={t("common.review")}>
+                        <button type="button" className={isSelected ? "primary-btn compact-btn" : "secondary-btn compact-btn"} onClick={(event) => {
+                          event.stopPropagation();
+                          selectSubmission(submission);
+                        }}>
+                          {t("admin.reviewButton")}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </section>
 
-      <section className="section-card review-detail-card">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">{t("common.reviewPanel")}</span>
-            <h2>{selectedSubmission ? selectedSubmission.assignmentTitle || t("common.assignment") : t("common.selectSubmission")}</h2>
-            <p>{selectedSubmission ? `${selectedSubmission.studentName || t("common.student")} Â· ${selectedSubmission.courseTitle || t("common.course")}` : t("admin.selectFromList")}</p>
-          </div>
-        </div>
-
+      <section className="assignment-review-detail-card section-card">
         {selectedSubmission ? (
           <div className="review-panel-content">
-            <div className="review-meta-grid">
+            <div className="assignment-review-detail-head">
+              <button type="button" className="text-button review-back-button" onClick={() => setReviewPanelOpen(false)}>
+                ← {t("admin.backToSubmissionList")}
+              </button>
               <div>
-                <small>{t("common.student")}</small>
-                <strong>{selectedSubmission.studentName || t("common.student")}</strong>
-                <p>{selectedSubmission.studentEmail || "â€”"}</p>
-              </div>
-              <div>
-                <small>{t("common.course")}</small>
-                <strong>{selectedSubmission.courseTitle || "â€”"}</strong>
-                <p>{selectedSubmission.classTitle || "â€”"}</p>
-              </div>
-              <div>
-                <small>{t("common.module")}</small>
-                <strong>{selectedSubmission.moduleTitle || "â€”"}</strong>
-                <p>{selectedSubmission.status ? t(`status.${selectedSubmission.status}`) : "â€”"}</p>
-              </div>
-              <div>
-                <small>{t("common.assignment")}</small>
-                <strong>{selectedSubmission.assignmentTitle || "â€”"}</strong>
-                <p>{selectedSubmission.assignment?.submissionType ? translateSubmissionType(selectedSubmission.assignment?.submissionType || selectedSubmission.assignment?.submission_type) : "â€”"}</p>
-              </div>
-              <div>
-                <small>{t("common.submittedDate")}</small>
-                <strong>{formatDisplayDate(selectedSubmission.submittedAt || selectedSubmission.submitted_at, language)}</strong>
-                <p>{selectedSubmission.status ? t(`status.${selectedSubmission.status}`) : "â€”"}</p>
+                <h2>{selectedSubmission.assignmentTitle || t("common.assignment")}</h2>
+                <p>
+                  {selectedSubmission.studentName || t("common.student")} • <Status status={selectedSubmission.status || "submitted"} />
+                </p>
               </div>
             </div>
 
-            <div className="response-block">
+            <div className="assignment-review-info-grid">
+              <article>
+                <span className="review-avatar">{getInitialsFromText(selectedSubmission.studentName || selectedSubmission.studentEmail)}</span>
+                <div>
+                  <small>{t("common.student")}</small>
+                  <strong>{selectedSubmission.studentName || t("common.student")}</strong>
+                  <p>{selectedSubmission.studentEmail || "—"}</p>
+                </div>
+              </article>
+              <article>
+                <small>{t("common.course")}</small>
+                <strong>{selectedSubmission.courseTitle || "—"}</strong>
+                <p>{selectedSubmission.moduleTitle || "—"}</p>
+              </article>
+              <article>
+                <small>{t("common.class")}</small>
+                <strong>{selectedSubmission.classTitle || "—"}</strong>
+              </article>
+              <article>
+                <small>{t("common.submittedDate")}</small>
+                <strong>{formatDisplayDate(selectedSubmission.submittedAt || selectedSubmission.submitted_at, language)}</strong>
+                <p>{formatDisplayDateTime(selectedSubmission.submittedAt || selectedSubmission.submitted_at, language)}</p>
+              </article>
+            </div>
+
+            <div className="assignment-review-attachment-card">
+              <div>
+                <small>{t("admin.attachment")}</small>
+                <strong>{selectedFileUrl ? selectedFileName : t("common.noFileAttachmentSubmitted")}</strong>
+                {selectedFileMeta ? <p>{selectedFileMeta}</p> : null}
+              </div>
+              {selectedFileUrl ? (
+                <a className="secondary-btn compact-btn" href={selectedFileUrl} target="_blank" rel="noreferrer">
+                  {t("common.openAttachment")}
+                </a>
+              ) : null}
+            </div>
+
+            <div className="response-block assignment-review-instructions">
               <strong>{t("common.assignmentInstructions")}</strong>
-              <p>{selectedSubmission.assignmentInstructions || t("common.noInstructionsAdded")}</p>
+              <p>{visibleInstructions || t("common.noInstructionsAdded")}</p>
+              {instructionsAreLong ? (
+                <button type="button" className="text-button" onClick={() => setInstructionsExpanded((current) => !current)}>
+                  {instructionsExpanded ? t("admin.showLess") : t("admin.showMore")}
+                </button>
+              ) : null}
             </div>
 
             {selectedSubmission.textResponse ? (
@@ -8428,39 +8556,55 @@ function AssignmentReviewsPage({ currentUser }) {
               </div>
             ) : null}
 
-            {selectedSubmission.filePublicUrl || selectedSubmission.fileUrl ? (
-              <a href={selectedSubmission.filePublicUrl || selectedSubmission.fileUrl} target="_blank" rel="noreferrer">{t("common.openAttachment")}</a>
-            ) : (
-              <small className="field-note">{t("common.noFileAttachmentSubmitted")}</small>
-            )}
+            <div className="assignment-review-form-grid">
+              <label>
+                {t("common.currentStatus")}
+                <select value={reviewForm.status} onChange={(event) => updateReviewForm("status", event.target.value)}>
+                  <option value="submitted">{t("status.submitted")}</option>
+                  <option value="approved">{t("status.approved")}</option>
+                  <option value="changes_requested">{t("status.changes_requested")}</option>
+                  <option value="rejected">{t("status.rejected")}</option>
+                  <option value="resubmitted">{t("status.resubmitted")}</option>
+                </select>
+              </label>
 
-            <label>
-              {t("common.currentStatus")}
-              <select value={reviewForm.status} onChange={(event) => updateReviewForm("status", event.target.value)}>
-                <option value="submitted">{t("status.submitted")}</option>
-                <option value="approved">{t("status.approved")}</option>
-                <option value="changes_requested">{t("status.changes_requested")}</option>
-                <option value="rejected">{t("status.rejected")}</option>
-                <option value="resubmitted">{t("status.resubmitted")}</option>
-              </select>
+              <label className="grade-input-label">
+                {t("admin.gradeOptional")}
+                <span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={reviewForm.grade}
+                    onChange={(event) => updateReviewForm("grade", event.target.value)}
+                    placeholder="0"
+                  />
+                  <strong>/ 100</strong>
+                </span>
+              </label>
+            </div>
+
+            <label className="assignment-review-feedback">
+              {t("admin.feedbackVisibleToStudent")}
+              <textarea
+                rows="6"
+                value={reviewForm.adminFeedback}
+                onChange={(event) => updateReviewForm("adminFeedback", event.target.value)}
+                placeholder={t("admin.feedbackPlaceholder")}
+              />
+              <small className="field-note">{feedbackLength} {t("admin.characters")}</small>
             </label>
 
-            <label>
-              {t("common.gradeOutOf100")}
-              <input type="number" min="0" max="100" value={reviewForm.grade} onChange={(event) => updateReviewForm("grade", event.target.value)} placeholder="0 - 100" />
-            </label>
-
-            <label>
-              {t("common.feedback")}
-              <textarea rows="6" value={reviewForm.adminFeedback} onChange={(event) => updateReviewForm("adminFeedback", event.target.value)} placeholder={t("admin.feedbackPlaceholder")} />
-            </label>
-
-            <div className="form-actions compact">
+            <div className="form-actions assignment-review-actions">
               <button type="button" className="primary-btn" disabled={reviewSavingId === selectedSubmission.id} onClick={() => void saveReview()}>
                 <Icon name="check" />
                 {reviewSavingId === selectedSubmission.id ? t("common.saving") : t("common.saveReview")}
               </button>
+              <button type="button" className="secondary-btn" onClick={resetReviewDraft}>
+                {t("common.cancel")}
+              </button>
             </div>
+            <small className="field-note">{t("admin.feedbackVisibleNote")}</small>
           </div>
         ) : (
           <p className="empty-copy">{t("common.selectSubmissionToOpenReview")}</p>

@@ -1234,6 +1234,220 @@ code { padding: 5px 7px; border-radius: 6px; color: var(--green-800); background
 .review-meta-grid small { display: block; margin-bottom: 5px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .review-meta-grid strong { display: block; font-size: 14px; }
 .review-meta-grid p { margin: 5px 0 0; font-size: 12px; line-height: 1.5; }
+.assignment-review-workspace {
+  display: grid;
+  grid-template-columns: minmax(560px, 1.05fr) minmax(420px, .95fr);
+  gap: 20px;
+  align-items: start;
+}
+.assignment-review-list-card,
+.assignment-review-detail-card {
+  overflow: hidden;
+}
+.assignment-review-page-heading h2,
+.assignment-review-detail-head h2 {
+  margin: 8px 0 6px;
+}
+.assignment-review-page-heading p,
+.assignment-review-detail-head p {
+  margin: 0;
+  color: var(--color-muted);
+}
+.assignment-review-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(170px, 250px) minmax(220px, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin: 24px 0;
+}
+.assignment-review-toolbar select,
+.assignment-review-search input {
+  width: 100%;
+}
+.assignment-review-search {
+  position: relative;
+}
+.assignment-review-search svg {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-muted);
+  pointer-events: none;
+}
+.assignment-review-search input {
+  padding-right: 44px;
+}
+.assignment-review-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.assignment-review-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+}
+.assignment-review-table th {
+  padding: 0 12px 10px;
+  color: var(--color-text-soft);
+  font-size: 11px;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.assignment-review-table td {
+  padding: 14px 12px;
+  border-top: 1px solid rgba(245, 241, 233, .08);
+  border-bottom: 1px solid rgba(245, 241, 233, .08);
+  color: var(--color-text);
+  font-size: 13px;
+  vertical-align: middle;
+}
+.assignment-review-table td:first-child {
+  border-left: 1px solid rgba(245, 241, 233, .08);
+  border-radius: 14px 0 0 14px;
+}
+.assignment-review-table td:last-child {
+  border-right: 1px solid rgba(245, 241, 233, .08);
+  border-radius: 0 14px 14px 0;
+}
+.assignment-review-table tr {
+  cursor: pointer;
+}
+.assignment-review-table tr:hover td,
+.assignment-review-table tr.selected td {
+  border-color: rgba(79, 202, 214, .45);
+  background: rgba(79, 202, 214, .07);
+  box-shadow: inset 0 0 0 1px rgba(79, 202, 214, .12);
+}
+.assignment-review-table strong,
+.assignment-review-table small {
+  display: block;
+}
+.assignment-review-table small {
+  margin-top: 4px;
+  color: var(--color-muted);
+  line-height: 1.35;
+}
+.review-student-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 150px;
+}
+.review-avatar {
+  width: 38px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: #08282b;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
+  font-size: 13px;
+  font-weight: 900;
+}
+.compact-btn {
+  min-height: 34px;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+.assignment-review-detail-card {
+  position: sticky;
+  top: 20px;
+}
+.assignment-review-detail-head {
+  display: grid;
+  gap: 14px;
+}
+.assignment-review-detail-head p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.review-back-button {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.assignment-review-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.assignment-review-info-grid article,
+.assignment-review-attachment-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface-2);
+}
+.assignment-review-info-grid small,
+.assignment-review-attachment-card small {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.assignment-review-info-grid strong,
+.assignment-review-attachment-card strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.assignment-review-info-grid p,
+.assignment-review-attachment-card p {
+  margin: 4px 0 0;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.assignment-review-attachment-card {
+  justify-content: space-between;
+}
+.assignment-review-instructions {
+  max-height: none;
+}
+.assignment-review-instructions .text-button {
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.assignment-review-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, .75fr);
+  gap: 14px;
+}
+.grade-input-label > span {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.grade-input-label strong {
+  color: var(--color-text-soft);
+}
+.assignment-review-feedback {
+  display: grid;
+  gap: 8px;
+}
+.assignment-review-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
 .progress-steps { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .lesson-meta { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; }
 .lesson-meta a { color: var(--green-700); word-break: break-word; }
@@ -2590,7 +2804,9 @@ code {
 
 .status.approved { color: var(--color-success); background: rgba(138, 208, 163, .14); border-color: rgba(138, 208, 163, .18); }
 .status.submitted { color: var(--color-primary); background: rgba(79, 202, 214, .14); border-color: rgba(79, 202, 214, .18); }
-.status.needs_revision { color: var(--color-warning); background: rgba(217, 183, 111, .14); border-color: rgba(217, 183, 111, .18); }
+.status.needs_revision,
+.status.changes_requested { color: var(--color-warning); background: rgba(217, 183, 111, .14); border-color: rgba(217, 183, 111, .18); }
+.status.resubmitted { color: #8fb8ff; background: rgba(143, 184, 255, .14); border-color: rgba(143, 184, 255, .18); }
 .status.rejected,
 .danger-text { color: var(--color-danger) !important; background: transparent; }
 .warning-text { color: var(--color-warning) !important; background: transparent; }
@@ -3307,7 +3523,15 @@ select:focus {
   .course-detail-layout { grid-template-columns: 330px minmax(0,1fr); }
   .login-panel { padding-inline: 45px; }
   .submission-summary { flex-direction: column; }
-  .review-center-layout, .review-meta-grid { grid-template-columns: 1fr; }
+  .review-center-layout,
+  .review-meta-grid,
+  .assignment-review-workspace {
+    grid-template-columns: 1fr;
+  }
+  .assignment-review-detail-card {
+    position: static;
+    top: auto;
+  }
   .filters-row { grid-template-columns: 1fr; }
   .user-list-main { grid-template-columns: 1fr; align-items: stretch; }
   .user-list-actions { justify-items: start; }
@@ -3346,9 +3570,20 @@ select:focus {
   }
   .course-form,
   .post-form,
-  .review-detail-card {
+  .review-detail-card,
+  .assignment-review-detail-card {
     position: static;
     top: auto;
+  }
+  .assignment-review-toolbar,
+  .assignment-review-form-grid,
+  .assignment-review-info-grid,
+  .assignment-review-actions {
+    grid-template-columns: 1fr;
+  }
+  .assignment-review-attachment-card {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .cert-layout,
   .assignment-manager-grid,
@@ -3677,6 +3912,60 @@ select:focus {
 }
 
 @media (max-width: 430px) {
+  .assignment-review-workspace.review-panel-open .assignment-review-list-card {
+    display: none;
+  }
+  .assignment-review-workspace:not(.review-panel-open) .assignment-review-detail-card {
+    display: none;
+  }
+  .assignment-review-table-wrap {
+    overflow-x: visible;
+  }
+  .assignment-review-table,
+  .assignment-review-table thead,
+  .assignment-review-table tbody,
+  .assignment-review-table tr,
+  .assignment-review-table th,
+  .assignment-review-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .assignment-review-table thead {
+    display: none;
+  }
+  .assignment-review-table tbody {
+    display: grid;
+    gap: 12px;
+  }
+  .assignment-review-table tr {
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 18px;
+    background: var(--color-surface-2);
+  }
+  .assignment-review-table tr.selected {
+    border-color: rgba(79, 202, 214, .45);
+  }
+  .assignment-review-table td,
+  .assignment-review-table td:first-child,
+  .assignment-review-table td:last-child {
+    padding: 8px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .assignment-review-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--color-text-soft);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
   .login-panel { padding-inline: 22px; }
   .topbar { gap: 12px; }
   .topbar h1,
