@@ -8240,7 +8240,33 @@ function AssignmentReviewsPage({ currentUser }) {
         reviewForm.status,
         reviewForm.adminFeedback,
         gradeValue,
+        currentUser?.id ?? null,
       );
+      const nextSubmission = reviewedSubmission
+        ? {
+            ...selectedSubmission,
+            ...reviewedSubmission,
+            status: reviewedSubmission.status ?? reviewForm.status,
+            grade: reviewedSubmission.grade ?? gradeValue,
+            feedback: reviewedSubmission.feedback ?? reviewForm.adminFeedback,
+            adminFeedback: reviewedSubmission.adminFeedback ?? reviewedSubmission.feedback ?? reviewForm.adminFeedback,
+          }
+        : {
+            ...selectedSubmission,
+            status: reviewForm.status,
+            grade: gradeValue,
+            feedback: reviewForm.adminFeedback,
+            adminFeedback: reviewForm.adminFeedback,
+          };
+      setSubmissions((current) =>
+        current.map((submission) =>
+          String(submission.id) === String(selectedSubmission.id) ? nextSubmission : submission,
+        ),
+      );
+      setReviewForms((current) => ({
+        ...current,
+        [selectedSubmission.id]: createReviewDraft(nextSubmission),
+      }));
       await recordAdminAuditLog({
         adminUser: currentUser,
         action: "assignment_reviewed",
@@ -8275,8 +8301,8 @@ function AssignmentReviewsPage({ currentUser }) {
       }
       setReviewMessage(
         certificateOutcome?.generated
-          ? t("admin.assignmentGradedCertificateGenerated")
-          : t("admin.assignmentGradedCertificatePending"),
+          ? `${t("admin.reviewSaved")} ${t("admin.assignmentGradedCertificateGenerated")}`
+          : t("admin.reviewSaved"),
       );
       await loadSubmissions(selectedSubmission.id);
     } catch (error) {
@@ -8413,8 +8439,9 @@ function AssignmentReviewsPage({ currentUser }) {
               <select value={reviewForm.status} onChange={(event) => updateReviewForm("status", event.target.value)}>
                 <option value="submitted">{t("status.submitted")}</option>
                 <option value="approved">{t("status.approved")}</option>
-                <option value="needs_revision">{t("status.needs_revision")}</option>
+                <option value="changes_requested">{t("status.changes_requested")}</option>
                 <option value="rejected">{t("status.rejected")}</option>
+                <option value="resubmitted">{t("status.resubmitted")}</option>
               </select>
             </label>
 

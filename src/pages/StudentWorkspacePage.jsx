@@ -1673,7 +1673,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
     ? t("common.submitting")
     : !hasSubmission
       ? t("common.submitAssignment")
-      : assignmentStatus === "needs_revision"
+      : assignmentStatus === "changes_requested" || assignmentStatus === "needs_revision"
         ? t("common.resubmitAssignment")
         : assignmentStatus === "rejected"
           ? t("common.resubmitAssignment")
@@ -2123,7 +2123,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
                 <small className="field-note">
                   {assignmentStatus === "approved"
                     ? t("common.assignmentApprovedHelp")
-                    : assignmentStatus === "needs_revision"
+                    : assignmentStatus === "changes_requested" || assignmentStatus === "needs_revision"
                       ? t("common.assignmentNeedsRevisionHelp")
                       : assignmentStatus === "rejected"
                         ? t("common.assignmentRejectedHelp")
@@ -2160,7 +2160,7 @@ function StudentModuleDetail({ course, studentId, completed, onUpdateProgress, p
               <span className={assignmentRequirementMet ? "subtle-badge" : "count-badge"}>
                 {assignmentStatus === "approved"
                   ? t("common.assignmentApproved")
-                  : assignmentStatus === "needs_revision"
+                  : assignmentStatus === "changes_requested" || assignmentStatus === "needs_revision"
                     ? t("common.assignmentNeedsRevision")
                     : assignmentStatus === "rejected"
                       ? t("common.assignmentRejected")

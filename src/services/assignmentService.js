@@ -10,7 +10,11 @@ import {
   setMockCourses,
 } from "./mockStore.js";
 
-const VALID_SUBMISSION_STATUSES = new Set(["submitted", "approved", "needs_revision", "rejected"]);
+const VALID_SUBMISSION_STATUSES = new Set(["submitted", "approved", "changes_requested", "rejected", "resubmitted"]);
+const LEGACY_SUBMISSION_STATUS_MAP = {
+  needs_revision: "changes_requested",
+};
+const OPTIONAL_REVIEW_COLUMNS = ["feedback", "admin_feedback", "reviewed_by", "reviewed_at", "updated_at", "graded_at"];
 const OPTIONAL_ASSIGNMENT_COLUMNS = ["title_en", "title_es", "instructions_en", "instructions_es"];
 
 function normalizeEntityId(value) {
@@ -31,7 +35,8 @@ function normalizeSubmissionType(value) {
 
 function normalizeSubmissionStatus(value) {
   const normalizedValue = `${value ?? "submitted"}`.trim().toLowerCase();
-  return VALID_SUBMISSION_STATUSES.has(normalizedValue) ? normalizedValue : "submitted";
+  const mappedValue = LEGACY_SUBMISSION_STATUS_MAP[normalizedValue] ?? normalizedValue;
+  return VALID_SUBMISSION_STATUSES.has(mappedValue) ? mappedValue : "submitted";
 }
 
 function normalizeGrade(value) {
@@ -107,11 +112,14 @@ function normalizeSubmission(row, context = {}) {
     fileSize: normalizeOptionalNumber(row.file_size),
     file_size: normalizeOptionalNumber(row.file_size),
     status: normalizeSubmissionStatus(row.status),
-    adminFeedback: row.admin_feedback ?? "",
-    admin_feedback: row.admin_feedback ?? "",
+    feedback: row.feedback ?? row.admin_feedback ?? "",
+    adminFeedback: row.feedback ?? row.admin_feedback ?? "",
+    admin_feedback: row.feedback ?? row.admin_feedback ?? "",
     grade: Number.isNaN(grade) ? null : grade,
     reviewedAt: row.reviewed_at ?? null,
     reviewed_at: row.reviewed_at ?? null,
+    reviewedBy: row.reviewed_by ?? null,
+    reviewed_by: row.reviewed_by ?? null,
     gradedAt: row.graded_at ?? null,
     graded_at: row.graded_at ?? null,
     submittedAt: row.submitted_at ?? row.created_at ?? null,
@@ -128,6 +136,45 @@ function normalizeSubmission(row, context = {}) {
     studentName: student?.name ?? "",
     studentEmail: student?.email ?? "",
   };
+}
+
+async function updateSubmissionReviewWithFallback(submissionId, payload, attempt = 0) {
+  const { data, error } = await supabase
+    .from("assignment_submissions")
+    .update(payload)
+    .eq("id", submissionId)
+    .select("*")
+    .single();
+
+  if (!error) return data;
+
+  const details = [error.message, error.details, error.hint, error.code]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const missingColumn = OPTIONAL_REVIEW_COLUMNS.find(
+    (column) =>
+      column in payload &&
+      (details.includes(`'${column}'`) ||
+        details.includes(`assignment_submissions.${column}`) ||
+        details.includes(`column ${column}`) ||
+        details.includes(column)),
+  );
+
+  if (
+    missingColumn &&
+    attempt < OPTIONAL_REVIEW_COLUMNS.length &&
+    (details.includes("42703") || details.includes("pgrst204") || details.includes("schema cache"))
+  ) {
+    const nextPayload = { ...payload };
+    delete nextPayload[missingColumn];
+    console.warn(
+      `[AssignmentReview] Retrying review save without missing optional column ${missingColumn}. Run supabase/sql/assignment_review_schema.sql to enable the full review schema.`,
+    );
+    return updateSubmissionReviewWithFallback(submissionId, nextPayload, attempt + 1);
+  }
+
+  throw error;
 }
 
 function sanitizeAssignmentData(assignmentData = {}) {
@@ -754,16 +801,19 @@ export async function getStudentSubmission(assignmentId, studentId) {
   return (await hydrateSubmissions([data]))[0] ?? null;
 }
 
-export async function reviewSubmission(submissionId, status, adminFeedback, grade) {
+export async function reviewSubmission(submissionId, status, adminFeedback, grade, reviewerId = null) {
   const normalizedSubmissionId = normalizeEntityId(submissionId);
   const nextStatus = normalizeSubmissionStatus(status);
   const nextGrade = normalizeGrade(grade);
   const timestamp = new Date().toISOString();
   const payload = {
     status: nextStatus,
+    feedback: `${adminFeedback ?? ""}`.trim() || null,
     admin_feedback: `${adminFeedback ?? ""}`.trim() || null,
     grade: nextGrade,
+    reviewed_by: reviewerId || null,
     reviewed_at: timestamp,
+    updated_at: timestamp,
     graded_at: nextGrade === null ? null : timestamp,
   };
 
@@ -793,17 +843,7 @@ export async function reviewSubmission(submissionId, status, adminFeedback, grad
       : null;
   }
 
-  const { data, error } = await supabase
-    .from("assignment_submissions")
-    .update(payload)
-    .eq("id", normalizedSubmissionId)
-    .select("*")
-    .single();
-
-  if (error) {
-    console.error("Failed to save assignment review in Supabase:", error);
-    throw error;
-  }
+  const data = await updateSubmissionReviewWithFallback(normalizedSubmissionId, payload);
 
   const hydratedSubmission = (await hydrateSubmissions([data]))[0] ?? null;
   const certificateOutcome = hydratedSubmission?.studentId && hydratedSubmission?.courseId

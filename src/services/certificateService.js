@@ -225,7 +225,11 @@ function evaluateModuleEligibility({ module, progressState, assignmentMap, submi
   const submissionStatus = `${submission.status ?? ""}`.trim().toLowerCase();
   return {
     complete: false,
-    waitingForGrading: submissionStatus === "submitted" || submissionStatus === "needs_revision" || submissionStatus === "rejected",
+    waitingForGrading:
+      submissionStatus === "submitted" ||
+      submissionStatus === "changes_requested" ||
+      submissionStatus === "needs_revision" ||
+      submissionStatus === "rejected",
   };
 }
 
