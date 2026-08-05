@@ -14,8 +14,8 @@ const VALID_SUBMISSION_STATUSES = new Set(["submitted", "approved", "changes_req
 const LEGACY_SUBMISSION_STATUS_MAP = {
   needs_revision: "changes_requested",
 };
-const OPTIONAL_REVIEW_COLUMNS = ["feedback", "admin_feedback", "reviewed_by", "reviewed_at", "updated_at", "graded_at"];
 const OPTIONAL_ASSIGNMENT_COLUMNS = ["title_en", "title_es", "instructions_en", "instructions_es"];
+const REVIEW_SELECT_COLUMNS = "id,status,grade,feedback,reviewed_by,reviewed_at,updated_at";
 
 function normalizeEntityId(value) {
   const trimmedValue = `${value ?? ""}`.trim();
@@ -138,43 +138,35 @@ function normalizeSubmission(row, context = {}) {
   };
 }
 
-async function updateSubmissionReviewWithFallback(submissionId, payload, attempt = 0) {
+async function loadSubmissionRow(submissionId) {
+  const { data, error } = await supabase
+    .from("assignment_submissions")
+    .select("*")
+    .eq("id", submissionId)
+    .single();
+
+  if (error) {
+    console.error("Failed to load assignment submission before review save:", error);
+    throw error;
+  }
+
+  return data;
+}
+
+async function updateSubmissionReview(submissionId, payload) {
   const { data, error } = await supabase
     .from("assignment_submissions")
     .update(payload)
     .eq("id", submissionId)
-    .select("*")
+    .select(REVIEW_SELECT_COLUMNS)
     .single();
 
-  if (!error) return data;
-
-  const details = [error.message, error.details, error.hint, error.code]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  const missingColumn = OPTIONAL_REVIEW_COLUMNS.find(
-    (column) =>
-      column in payload &&
-      (details.includes(`'${column}'`) ||
-        details.includes(`assignment_submissions.${column}`) ||
-        details.includes(`column ${column}`) ||
-        details.includes(column)),
-  );
-
-  if (
-    missingColumn &&
-    attempt < OPTIONAL_REVIEW_COLUMNS.length &&
-    (details.includes("42703") || details.includes("pgrst204") || details.includes("schema cache"))
-  ) {
-    const nextPayload = { ...payload };
-    delete nextPayload[missingColumn];
-    console.warn(
-      `[AssignmentReview] Retrying review save without missing optional column ${missingColumn}. Run supabase/sql/assignment_review_schema.sql to enable the full review schema.`,
-    );
-    return updateSubmissionReviewWithFallback(submissionId, nextPayload, attempt + 1);
+  if (error) {
+    console.error("Failed to save assignment review in Supabase:", error);
+    throw error;
   }
 
-  throw error;
+  return data;
 }
 
 function sanitizeAssignmentData(assignmentData = {}) {
@@ -631,12 +623,7 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
       responseData.fileSize === null || responseData.fileSize === undefined || responseData.fileSize === ""
         ? null
         : Number(responseData.fileSize),
-    status: "submitted",
-    admin_feedback: null,
-    grade: null,
     submitted_at: submittedAt,
-    reviewed_at: null,
-    graded_at: null,
   };
 
   if (!isSupabaseConfigured) {
@@ -651,15 +638,20 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
       throw new Error("This assignment has already been submitted. Resubmission is not allowed.");
     }
 
+    const mutationPayload = {
+      ...payload,
+      status: existingSubmission ? "resubmitted" : "submitted",
+    };
+
     const nextSubmission = existingSubmission
       ? {
           ...existingSubmission,
-          ...payload,
+          ...mutationPayload,
           created_at: existingSubmission.created_at ?? submittedAt,
         }
       : {
           id: createMockId(submissions),
-          ...payload,
+          ...mutationPayload,
           created_at: submittedAt,
         };
 
@@ -699,14 +691,19 @@ export async function submitAssignment(assignmentId, studentId, responseData = {
     throw new Error("This assignment has already been submitted. Resubmission is not allowed.");
   }
 
+  const mutationPayload = {
+    ...payload,
+    status: existingSubmission ? "resubmitted" : "submitted",
+  };
+
   const mutation = existingSubmission
     ? supabase
         .from("assignment_submissions")
-        .update(payload)
+        .update(mutationPayload)
         .eq("id", existingSubmission.id)
         .select("*")
         .single()
-    : supabase.from("assignment_submissions").insert([payload]).select("*").single();
+    : supabase.from("assignment_submissions").insert([mutationPayload]).select("*").single();
 
   const { data, error } = await mutation;
   if (error) {
@@ -809,12 +806,10 @@ export async function reviewSubmission(submissionId, status, adminFeedback, grad
   const payload = {
     status: nextStatus,
     feedback: `${adminFeedback ?? ""}`.trim() || null,
-    admin_feedback: `${adminFeedback ?? ""}`.trim() || null,
     grade: nextGrade,
     reviewed_by: reviewerId || null,
     reviewed_at: timestamp,
     updated_at: timestamp,
-    graded_at: nextGrade === null ? null : timestamp,
   };
 
   if (!isSupabaseConfigured) {
@@ -843,7 +838,12 @@ export async function reviewSubmission(submissionId, status, adminFeedback, grad
       : null;
   }
 
-  const data = await updateSubmissionReviewWithFallback(normalizedSubmissionId, payload);
+  const existingSubmission = await loadSubmissionRow(normalizedSubmissionId);
+  const reviewedFields = await updateSubmissionReview(normalizedSubmissionId, payload);
+  const data = {
+    ...existingSubmission,
+    ...reviewedFields,
+  };
 
   const hydratedSubmission = (await hydrateSubmissions([data]))[0] ?? null;
   const certificateOutcome = hydratedSubmission?.studentId && hydratedSubmission?.courseId

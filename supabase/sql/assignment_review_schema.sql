@@ -31,6 +31,9 @@ add column if not exists graded_at timestamptz;
 alter table public.assignment_submissions
 add column if not exists updated_at timestamptz default now();
 
+alter table public.assignment_submissions
+add column if not exists rubric jsonb;
+
 -- Keep timestamps populated for existing rows.
 update public.assignment_submissions
 set updated_at = now()
@@ -59,6 +62,9 @@ where status is null
    or status not in ('submitted', 'approved', 'changes_requested', 'rejected', 'resubmitted');
 
 -- Replace existing status check constraints that reference status.
+alter table public.assignment_submissions
+drop constraint if exists assignment_submissions_status_check;
+
 do $$
 declare
   constraint_record record;
@@ -78,20 +84,15 @@ alter table public.assignment_submissions
 add constraint assignment_submissions_status_check
 check (status in ('submitted', 'approved', 'changes_requested', 'rejected', 'resubmitted'));
 
--- Add a grade range check only if it is not already present.
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conrelid = 'public.assignment_submissions'::regclass
-      and conname = 'assignment_submissions_grade_range_check'
-  ) then
-    alter table public.assignment_submissions
-    add constraint assignment_submissions_grade_range_check
-    check (grade is null or (grade >= 0 and grade <= 100));
-  end if;
-end $$;
+alter table public.assignment_submissions
+drop constraint if exists assignment_submissions_grade_range_check;
+
+alter table public.assignment_submissions
+drop constraint if exists assignment_submissions_grade_check;
+
+alter table public.assignment_submissions
+add constraint assignment_submissions_grade_check
+check (grade is null or (grade >= 0 and grade <= 100));
 
 create index if not exists idx_assignment_submissions_assignment_id
 on public.assignment_submissions(assignment_id);
@@ -101,6 +102,20 @@ on public.assignment_submissions(student_id);
 
 create index if not exists idx_assignment_submissions_reviewed_by
 on public.assignment_submissions(reviewed_by);
+
+-- Course ownership columns are used to limit instructor review access to
+-- submissions from courses they own/teach.
+alter table public.courses
+add column if not exists created_by uuid references public.users(id) on delete set null;
+
+alter table public.courses
+add column if not exists instructor_id uuid references public.users(id) on delete set null;
+
+create index if not exists idx_courses_created_by
+on public.courses(created_by);
+
+create index if not exists idx_courses_instructor_id
+on public.courses(instructor_id);
 
 -- ==================================================
 -- Helper functions used by RLS
@@ -155,6 +170,45 @@ as $$
 $$;
 
 grant execute on function public.can_review_assignment_submission(uuid) to authenticated;
+
+-- Prevent students from modifying review-only fields on their own submissions.
+-- Students can still submit/resubmit through the existing app flow.
+create or replace function public.prevent_student_review_field_changes()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_profile uuid;
+begin
+  current_profile := public.current_profile_id();
+
+  if public.can_review_assignment_submission(old.id) then
+    return new;
+  end if;
+
+  if old.student_id = current_profile then
+    if new.grade is distinct from old.grade
+      or new.feedback is distinct from old.feedback
+      or new.admin_feedback is distinct from old.admin_feedback
+      or new.reviewed_by is distinct from old.reviewed_by
+      or new.reviewed_at is distinct from old.reviewed_at
+      or new.graded_at is distinct from old.graded_at
+    then
+      raise exception 'Students cannot update review fields on assignment submissions.';
+    end if;
+  end if;
+
+  return new;
+end
+$$;
+
+drop trigger if exists prevent_student_review_field_changes_trigger on public.assignment_submissions;
+create trigger prevent_student_review_field_changes_trigger
+before update on public.assignment_submissions
+for each row
+execute function public.prevent_student_review_field_changes();
 
 -- ==================================================
 -- RLS policies

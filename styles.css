@@ -1236,7 +1236,7 @@ code { padding: 5px 7px; border-radius: 6px; color: var(--green-800); background
 .review-meta-grid p { margin: 5px 0 0; font-size: 12px; line-height: 1.5; }
 .assignment-review-workspace {
   display: grid;
-  grid-template-columns: minmax(560px, 1.05fr) minmax(420px, .95fr);
+  grid-template-columns: minmax(700px, 1.22fr) minmax(420px, .78fr);
   gap: 20px;
   align-items: start;
 }
@@ -1284,7 +1284,8 @@ code { padding: 5px 7px; border-radius: 6px; color: var(--green-800); background
 }
 .assignment-review-table {
   width: 100%;
-  min-width: 760px;
+  min-width: 980px;
+  table-layout: auto;
   border-collapse: separate;
   border-spacing: 0 8px;
 }
@@ -1304,6 +1305,44 @@ code { padding: 5px 7px; border-radius: 6px; color: var(--green-800); background
   color: var(--color-text);
   font-size: 13px;
   vertical-align: middle;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+.assignment-review-table th:nth-child(1),
+.assignment-review-table td:nth-child(1) {
+  min-width: 190px;
+}
+.assignment-review-table th:nth-child(2),
+.assignment-review-table td:nth-child(2) {
+  min-width: 175px;
+}
+.assignment-review-table th:nth-child(3),
+.assignment-review-table td:nth-child(3) {
+  min-width: 95px;
+}
+.assignment-review-table th:nth-child(4),
+.assignment-review-table td:nth-child(4) {
+  min-width: 220px;
+}
+.assignment-review-table th:nth-child(5),
+.assignment-review-table td:nth-child(5) {
+  min-width: 132px;
+  white-space: nowrap;
+}
+.assignment-review-table th:nth-child(6),
+.assignment-review-table td:nth-child(6) {
+  min-width: 92px;
+  white-space: nowrap;
+}
+.assignment-review-table th:nth-child(7),
+.assignment-review-table td:nth-child(7) {
+  min-width: 135px;
+  white-space: nowrap;
+}
+.assignment-review-table th:nth-child(8),
+.assignment-review-table td:nth-child(8) {
+  min-width: 96px;
+  white-space: nowrap;
 }
 .assignment-review-table td:first-child {
   border-left: 1px solid rgba(245, 241, 233, .08);
@@ -1331,11 +1370,22 @@ code { padding: 5px 7px; border-radius: 6px; color: var(--green-800); background
   color: var(--color-muted);
   line-height: 1.35;
 }
+.assignment-review-table .status,
+.assignment-review-table .compact-btn {
+  white-space: nowrap;
+}
+.assignment-review-table td:nth-child(1) small {
+  overflow-wrap: anywhere;
+}
+.assignment-review-table td:nth-child(2),
+.assignment-review-table td:nth-child(4) {
+  white-space: normal;
+}
 .review-student-cell {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 150px;
+  min-width: 170px;
 }
 .review-avatar {
   width: 38px;
@@ -3493,6 +3543,17 @@ select:focus {
   justify-content: center;
 }
 
+@media (max-width: 1320px) {
+  .assignment-review-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .assignment-review-detail-card {
+    position: static;
+    top: auto;
+  }
+}
+
 @media (max-width: 1024px) {
   .content {
     max-width: 100%;
@@ -3906,6 +3967,67 @@ select:focus {
     color: var(--color-text-soft);
     font-size: 11px;
     font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+}
+
+@media (max-width: 640px) {
+  .assignment-review-workspace.review-panel-open .assignment-review-list-card {
+    display: none;
+  }
+  .assignment-review-workspace:not(.review-panel-open) .assignment-review-detail-card {
+    display: none;
+  }
+  .assignment-review-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .assignment-review-table-wrap {
+    overflow-x: visible;
+  }
+  .assignment-review-table,
+  .assignment-review-table thead,
+  .assignment-review-table tbody,
+  .assignment-review-table tr,
+  .assignment-review-table th,
+  .assignment-review-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .assignment-review-table thead {
+    display: none;
+  }
+  .assignment-review-table tbody {
+    display: grid;
+    gap: 12px;
+  }
+  .assignment-review-table tr {
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 18px;
+    background: var(--color-surface-2);
+  }
+  .assignment-review-table tr.selected {
+    border-color: rgba(79, 202, 214, .45);
+  }
+  .assignment-review-table td,
+  .assignment-review-table td:first-child,
+  .assignment-review-table td:last-child {
+    padding: 8px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    white-space: normal;
+  }
+  .assignment-review-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--color-text-soft);
+    font-size: 10px;
+    font-weight: 800;
     text-transform: uppercase;
     letter-spacing: .06em;
   }
